@@ -1,0 +1,23 @@
+{
+  "name": "@svelte-devtools/client",
+  "version": "2.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Svelte DevTools client UI (iframe)",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  },
+  "dependencies": {
+    "@svelte-devtools/types": "file:../types",
+    "@vitejs/devtools-kit": "0.0.0.31",
+    "svelte": "^5.49.2"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@types/chrome": "~0.1.38",
+    "@types/node": "^22.0.0",
+    "typescript": "^5",
+    "vite": "^8.0.3"
+  }
+}

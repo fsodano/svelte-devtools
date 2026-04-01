@@ -1,0 +1,26 @@
+{
+  "name": "@svelte-devtools/runtime",
+  "version": "3.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc && rolldown -c",
+    "dev": "rolldown -c --watch"
+  },
+  "devDependencies": {
+    "rolldown": "latest",
+    "rolldown-plugin-dts": "latest",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  }
+}

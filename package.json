@@ -1,0 +1,29 @@
+{
+  "name": "svelte-devtools",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Full-stack debugging for Svelte 5 and SvelteKit",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build:types && npm run build:runtime && npm run build:vite-plugin && npm run build:client",
+    "build:runtime": "npm run build -w @svelte-devtools/runtime",
+    "build:vite-plugin": "npm run build -w @svelte-devtools/vite-plugin",
+    "build:client": "npm run build -w @svelte-devtools/client",
+    "build:types": "npm run build -w @svelte-devtools/types",
+    "test": "npm run build && echo '✅ Build successful - ready for integration testing (TBD)'",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "clean": "rm -rf dist/ && rm -rf packages/*/dist/"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "rolldown": "^1.0.0-rc.12",
+    "rolldown-plugin-dts": "^0.23.2",
+    "svelte": "^5.55.1",
+    "tslib": "^2.6.2",
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.2"
+  },
+  "packageManager": "npm@10.0.0"
+}
