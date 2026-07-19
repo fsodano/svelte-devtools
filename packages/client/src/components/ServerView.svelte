@@ -1,191 +1,150 @@
 <script lang="ts">
-  interface ServerLoad {
-    route: string;
-    data: Record<string, unknown>;
-    duration: number;
-    timestamp: number;
-  }
+  import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
 
-  interface ApiCall {
-    url: string;
-    method: string;
-    status: number;
-    duration: number;
-    timestamp: number;
-  }
+  const serverEvents = $derived(
+    devtoolsStore.serverEvents as Array<{
+      id: string;
+      type: string;
+      timestamp: number;
+      duration?: number;
+      data: {
+        url?: string;
+        method?: string;
+        routeId?: string | null;
+        error?: { message: string; stack?: string };
+      };
+    }>
+  );
 
-  interface ServerTrace {
+  let selected = $state<{
     id: string;
-    url: string;
-    method: string;
-    routeId: string | null;
-    timings: { name: string; duration?: number }[];
-    dataLoads: { routeId: string; loadFunction: string; duration: number }[];
-    apiCalls: { url: string; method: string; status: number; duration: number }[];
-    dbQueries: { query: string; duration: number }[];
-    errors: { message: string }[];
-    startTime: number;
-    endTime?: number;
+    type: string;
+    timestamp: number;
     duration?: number;
+    data: {
+      url?: string;
+      method?: string;
+      routeId?: string | null;
+      error?: { message: string; stack?: string };
+    };
+  } | null>(null);
+
+  let filterType = $state<'all' | 'trace' | 'error'>('all');
+
+  const filteredEvents = $derived(
+    filterType === 'all'
+      ? serverEvents
+      : serverEvents.filter(e =>
+          filterType === 'error' ? e.type === 'server:error' : e.type !== 'server:error'
+        )
+  );
+
+  async function refresh(): Promise<void> {
+    try {
+      const res = await fetch('/__svelte-devtools/server-events?last=50');
+      if (res.ok) devtoolsStore.setServerEvents(await res.json());
+    } catch { /* noop */ }
   }
 
-  let activeTab = $state<'loads' | 'api' | 'database' | 'traces'>('loads');
-  let serverLoads = $state<ServerLoad[]>([]);
-  let apiCalls = $state<ApiCall[]>([]);
-  let serverTraces = $state<ServerTrace[]>([]);
-  let selectedLoad = $state<ServerLoad | null>(null);
-
-  function formatDuration(ms: number): string {
-    return ms > 1000 
-      ? `${(ms / 1000).toFixed(2)}s` 
-      : `${ms.toFixed(0)}ms`;
+  async function clearAll(): Promise<void> {
+    try {
+      await fetch('/__svelte-devtools/server-events', { method: 'DELETE' });
+    } catch { /* noop */ }
   }
 
-  function formatData(data: Record<string, unknown>): string {
-    return JSON.stringify(data, null, 2);
+  function fmtDuration(ms?: number): string {
+    if (ms === undefined) return '';
+    return ms > 1000 ? `${(ms / 1000).toFixed(2)}s` : `${Math.round(ms)}ms`;
   }
 
-  function getStatusColor(status: number): string {
-    if (status >= 200 && status < 300) return '#4ec9b0';
-    if (status >= 300 && status < 400) return '#dcdcaa';
-    if (status >= 400) return '#f48771';
-    return '#858585';
+  function fmtTime(ts: number): string {
+    return new Date(ts).toLocaleTimeString();
   }
 </script>
 
 <div class="server-view">
-  <nav class="tabs">
-    <button 
-      class="tab"
-      class:active={activeTab === 'loads'}
-      onclick={() => activeTab = 'loads'}
-    >
-      Server Loads ({serverLoads.length})
-    </button>
-    <button 
-      class="tab"
-      class:active={activeTab === 'api'}
-      onclick={() => activeTab = 'api'}
-    >
-      API Calls ({apiCalls.length})
-    </button>
-    <button 
-      class="tab"
-      class:active={activeTab === 'traces'}
-      onclick={() => activeTab = 'traces'}
-    >
-      Server Traces ({serverTraces.length})
-    </button>
-    <button 
-      class="tab"
-      class:active={activeTab === 'database'}
-      onclick={() => activeTab = 'database'}
-    >
-      Database
-    </button>
-  </nav>
+  <header class="header">
+    <span class="count">{serverEvents.length} requests</span>
+    <div class="toolbar">
+      <select class="filter-select" bind:value={filterType}>
+        <option value="all">All</option>
+        <option value="trace">Traces</option>
+        <option value="error">Errors</option>
+      </select>
+      <button class="tool-btn" onclick={refresh}>Refresh</button>
+      <button class="tool-btn" onclick={clearAll}>Clear</button>
+    </div>
+  </header>
 
-  <div class="content">
-    {#if activeTab === 'loads'}
-      <div class="split">
-        <div class="list">
-          {#if serverLoads.length > 0}
-            {#each serverLoads as load (load.route + load.timestamp)}
-              <button 
-                class="item"
-                class:selected={selectedLoad === load}
-                onclick={() => selectedLoad = load}
-              >
-                <span class="route">{load.route}</span>
-                <span class="duration" class:slow={load.duration > 1000}>
-                  {formatDuration(load.duration)}
-                </span>
-              </button>
-            {/each}
-          {:else}
-            <div class="empty">No server loads recorded</div>
-          {/if}
-        </div>
-
-        {#if selectedLoad}
-          <div class="detail">
-            <h3>{selectedLoad.route}</h3>
-            <p class="meta">
-              Duration: <span class:slow={selectedLoad.duration > 1000}>
-                {formatDuration(selectedLoad.duration)}
+  <div class="split">
+    <div class="list">
+      {#if filteredEvents.length > 0}
+        {#each filteredEvents as evt (evt.id)}
+          <button
+            class="item"
+            class:error={!!evt.data.error}
+            class:selected={selected?.id === evt.id}
+            onclick={() => selected = evt}
+          >
+            <span class="method" class:error={!!evt.data.error}>
+              {evt.data.method ?? '???'}
+            </span>
+            <span class="url" title={evt.data.url}>{evt.data.url ?? '???'}</span>
+            {#if evt.data.error}
+              <span class="badge error">ERROR</span>
+            {:else}
+              <span class="duration" class:slow={(evt.duration || 0) > 500}>
+                {fmtDuration(evt.duration)}
               </span>
-            </p>
-            <pre class="data">{formatData(selectedLoad.data)}</pre>
+            {/if}
+          </button>
+        {/each}
+      {:else}
+        <div class="empty">No server events recorded yet.</div>
+      {/if}
+    </div>
+
+    <div class="detail-scroll">
+      {#if selected}
+        <div class="detail">
+          <div class="detail-row">
+            <span class="label">URL</span>
+            <span class="value">{selected.data.url ?? '—'}</span>
           </div>
-        {:else}
-          <div class="empty">Select a server load to view details</div>
-        {/if}
-      </div>
-    {:else if activeTab === 'api'}
-      <div class="list">
-        {#if apiCalls.length > 0}
-          {#each apiCalls as call (call.url + call.timestamp)}
-            <div class="item api-item">
-              <span class="method" style="color: {call.method === 'GET' ? '#4ec9b0' : '#dcdcaa'}">
-                {call.method}
-              </span>
-              <span class="url">{call.url}</span>
-              <span class="status" style="color: {getStatusColor(call.status)}">
-                {call.status}
-              </span>
-              <span class="duration" class:slow={call.duration > 500}>
-                {formatDuration(call.duration)}
-              </span>
+          <div class="detail-row">
+            <span class="label">Method</span>
+            <span class="value">{selected.data.method ?? '—'}</span>
+          </div>
+          {#if selected.data.routeId !== undefined}
+            <div class="detail-row">
+              <span class="label">Route</span>
+              <span class="value">{selected.data.routeId ?? '(layout/root)'}</span>
             </div>
-          {/each}
-        {:else}
-          <div class="empty">No API calls recorded</div>
-        {/if}
-      </div>
-    {:else if activeTab === 'traces'}
-      <div class="split">
-        <div class="list">
-          {#if serverTraces.length > 0}
-            {#each serverTraces as trace (trace.id)}
-              <button 
-                class="item"
-                class:selected={selectedLoad !== null && selectedLoad?.url === trace.url}
-                onclick={() => selectedLoad = { route: trace.url, data: {}, duration: trace.duration || 0, timestamp: trace.startTime }}
-              >
-                <span class="route">{trace.method} {trace.url}</span>
-                <span class="duration" class:slow={trace.duration && trace.duration > 1000}>
-                  {formatDuration(trace.duration || 0)}
-                </span>
-              </button>
-            {/each}
-          {:else}
-            <div class="empty">No server traces recorded</div>
+          {/if}
+          <div class="detail-row">
+            <span class="label">Time</span>
+            <span class="value">{fmtTime(selected.timestamp)}</span>
+          </div>
+          {#if selected.duration !== undefined}
+            <div class="detail-row">
+              <span class="label">Duration</span>
+              <span class="value">{fmtDuration(selected.duration)}</span>
+            </div>
+          {/if}
+          {#if selected.data.error}
+            <div class="detail-row">
+              <span class="label">Error</span>
+              <span class="value error-text">{selected.data.error.message}</span>
+            </div>
+            {#if selected.data.error.stack}
+              <pre class="stack">{selected.data.error.stack}</pre>
+            {/if}
           {/if}
         </div>
-
-        {#if selectedLoad}
-          <div class="detail">
-            <h3>{selectedLoad.route}</h3>
-            <p class="meta">
-              Duration: <span class:slow={(selectedLoad as ServerLoad).duration > 1000}>
-                {formatDuration((selectedLoad as ServerLoad).duration)}
-              </span>
-            </p>
-            <pre class="data">{formatData(selectedLoad.data)}</pre>
-          </div>
-        {:else}
-          <div class="empty">Select a server trace to view details</div>
-        {/if}
-      </div>
-    {:else if activeTab === 'database'}
-      <div class="empty">
-        <p>Database tracing requires server-side instrumentation.</p>
-        <p>Add the SvelteKit DevTools handle to your hooks.server.ts:</p>
-        <pre class="code">import &#123; sveltekitDevtools &#125; from 'svelte-devtools/server';
-
-export const handle = sveltekitDevtools();</pre>
-      </div>
-    {/if}
+      {:else}
+        <div class="empty">Select a request to inspect details.</div>
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -194,37 +153,57 @@ export const handle = sveltekitDevtools();</pre>
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #252526;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
   }
 
-  .tabs {
+  .header {
     display: flex;
-    border-bottom: 1px solid #333;
-    padding: 0 8px;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border-default);
+    background: var(--bg-surface);
+    flex-shrink: 0;
   }
 
-  .tab {
-    padding: 12px 16px;
-    border: none;
-    background: transparent;
-    color: #858585;
-    cursor: pointer;
+  .count {
     font-size: 12px;
-    transition: all 0.15s;
+    color: var(--text-muted);
+    font-weight: 500;
   }
 
-  .tab:hover {
-    color: #cccccc;
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 
-  .tab.active {
-    color: #ffffff;
-    border-bottom: 2px solid #007acc;
+  .filter-select {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
   }
 
-  .content {
-    flex: 1;
-    overflow: hidden;
+  .tool-btn {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 3px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .tool-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 
   .split {
@@ -232,101 +211,128 @@ export const handle = sveltekitDevtools();</pre>
     grid-template-columns: 1fr 1fr;
     height: 100%;
     gap: 1px;
-    background: #333;
+    background: var(--border-default);
   }
 
   .list {
     overflow-y: auto;
-    background: #252526;
+    background: var(--bg-surface);
   }
 
   .item {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: var(--space-2);
     align-items: center;
-    justify-content: space-between;
     width: 100%;
-    padding: 10px 12px;
+    padding: 8px var(--space-3);
     border: none;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-default);
     background: transparent;
-    color: #cccccc;
+    color: var(--text-secondary);
     cursor: pointer;
     text-align: left;
-    font-size: 12px;
+    font-size: 11px;
+    transition: background var(--transition-fast);
   }
 
   .item:hover {
-    background: #2a2d2e;
+    background: var(--bg-hover);
   }
 
   .item.selected {
-    background: #094771;
+    background: var(--svelte-brand-10);
   }
 
-  .api-item {
-    display: grid;
-    grid-template-columns: auto 1fr auto auto;
-    gap: 12px;
+  .item.error {
+    border-left: 3px solid var(--status-disconnected);
   }
 
   .method {
     font-weight: 600;
-    font-size: 11px;
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-muted);
     min-width: 40px;
   }
 
+  .method.error {
+    color: var(--status-disconnected);
+  }
+
   .url {
-    font-family: 'Monaco', 'Menlo', monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .status {
-    font-weight: 600;
-    font-size: 11px;
-  }
-
-  .route {
-    font-family: 'Monaco', 'Menlo', monospace;
-    color: #9cdcfe;
+    white-space: nowrap;
   }
 
   .duration {
-    font-size: 11px;
-    color: #858585;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
   }
 
   .duration.slow {
-    color: #f48771;
+    color: var(--status-disconnected);
+  }
+
+  .badge {
+    font-size: 9px;
     font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+  }
+
+  .badge.error {
+    background: rgba(255, 58, 47, 0.15);
+    color: var(--status-disconnected);
+  }
+
+  .detail-scroll {
+    overflow-y: auto;
+    background: var(--bg-surface);
   }
 
   .detail {
-    padding: 16px;
-    background: #1e1e1e;
-    overflow-y: auto;
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
   }
 
-  .detail h3 {
-    margin-bottom: 12px;
-    color: #cccccc;
-    font-size: 14px;
-  }
-
-  .meta {
-    color: #858585;
+  .detail-row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: var(--space-2);
+    align-items: baseline;
     font-size: 12px;
-    margin-bottom: 16px;
   }
 
-  .data {
-    background: #252526;
-    padding: 12px;
-    border-radius: 4px;
-    font-family: 'Monaco', 'Menlo', monospace;
+  .label {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .value {
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    word-break: break-word;
+  }
+
+  .error-text {
+    color: var(--status-disconnected);
+    font-weight: 600;
+  }
+
+  .stack {
+    margin-top: var(--space-2);
+    padding: var(--space-3);
+    background: var(--bg-inset);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
     font-size: 11px;
-    color: #d4d4d4;
+    color: var(--status-disconnected);
     overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-word;
@@ -334,25 +340,12 @@ export const handle = sveltekitDevtools();</pre>
 
   .empty {
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: #858585;
+    color: var(--text-muted);
     font-size: 12px;
-    padding: 32px;
+    padding: var(--space-6);
     text-align: center;
-  }
-
-  .code {
-    margin-top: 16px;
-    background: #1e1e1e;
-    padding: 16px;
-    border-radius: 4px;
-    font-family: 'Monaco', 'Menlo', monospace;
-    font-size: 11px;
-    color: #d4d4d4;
-    text-align: left;
-    overflow-x: auto;
   }
 </style>

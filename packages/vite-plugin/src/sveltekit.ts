@@ -1,0 +1,97 @@
+import type { Handle } from '@sveltejs/kit';
+
+export type { Handle };
+
+const GLOBAL_KEY = '__svelte_devtools_addEvent__';
+const SEEN_KEY = '__svelte_devtools_markSeen__';
+
+interface ServerEvent {
+    id: string;
+    type: string;
+    timestamp: number;
+    duration?: number;
+    data: unknown;
+}
+
+export function svelteDevToolsHandle(): Handle {
+    return async ({ event, resolve }) => {
+        const svelteRuntime =
+            `<script type="module" src="/__svelte-devtools/svelte-runtime.js"></script>`;
+
+        // Inject @vitejs/devtools client for SvelteKit SSR (Vite's transformIndexHtml is bypassed by SSR)
+        const devtoolsInjectPath = (globalThis as Record<string, unknown>).__SVELTE_DEVTOOLS_INJECT_PATH__ as string | undefined;
+        const devtoolsInject = devtoolsInjectPath
+            ? `<script type="module" src="/@fs${devtoolsInjectPath}"></script>`
+            : '';
+
+        const reqKey = `${event.request.method}:${event.url.pathname}`;
+        const markSeen = (globalThis as Record<string, unknown>)[SEEN_KEY] as
+            | ((key: string) => void)
+            | undefined;
+        if (markSeen) markSeen(reqKey);
+
+        const startTime = performance.now();
+        let response: Response;
+        let error: Error | undefined;
+
+        try {
+            response = await resolve(event, {
+            transformPageChunk: ({ html }) => {
+                try {
+                    const marker = `</head>`;
+                    let idx = html.indexOf(marker);
+                    if (idx === -1) {
+                        // Fallback: try </body>
+                        const bodyIdx = html.indexOf('</body>');
+                        if (bodyIdx === -1) {
+                            // Last resort: append before </html> or at end
+                            const htmlIdx = html.lastIndexOf('</html>');
+                            if (htmlIdx !== -1) {
+                                return html.slice(0, htmlIdx) + devtoolsInject + svelteRuntime + html.slice(htmlIdx);
+                            }
+                            return html + devtoolsInject + svelteRuntime;
+                        }
+                        return html.slice(0, bodyIdx) + devtoolsInject + svelteRuntime + html.slice(bodyIdx);
+                    }
+                    return html.slice(0, idx) + devtoolsInject + svelteRuntime + html.slice(idx);
+                } catch (err) {
+                    console.warn('[Svelte DevTools] transformPageChunk failed:', err);
+                    return html;
+                }
+            }
+            });
+        } catch (e) {
+            error = e instanceof Error ? e : new Error(String(e));
+            throw error;
+        } finally {
+            const duration = performance.now() - startTime;
+            const addEvent = (globalThis as Record<string, unknown>)[GLOBAL_KEY] as
+                | ((e: ServerEvent) => void)
+                | undefined;
+
+            if (addEvent) {
+                addEvent({
+                    id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                    type: error ? 'server:error' : 'server:trace',
+                    timestamp: startTime,
+                    duration,
+                    data: {
+                        url: event.url.pathname + event.url.search,
+                        method: event.request.method,
+                        routeId: event.route.id,
+                        duration,
+                        error: error
+                            ? { message: error.message, stack: error.stack }
+                            : undefined
+                    }
+                });
+            }
+        }
+
+        return response!;
+    };
+}
+
+export function noopHandle(): Handle {
+    return async ({ event, resolve }) => resolve(event);
+}

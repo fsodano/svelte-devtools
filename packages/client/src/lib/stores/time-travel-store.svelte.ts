@@ -36,9 +36,8 @@ let isTimeTravelMode = $state(false);
 let maxSnapshots = $state(LIMITS.MAX_STATE_SNAPSHOTS);
 let lastCapturedState: { components: ComponentNode[]; timeline: TimelineEntry[] } | null = null;
 
-// Debounce capture to avoid too many snapshots
 let captureTimeout: ReturnType<typeof setTimeout> | null = null;
-const CAPTURE_DEBOUNCE = 100; // ms
+const CAPTURE_DEBOUNCE = 100;
 
 function generateSnapshotId(): string {
   return `snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -48,7 +47,12 @@ function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
-export function createTimeTravelStore(getComponents: () => ComponentNode[], getTimeline: () => TimelineEntry[]): TimeTravelStore {
+export function createTimeTravelStore(
+  getComponents: () => ComponentNode[],
+  getTimeline: () => TimelineEntry[],
+  setComponents?: (c: ComponentNode[]) => void,
+  setTimeline?: (t: TimelineEntry[]) => void
+): TimeTravelStore {
   /**
    * Capture current state
    * Only captures if state has changed significantly
@@ -62,7 +66,6 @@ export function createTimeTravelStore(getComponents: () => ComponentNode[], getT
       const components = getComponents();
       const timeline = getTimeline();
 
-      // Check if state has changed significantly
       if (lastCapturedState) {
         const componentsChanged = JSON.stringify(components) !== JSON.stringify(lastCapturedState.components);
         const timelineChanged = timeline.length !== lastCapturedState.timeline.length;
@@ -102,9 +105,12 @@ export function createTimeTravelStore(getComponents: () => ComponentNode[], getT
   function restore(index: number): void {
     if (index < 0 || index >= snapshots.length) return;
 
-    const snapshot = snapshots[index];
-    // Restore would be handled by the parent store
     currentIndex = index;
+    isTimeTravelMode = true;
+
+    const snapshot = snapshots[index];
+    if (setComponents) setComponents(deepClone(snapshot.components));
+    if (setTimeline) setTimeline(deepClone(snapshot.timeline));
   }
 
   function goToSnapshot(id: string): void {

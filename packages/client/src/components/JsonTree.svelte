@@ -6,16 +6,17 @@
   let expanded = $state(true);
   let isCircular = $state(false);
 
-  // Initialize seen set if not provided
-  const localSeen = seen ?? new Set<unknown>();
-  
+  let localSeen = $derived(seen ?? new Set<unknown>());
+  let visited = $state(new Set<unknown>());
+
   // Check for circular reference on mount
   $effect(() => {
+    visited = new Set(localSeen);
     if (value && typeof value === "object") {
-      if (localSeen.has(value)) {
+      if (visited.has(value)) {
         isCircular = true;
       } else {
-        localSeen.add(value);
+        visited.add(value);
         isCircular = false;
       }
     }
@@ -154,10 +155,10 @@
 <div class="json-tree">
   {#if name !== undefined}
     <span class="named-node">
-      {@render valueNode(value, name, localSeen)}
+      {@render valueNode(value, name, visited)}
     </span>
   {:else}
-    {@render valueNode(value, undefined, localSeen)}
+    {@render valueNode(value, undefined, visited)}
   {/if}
 </div>
 

@@ -15,3 +15,10 @@ dist
 
 .idea
 .DS_Store
+
+#AI Agent Tests
+.playwright-mcp
+screenshot*
+
+#AI Agent Temp Files
+.sisyphus

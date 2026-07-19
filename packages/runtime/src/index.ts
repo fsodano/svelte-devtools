@@ -1,5 +1,7 @@
 import {ComponentRegistry} from './instrumentation/registry.js';
-import type {SvelteDevToolsAPI} from '@svelte-devtools/types';
+import type {ComponentInstance, SvelteDevToolsAPI} from '@svelte-devtools/types';
+
+type ComponentState = ComponentInstance;
 
 interface DevToolsState {
     registry: ComponentRegistry;
@@ -7,19 +9,14 @@ interface DevToolsState {
     components: Map<string, ComponentState>;
 }
 
-interface ComponentState {
-    id: string;
-    name: string;
-    filename?: string;
-    state: Map<string, unknown>;
-    parentId?: string;
-}
-
 interface SvelteDevToolsRuntimeWindow extends Window {
     __SVELTE_DEVTOOLS_RUNTIME__?: typeof runtime;
     __SVELTE_DEVTOOLS_REGISTRY__?: Map<string, { id: string; name: string; filename: string }>;
     __SVELTE_DEVTOOLS__?: SvelteDevToolsAPI;
+    __SVELTE_DEVTOOLS_DEBUG__?: boolean;
 }
+
+const isDebug = typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>)?.__SVELTE_DEVTOOLS_DEBUG__;
 
 const state: DevToolsState = {
     registry: new ComponentRegistry(),
@@ -50,6 +47,50 @@ export const runtime = {
                 }
             }
         }, 100);
+
+        // Watch for DOM removals to detect component unmounts
+        if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
+            const observer = new MutationObserver((mutations) => {
+                for (const mutation of mutations) {
+                    for (const node of mutation.removedNodes) {
+                        if (node instanceof Element) {
+                            const removedId = node.getAttribute('data-svelte-devtools-id');
+                            if (removedId && state.components.has(removedId)) {
+                                this.emit({
+                                    type: 'component:unmount',
+                                    componentId: removedId,
+                                    componentName: state.components.get(removedId)!.name,
+                                    timestamp: performance.now()
+                                });
+                                state.components.delete(removedId);
+                            }
+                            // Also check descendants
+                            const descendants = node.querySelectorAll('[data-svelte-devtools-id]');
+                            for (const desc of descendants) {
+                                const descId = desc.getAttribute('data-svelte-devtools-id');
+                                if (descId && state.components.has(descId)) {
+                                    this.emit({
+                                        type: 'component:unmount',
+                                        componentId: descId,
+                                        componentName: state.components.get(descId)!.name,
+                                        timestamp: performance.now()
+                                    });
+                                    state.components.delete(descId);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            const startObserver = () => {
+                if (document.body) {
+                    observer.observe(document.body, { childList: true, subtree: true });
+                } else {
+                    document.addEventListener('DOMContentLoaded', startObserver, { once: true });
+                }
+            };
+            startObserver();
+        }
     },
 
     registerComponent(id: string, name: string, filename: string, sourceLocation?: string): void {
@@ -59,8 +100,12 @@ export const runtime = {
             id,
             name,
             filename,
+            el: null,
             state: new Map(),
-            parentId: undefined
+            parentId: undefined,
+            children: [],
+            effects: [],
+            mountTime: performance.now()
         };
         state.components.set(id, componentState);
 
@@ -69,6 +114,7 @@ export const runtime = {
             if (typeof document !== 'undefined') {
                 const el = document.querySelector(`[data-svelte-devtools-id="${id}"]`);
                 if (el) {
+                    componentState.el = el;
                     let parent = el.parentElement;
                     while (parent) {
                         const parentIdAttr = parent.getAttribute('data-svelte-devtools-id');
@@ -104,27 +150,33 @@ export const runtime = {
                     timestamp: performance.now()
                 }
             }, '*');
-            console.log('[Runtime:registerComponent] Emitted:', id, name, 'parentId:', parentId);
+            if (isDebug) console.log('[Runtime:registerComponent] Emitted:', id, name, 'parentId:', parentId);
         }, 0);
     },
 
     handleState(componentId: string, key: string, type: string, value: unknown): void {
-        console.log('[Runtime:handleState] Called with:', {componentId, key, type, value});
+        if (isDebug) console.log('[Runtime:handleState] Called with:', {componentId, key, type, value});
         let component = state.components.get(componentId);
 
         if (!component) {
-            console.log('[Runtime:handleState] Creating new component for ID:', componentId);
+            if (isDebug) console.log('[Runtime:handleState] Creating new component for ID:', componentId);
             component = {
                 id: componentId,
                 name: 'Unknown',
                 filename: undefined,
-                state: new Map()
+                el: null,
+                state: new Map(),
+                parentId: undefined,
+                children: [],
+                effects: [],
+                mountTime: performance.now(),
+                isPlaceholder: true
             };
             state.components.set(componentId, component);
         }
 
         component.state.set(key, value);
-        console.log('[Runtime:handleState] Component state updated:', componentId, 'key:', key, 'value:', value);
+        if (isDebug) console.log('[Runtime:handleState] Component state updated:', componentId, 'key:', key, 'value:', value);
 
         this.emit({
             type: 'state' as const,
@@ -132,6 +184,19 @@ export const runtime = {
             componentName: component.name,
             key,
             value,
+            timestamp: performance.now()
+        });
+    },
+
+    handleEffect(componentId: string, key: string, dependencies: string[]): void {
+        if (isDebug) console.log('[Runtime:handleEffect] Called with:', {componentId, key, dependencies});
+        const component = state.components.get(componentId) || {name: 'Unknown'};
+        this.emit({
+            type: 'effect-run',
+            componentId,
+            componentName: component.name,
+            key,
+            value: {dependencies},
             timestamp: performance.now()
         });
     },
@@ -151,7 +216,7 @@ export const runtime = {
                 ...event,
                 value: sanitizeForPostMessage(event.value)
             };
-            console.log('[Runtime:emit] Sending event:', sanitizedEvent.type, 'payload:', sanitizedEvent);
+            if (isDebug) console.log('[Runtime:emit] Sending event:', sanitizedEvent.type, 'payload:', sanitizedEvent);
             window.postMessage({source: 'svelte-devtools', type: sanitizedEvent.type, payload: sanitizedEvent}, '*');
         }
     },
@@ -221,6 +286,7 @@ if (typeof window !== 'undefined') {
     svelteDevToolsRuntime.registerComponent = runtime.registerComponent.bind(runtime);
     svelteDevToolsRuntime.emit = runtime.emit.bind(runtime);
     svelteDevToolsRuntime.getState = runtime.getState.bind(runtime);
+    svelteDevToolsRuntime.handleEffect = runtime.handleEffect.bind(runtime);
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_RUNTIME__ = svelteDevToolsRuntime;
 
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS__ = {
@@ -228,23 +294,36 @@ if (typeof window !== 'undefined') {
         enabled: true,
         getComponentTree: () => {
             const allComponents = runtime.getAllComponents();
-            const componentMap = new Map<string, any>();
+            interface TreeNode {
+                id: string;
+                name: string;
+                filename?: string;
+                el: Element | null;
+                parentId?: string;
+                children: TreeNode[];
+                state: Map<string, unknown>;
+                effects: string[];
+                mountTime: number;
+                isPlaceholder?: boolean;
+            }
+            const componentMap = new Map<string, TreeNode>();
 
             allComponents.forEach(c => {
                 componentMap.set(c.id, {
                     id: c.id,
                     name: c.name,
                     filename: c.filename,
-                    el: null,
+                    el: c.el,
                     parentId: c.parentId,
                     children: [],
                     state: c.state,
-                    effects: [],
-                    mountTime: 0
+                    effects: [...c.effects],
+                    mountTime: c.mountTime,
+                    isPlaceholder: c.isPlaceholder
                 });
             });
 
-            const roots: any[] = [];
+            const roots: TreeNode[] = [];
             componentMap.forEach((node, id) => {
                 if (node.parentId && componentMap.has(node.parentId)) {
                     componentMap.get(node.parentId)!.children.push(node);

@@ -1,8 +1,4 @@
-export interface SourceLocation {
-    filename: string;
-    line: number;
-    column: number;
-}
+import type { SourceLocation } from '@svelte-devtools/types';
 
 export interface ComponentInfo {
     id: string;

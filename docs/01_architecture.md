@@ -175,16 +175,14 @@ Values must be serialized for cross-context communication. The runtime handles:
 
 ## Design Decisions
 
-### Why Vite DevTools Kit Instead of Chrome Extension?
+### Why Vite DevTools Kit?
 
-| Chrome Extension | Vite DevTools Kit |
-|-----------------|-------------------|
-| Requires separate installation | Built into dev server |
-| Complex messaging (ports, background scripts) | Simple iframe communication |
-| Manifest V3 restrictions | Full Vite integration |
-| Extension store approval | Immediate updates |
+Svelte DevTools is built as a Vite plugin that integrates with `@vitejs/devtools-kit`, serving the UI in an iframe at `/__svelte-devtools/`. This approach provides:
 
-**Decision**: Use Vite DevTools Kit for tighter integration and simpler architecture.
+- **Built into dev server** — no separate installation required
+- **Simple iframe communication** — uses postMessage between app and DevTools panel
+- **Full Vite integration** — leverages Vite's transform pipeline and middleware
+- **Immediate updates** — changes ship with the plugin, no store approval needed
 
 ### Why $inspect Injection Instead of Runtime Rune Hooking?
 

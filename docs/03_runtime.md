@@ -10,17 +10,14 @@ The runtime script is loaded by the Vite plugin via `transformIndexHtml`:
 <script type="module" src="/__svelte-devtools/svelte-runtime.js"></script>
 ```
 
-For SvelteKit SSR apps, inject via `hooks.server.ts`:
+For SvelteKit SSR apps, use the exported helper in `hooks.server.ts`:
 
 ```typescript
-export const handle = async ({ event, resolve }) => {
-  return resolve(event, {
-    transformPageChunk: ({ html }) => {
-      return html.replace('</head>',
-        `<script type="module" src="/__svelte-devtools/svelte-runtime.js"></script></head>`);
-    }
-  });
-};
+// src/hooks.server.ts
+import type { Handle } from '@sveltejs/kit';
+import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+
+export const handle: Handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```
 
 ## Global APIs
@@ -202,7 +199,7 @@ This triggers a `component-register` event via postMessage that the DevTools UI 
 
 ## Registry Polling
 
-The runtime polls the registry every 200ms to discover components that were registered before the runtime initialized:
+The runtime polls the registry every 100ms to discover components that were registered before the runtime initialized:
 
 ```typescript
 setInterval(() => {
@@ -214,7 +211,7 @@ setInterval(() => {
       this.registerComponent(id, meta.name, meta.filename);
     }
   }
-}, 200);
+}, 100);
 ```
 
 ## Architecture Summary
@@ -224,7 +221,7 @@ setInterval(() => {
 | Event Mechanism | `postMessage` |
 | State Detection | `$inspect` injection |
 | DOM Scanning | None |
-| Polling | 200ms (registry discovery only) |
+| Polling | 100ms (registry discovery only) |
 
 ## Performance Considerations
 

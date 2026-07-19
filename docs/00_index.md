@@ -11,7 +11,7 @@ Svelte DevTools provides real-time component inspection, state tracking, and tim
 - **Component Tree**: Visualize your Svelte component hierarchy with parent-child relationships
 - **State Inspection**: Track `$state`, `$derived`, `$props` runes in real-time
 - **Timeline**: View chronological event history (mounts, updates, effects) (NOT YET)
-- **Server-Side Tracing**: See SvelteKit load function data (when server package is used) (NOT YET)
+- **Server-Side Tracing**: Basic HTTP request tracing via Vite middleware (experimental)
 - **Motion Tracking**: Automatic tracking of Spring/Tween instances from `svelte/motion`
 - **Zero Production Impact**: All dev tools code is dev-only
 
@@ -52,13 +52,13 @@ flowchart TB
 **Development** (package not yet published):
 
 ```bash
-# Clone the repo and install from local
-git clone https://github.com/your-org/svelte-devtools
-cd svelte-devtools
+# From this repo
 npm install
 npm run build
 
-# Then in your project, use npm link or workspace reference
+# In your project
+npm link ../../svelte-dev-extension/packages/vite-plugin
+npm install @vitejs/devtools
 ```
 
 **Production** (once published):
@@ -69,18 +69,38 @@ npm install @svelte-devtools/vite-plugin
 
 ### 2. Configure Vite
 
+**Plain Vite:**
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite';
+import { DevTools } from '@vitejs/devtools';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { svelteDevTools } from '@svelte-devtools/vite-plugin';
+
+export default defineConfig({
+  plugins: [DevTools(), svelte(), svelteDevTools()]
+});
+```
+
+**SvelteKit:**
+
 ```typescript
 // vite.config.ts
 import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { DevTools } from '@vitejs/devtools';
 import { svelteDevTools } from '@svelte-devtools/vite-plugin';
 
 export default defineConfig({
-  plugins: [
-    sveltekit(),
-    svelteDevTools()
-  ]
+  plugins: [DevTools(), sveltekit(), svelteDevTools()]
 });
+
+// src/hooks.server.ts
+import type { Handle } from '@sveltejs/kit';
+import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+
+export const handle: Handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```
 
 ### 3. Start Development
@@ -104,7 +124,7 @@ npm run dev
 | 2 | [Vite Plugin](./02_vite-plugin.md)   | Build-time transforms and configuration |
 | 3 | [Runtime](./03_runtime.md)           | $inspect injection and state tracking |
 | 4 | [Client UI](./04_client.md)          | DevTools panel implementation |
-| 5 | [Server Integration](./05_server.md) | SvelteKit server-side tracing (planned) |
+| 5 | [Server Integration](./05_server.md) | SvelteKit request tracing (experimental) |
 | 6 | [API Reference](./06_api.md)        | Public API and type definitions |
 
 ## Suggested Reading Order

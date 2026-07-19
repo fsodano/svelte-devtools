@@ -32,11 +32,13 @@ npm install @svelte-devtools/vite-plugin
 ```typescript
 // vite.config.ts
 import { defineConfig } from 'vite';
+import { DevTools } from '@vitejs/devtools';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { svelteDevTools } from '@svelte-devtools/vite-plugin';
 
 export default defineConfig({
   plugins: [
+    DevTools(),
     sveltekit(),
     svelteDevTools()
   ]
@@ -354,21 +356,21 @@ ctx.docks.register({
 
 ### SvelteKit vs Plain Vite
 
-**Problem**: `transformIndexHtml` not working with SvelteKit SSR.
+**Problem**: `transformIndexHtml` does not fire with SvelteKit SSR.
 
-**Solution**: For SvelteKit, inject via `hooks.server.ts`:
+**Solution**: Use the exported `svelteDevToolsHandle` helper in `hooks.server.ts`:
 
 ```typescript
-export const handle = async ({ event, resolve }) => {
-  return resolve(event, {
-    transformPageChunk: ({ html }) => {
-      return html.replace('</head>',
-        `<script src="/__svelte-devtools/svelte-runtime.js"></script></head>`
-      );
-    }
-  });
-};
+// src/hooks.server.ts
+import type { Handle } from '@sveltejs/kit';
+import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+
+export const handle: Handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```
+
+When the Vite plugin detects SvelteKit, it logs this exact snippet to stdout.
+
+The helper injects both the Vite DevTools client injection script and the Svelte runtime script via `transformPageChunk` on every server-rendered response.
 
 ### Generated Files
 
@@ -385,7 +387,7 @@ The plugin has `apply: 'serve'` which means it only runs in development:
 ```typescript
 export function svelteDevTools(options = {}): Plugin {
   return {
-    name: 'svelte-devtools-pro',  // Dev only
+    name: 'svelte-devtools',  // Dev only
     apply: 'serve',
     enforce: 'pre',
     // ...

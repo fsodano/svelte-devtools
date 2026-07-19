@@ -169,31 +169,18 @@ interface SvelteDevToolsPluginOptions {
 
 ```typescript
 /**
- * Options for SvelteKit server integration (planned).
- */
-interface SvelteKitDevtoolsOptions {
-  /** Include trace headers in response (default: true) */
-  includeTraceHeaders?: boolean;
-
-  /** Trace load functions (default: true) */
-  traceLoads?: boolean;
-
-  /** Trace fetch calls (default: true) */
-  traceFetches?: boolean;
-
-  /** Custom sanitization function */
-  sanitize?: (key: string, value: unknown) => unknown;
-}
-
-/**
- * Server-side event (planned).
+ * Server event captured by the Vite plugin middleware.
  */
 interface ServerEvent {
-  type: 'server:load' | 'api:call' | 'db:query' | 'server:error';
-  traceId: string;
+  id: string;
+  type: 'server:trace' | 'server:error';
   timestamp: number;
   duration?: number;
-  data: unknown;
+  data: {
+    url: string;
+    method: string;
+    statusCode: number;
+  };
 }
 ```
 
@@ -236,7 +223,7 @@ Injects the runtime script:
 ```typescript
 transformIndexHtml(html) {
   return html.replace('</head>',
-    `<script src="/__svelte-devtools/svelte-runtime.js"></script></head>`
+    `<script type="module" src="/__svelte-devtools/svelte-runtime.js"></script></head>`
   );
 }
 ```
