@@ -12,18 +12,23 @@
     "build:vite-plugin": "npm run build -w @svelte-devtools/vite-plugin",
     "build:client": "npm run build -w @svelte-devtools/client",
     "build:types": "npm run build -w @svelte-devtools/types",
-    "test": "npm run build && echo '✅ Build successful - ready for integration testing (TBD)'",
+    "test": "npm run build && vitest run",
+    "test:watch": "vitest",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "clean": "rm -rf dist/ && rm -rf packages/*/dist/"
+    "clean": "rm -rf dist/ && rm -rf packages/*/dist/",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "rolldown": "^1.0.0-rc.12",
+    "@types/node": "^25.5.0",
+    "happy-dom": "^20.9.0",
+    "rolldown": "^1.0.0-rc.13",
     "rolldown-plugin-dts": "^0.23.2",
     "svelte": "^5.55.1",
-    "tslib": "^2.6.2",
-    "typescript": "^5.3.3",
+    "typescript": "^6.0.2",
     "vitest": "^4.1.2"
-  },
-  "packageManager": "npm@10.0.0"
+  }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@svelte-devtools/types",
-  "version": "2.0.0",
+  "version": "0.0.1",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -18,7 +18,7 @@
     "build": "tsc",
     "dev": "tsc --watch"
   },
-  "devDependencies": {
-    "typescript": "^5.0.0"
+  "publishConfig": {
+    "access": "public"
   }
 }

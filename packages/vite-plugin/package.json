@@ -1,6 +1,6 @@
 {
   "name": "@svelte-devtools/vite-plugin",
-  "version": "2.0.0",
+  "version": "0.0.1",
   "type": "module",
   "description": "Professional Vite plugin for Svelte 5 DevTools",
   "main": "dist/index.js",
@@ -9,6 +9,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./sveltekit": {
+      "import": "./dist/sveltekit.js",
+      "types": "./dist/sveltekit.d.ts"
     }
   },
   "scripts": {
@@ -20,19 +24,22 @@
     "@babel/types": "^7.26.0",
     "@svelte-devtools/runtime": "file:../runtime",
     "@svelte-devtools/types": "file:../types",
-    "@vitejs/devtools-kit": "0.0.0-alpha.31",
+    "@vitejs/devtools-kit": "^0.4.0",
     "launch-editor": "^2.6.1",
     "magic-string": "^0.30.0",
-    "sirv": "^2.0.4"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "svelte": "^5.0.0",
-    "typescript": "^5.0.0",
-    "vite": "^8.0.3"
+    "sirv": "^3.0.2"
   },
   "peerDependencies": {
+    "@sveltejs/kit": "^2.55.0",
     "svelte": "^5.0.0",
     "vite": "^8.0.3"
+  },
+  "peerDependencyMeta": {
+    "@sveltejs/kit": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
