@@ -19,11 +19,28 @@ export interface ComponentMeta {
   id: string;
   name: string;
   filename: string;
+  runeCounts?: Record<string, number>;
+  migrationResult?: {
+    filename: string;
+    maxScore: number;
+    actualScore: number;
+    percentage: number;
+    patterns: Array<{
+      svelte4: string;
+      svelte5: string;
+      weight: number;
+      migrated: boolean;
+      detected: boolean;
+    }>;
+  };
 }
 
 /**
  * Complete component instance tracked at runtime.
  * Used by the instrumentation and exposed via __SVELTE_DEVTOOLS__ API.
+ * 
+ * In flat mode (getAllComponents): children are string IDs.
+ * In tree mode (getComponentTree): children are nested ComponentInstance objects.
  */
 export interface ComponentInstance {
   id: string;
@@ -31,7 +48,7 @@ export interface ComponentInstance {
   filename?: string;
   el: Element | null;
   parentId?: string;
-  children: string[];
+  children: string[] | ComponentInstance[];
   state: Map<string, unknown>;
   effects: string[];
   mountTime: number;
@@ -235,8 +252,15 @@ export type StateChangeHandler = (
 ) => void;
 
 // ============================================================================
-// Plugin Types
+// Agent API Types
 // ============================================================================
+
+export interface AgentResponse<T = unknown> {
+  ok: boolean;
+  data?: T;
+  error?: { code: string; message: string };
+  timestamp: number;
+}
 
 /**
  * Options for the Vite plugin.
@@ -298,13 +322,6 @@ export interface ComponentInfo {
   sourceLocation?: SourceLocation;
 }
 
-/**
- * Component tree structure.
- */
-export interface ComponentTree {
-  component: ComponentInfo;
-  children: ComponentTree[];
-}
 
 // ============================================================================
 // Re-export constants

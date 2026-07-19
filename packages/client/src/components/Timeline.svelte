@@ -30,9 +30,73 @@
     duration?: number;
   }
 
-  let entries = $state<TimelineEntry[]>([]);
+  import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
+
+  // --- Store-derived reactive state ---
+  let entries = $derived(devtoolsStore.timeline);
+  let snapshots = $derived(devtoolsStore.timeTravel.snapshots);
+  let currentSnapshotIndex = $derived(devtoolsStore.timeTravel.currentIndex);
+  let canUndo = $derived(devtoolsStore.timeTravel.canUndo);
+  let canRedo = $derived(devtoolsStore.timeTravel.canRedo);
+
+  // --- Local UI state ---
+  let isRecording = $state(true);
+  let isPlaying = $state(false);
   let filter = $state<string>('all');
 
+  // --- Derived helpers ---
+  let isViewingHistorical = $derived(
+    snapshots.length > 0 && currentSnapshotIndex < snapshots.length - 1
+  );
+
+  let snapshotCounter = $derived(
+    snapshots.length > 0
+      ? `Snapshot ${currentSnapshotIndex + 1} / ${snapshots.length}`
+      : ''
+  );
+
+  // --- Auto-play: advance through snapshots on an interval ---
+  $effect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      if (canRedo) {
+        devtoolsStore.timeTravel.redo();
+      } else {
+        isPlaying = false;
+      }
+    }, 1500);
+    return () => clearInterval(interval);
+  });
+
+  // --- Toolbar action handlers ---
+  function toggleRecording(): void {
+    isRecording = !isRecording;
+    if (isRecording) {
+      devtoolsStore.timeTravel.capture();
+    }
+  }
+
+  function togglePlay(): void {
+    isPlaying = !isPlaying;
+  }
+
+  function handleUndo(): void {
+    devtoolsStore.timeTravel.undo();
+  }
+
+  function handleRedo(): void {
+    devtoolsStore.timeTravel.redo();
+  }
+
+  function handleClearSnapshots(): void {
+    devtoolsStore.timeTravel.clear();
+  }
+
+  function handleRestoreLatest(): void {
+    devtoolsStore.timeTravel.restore(snapshots.length - 1);
+  }
+
+  // --- Filter state & helpers (existing) ---
   const filters = [
     { id: 'all', label: 'All' },
     { id: 'component', label: 'Components' },
@@ -86,7 +150,7 @@
   }
 
   function clearTimeline(): void {
-    entries = [];
+    devtoolsStore.clearTimeline();
   }
 
   function formatTraceData(data: unknown): string {
@@ -111,6 +175,102 @@
 </script>
 
 <div class="timeline">
+  {#if snapshots.length > 0}
+    <!-- ── Time-travel toolbar ── -->
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <!-- Record toggle -->
+        <button
+          class="tb-btn record-btn"
+          class:recording={isRecording}
+          onclick={toggleRecording}
+          title={isRecording ? 'Recording on \u2014 click to stop' : 'Recording off \u2014 click to start'}
+        >
+          <svg viewBox="0 0 12 12" width="10" height="10">
+            <circle cx="6" cy="6" r="4" fill="currentColor"/>
+          </svg>
+        </button>
+
+        <!-- Undo -->
+        <button
+          class="tb-btn"
+          onclick={handleUndo}
+          disabled={!canUndo}
+          title="Undo snapshot"
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 7l3-3v2h5v3H8v2L5 7z"/>
+          </svg>
+        </button>
+
+        <!-- Redo -->
+        <button
+          class="tb-btn"
+          onclick={handleRedo}
+          disabled={!canRedo}
+          title="Redo snapshot"
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 7L8 4v2H3v3h5v2l3-3z"/>
+          </svg>
+        </button>
+
+        <!-- Snapshot counter -->
+        <span class="counter">{snapshotCounter}</span>
+      </div>
+
+      <div class="toolbar-group">
+        <!-- Play / Pause auto-play -->
+        <button class="tb-btn" onclick={togglePlay} title={isPlaying ? 'Pause auto-play' : 'Play through snapshots'}>
+          {#if isPlaying}
+            <svg viewBox="0 0 16 16" width="12" height="12">
+              <rect x="3" y="2" width="4" height="12" rx="1" fill="currentColor"/>
+              <rect x="9" y="2" width="4" height="12" rx="1" fill="currentColor"/>
+            </svg>
+          {:else}
+            <svg viewBox="0 0 16 16" width="12" height="12">
+              <path d="M5 3l8 5-8 5V3z" fill="currentColor"/>
+            </svg>
+          {/if}
+        </button>
+
+        <!-- Clear snapshots -->
+        <button class="tb-btn clear-snapshots-btn" onclick={handleClearSnapshots} title="Clear all snapshots">
+          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M4 4l8 8M12 4l-8 8"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Snapshot timeline dots ── -->
+    <div class="dot-bar">
+      {#each snapshots as snap, i (snap.id)}
+        <button
+          class="dot-wrap"
+          class:active={currentSnapshotIndex === i}
+          onclick={() => devtoolsStore.timeTravel.restore(i)}
+          title={new Date(snap.timestamp).toLocaleString()}
+        >
+          <span class="dot"></span>
+        </button>
+      {/each}
+    </div>
+
+    <!-- ── "Viewing historical state" banner ── -->
+    {#if isViewingHistorical}
+      <div class="history-banner">
+        <svg class="history-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <circle cx="8" cy="8" r="6"/>
+          <path d="M8 4.5V8l2.5 2.5"/>
+        </svg>
+        <span class="history-text">Viewing historical state</span>
+        <button class="restore-btn" onclick={handleRestoreLatest}>Restore latest</button>
+      </div>
+    {/if}
+  {/if}
+
+  <!-- ── Filter header (existing) ── -->
   <header class="header">
     <div class="filters">
       {#each filters as f (f.id)}
@@ -126,6 +286,7 @@
     <button class="clear-btn" onclick={clearTimeline}>Clear</button>
   </header>
 
+  <!-- ── Event entries (existing) ── -->
   <div class="entries">
     {#if getFilteredEntries().length > 0}
       {#each getFilteredEntries() as entry (entry.id)}
@@ -155,74 +316,263 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #252526;
+    background: var(--bg-surface);
   }
 
+  /* ── Time-travel toolbar ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-1) var(--space-2);
+    background: var(--bg-inset);
+    border-bottom: 1px solid var(--border-default);
+    flex-shrink: 0;
+    gap: var(--space-1);
+  }
+
+  .toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .tb-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .tb-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .tb-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .tb-btn:disabled:hover {
+    background: transparent;
+    color: var(--text-secondary);
+  }
+
+  .record-btn {
+    color: var(--text-secondary);
+  }
+
+  .record-btn.recording {
+    color: var(--error);
+  }
+
+  .record-btn.recording :global(svg) {
+    animation: record-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes record-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .clear-snapshots-btn:hover {
+    color: var(--text-error);
+  }
+
+  .counter {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    margin-left: 6px;
+    user-select: none;
+  }
+
+  /* ── Snapshot dots bar ── */
+  .dot-bar {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 5px var(--space-3);
+    background: var(--bg-inset);
+    border-bottom: 1px solid var(--border-default);
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+
+  .dot-bar::-webkit-scrollbar {
+    height: 3px;
+  }
+
+  .dot-bar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .dot-bar::-webkit-scrollbar-thumb {
+    background: var(--border-default);
+    border-radius: 2px;
+  }
+
+  .dot-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .dot-wrap:hover {
+    background: var(--bg-hover);
+  }
+
+  .dot {
+    display: block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border-default);
+    transition: background var(--transition-fast), transform var(--transition-fast);
+  }
+
+  .dot-wrap:hover .dot {
+    background: var(--text-muted);
+    transform: scale(1.15);
+  }
+
+  .dot-wrap.active .dot {
+    background: var(--accent-primary);
+    box-shadow: 0 0 0 2px var(--svelte-brand-15);
+  }
+
+  .dot-wrap.active:hover .dot {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 2.5px var(--svelte-brand-15);
+  }
+
+  /* ── Historical state banner ── */
+  .history-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 5px var(--space-3);
+    background: var(--bg-error);
+    border-bottom: 1px solid var(--border-default);
+    flex-shrink: 0;
+  }
+
+  .history-icon {
+    color: var(--warning);
+    flex-shrink: 0;
+  }
+
+  .history-text {
+    font-size: 11px;
+    color: var(--warning);
+    flex: 1;
+  }
+
+  .restore-btn {
+    padding: 3px var(--space-3);
+    border: 1px solid var(--border-default);
+    background: var(--bg-elevated);
+    color: var(--warning);
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .restore-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--warning);
+  }
+
+  /* ── Filter header ── */
   .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 12px;
-    border-bottom: 1px solid #333;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border-default);
+    flex-shrink: 0;
   }
 
   .filters {
     display: flex;
-    gap: 4px;
+    gap: var(--space-1);
   }
 
   .filter-btn {
-    padding: 4px 8px;
+    padding: var(--space-1) var(--space-2);
     border: none;
     background: transparent;
-    color: #858585;
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 11px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
   }
 
   .filter-btn:hover {
-    background: #2a2d2e;
-    color: #cccccc;
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 
   .filter-btn.active {
-    background: #37373d;
-    color: #ffffff;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
   }
 
   .clear-btn {
-    padding: 4px 12px;
+    padding: var(--space-1) var(--space-3);
     border: none;
-    background: #5a1d1d;
-    color: #f48771;
+    background: var(--bg-error);
+    color: var(--text-error);
     cursor: pointer;
     font-size: 11px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
   }
 
   .clear-btn:hover {
-    background: #7a2d2d;
+    background: var(--bg-error);
+    filter: brightness(1.3);
   }
 
+  /* ── Event entries ── */
   .entries {
     flex: 1;
     overflow-y: auto;
-    padding: 8px;
+    padding: var(--space-2);
   }
 
   .entry {
     display: grid;
     grid-template-columns: 24px 1fr auto auto;
-    gap: 8px;
+    gap: var(--space-2);
     align-items: center;
-    padding: 6px 8px;
-    border-bottom: 1px solid #333;
+    padding: 6px var(--space-2);
+    border-bottom: 1px solid var(--border-default);
     font-size: 11px;
   }
 
   .entry:hover {
-    background: #2a2d2e;
+    background: var(--bg-hover);
   }
 
   .icon {
@@ -230,24 +580,24 @@
   }
 
   .type {
-    font-family: 'Monaco', 'Menlo', monospace;
-    color: #9cdcfe;
+    font-family: var(--font-mono);
+    color: var(--syntax-key);
   }
 
   .time {
-    color: #858585;
+    color: var(--text-secondary);
     font-size: 10px;
   }
 
   .duration {
-    font-family: 'Monaco', 'Menlo', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
   }
 
   .trace-info {
-    font-family: 'Monaco', 'Menlo', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
-    color: #ce9178;
+    color: var(--syntax-string);
   }
 
   .empty {
@@ -255,7 +605,7 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: #858585;
+    color: var(--text-secondary);
     font-size: 12px;
   }
 </style>

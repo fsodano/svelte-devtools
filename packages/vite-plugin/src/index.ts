@@ -1,4 +1,5 @@
 import type {Plugin, ResolvedConfig, ViteDevServer} from 'vite';
+import {createFilter} from 'vite';
 import MagicString from 'magic-string';
 import {parse as parseJS} from '@babel/parser';
 import * as t from '@babel/types';
@@ -11,13 +12,21 @@ import launchEditor from 'launch-editor';
 import {parse} from 'svelte/compiler';
 import type {ComponentMeta, StateDeclaration, SvelteDevToolsPluginOptions} from '@svelte-devtools/types';
 import {DOCK_CONFIG, RPC_METHODS, RPC_TYPES} from '@svelte-devtools/types';
+import type {DevToolsNodeContext} from '@vitejs/devtools-kit';
+import {analyzeMigration} from './migration-analyzer.js';
 
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DEVTOOLS_PREFIX = '/__svelte-devtools';
+const GLOBAL_KEY = '__svelte_devtools_addEvent__';
 const COMPONENT_REGISTRY = new Map<string, ComponentMeta>();
+let logsApi: Record<string, (arg: unknown) => unknown> | null = null;
+let viteServer: ViteDevServer | null = null;
+let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
+const isDebug = process.env.SVELTE_DEVTOOLS_DEBUG === 'true';
 
 function getStableId(id: string, root: string): string {
     const relPath = path.relative(root, id);
@@ -34,17 +43,68 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
     let root = process.cwd();
     let config: ResolvedConfig;
 
-    const plugin: Plugin & { devtools: { setup: (ctx: DevToolsContext) => void } } = {
-        name: 'svelte-devtools-pro',
+    // Vite 8: use createFilter for include/exclude matching
+    const filter = createFilter(include, exclude);
+
+    const plugin: Plugin & { devtools: { setup: (ctx: DevToolsNodeContext) => void } } = {
+        name: 'svelte-devtools',
+        // apply: 'serve' is the default for devtools plugins — no need to set explicitly
         apply: 'serve',
         enforce: 'pre',
 
         configResolved(resolvedConfig: ResolvedConfig) {
             config = resolvedConfig;
             root = config.root;
+
+            // Detect rolldown (Vite 8)
+            const isRolldown = resolvedConfig.plugins.some(
+                (p: { name?: string }) => p?.name?.includes('rolldown') || p?.name?.includes('vite:rolldown')
+            );
+            if (isRolldown) {
+                console.log('\x1b[33m[Svelte DevTools] Detected rolldown (Vite 8). Using rolldown-compatible transform.\x1b[0m');
+            }
+
+            // Resolve tsconfig paths for SvelteKit alias support
+            const tsconfigPath = path.resolve(root, 'tsconfig.json');
+            if (fs.existsSync(tsconfigPath)) {
+                try {
+                    const tsconfigContent = fs.readFileSync(tsconfigPath, 'utf-8');
+                    const parsed = JSON.parse(tsconfigContent.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ''));
+                    if (parsed?.compilerOptions?.paths) {
+                        const aliases = parsed.compilerOptions.paths;
+                        for (const [alias, paths] of Object.entries(aliases)) {
+                            if (Array.isArray(paths) && paths.length > 0) {
+                                const aliasPath = path.resolve(root, paths[0].replace(/\/\*$/, ''));
+                                if (!config.resolve.alias) {
+                                    config.resolve.alias = [];
+                                }
+                                (config.resolve.alias as Array<{ find: string | RegExp; replacement: string }>).push({
+                                    find: alias,
+                                    replacement: aliasPath
+                                });
+                            }
+                        }
+                    }
+                } catch {
+                    // Ignore tsconfig parse errors
+                }
+            }
+
+                const hasSvelteKit = resolvedConfig.plugins.some(
+                    (p: { name?: string }) => p?.name === 'vite-plugin-sveltekit'
+                );
+                if (hasSvelteKit && isDebug) {
+                    console.info(
+                        '[Svelte DevTools] SvelteKit detected — add to src/hooks.server.ts:\n' +
+                        '  import { dev } from \'$app/environment\';\n' +
+                        '  import { svelteDevToolsHandle, noopHandle } from \'@svelte-devtools/vite-plugin/sveltekit\';\n' +
+                        '  export const handle = dev ? svelteDevToolsHandle() : noopHandle();'
+                    );
+                }
         },
 
         configureServer(server: ViteDevServer) {
+            viteServer = server;
             let clientPath: string;
             try {
                 clientPath = path.resolve(path.dirname(require.resolve('@svelte-devtools/vite-plugin/package.json')), '../client/dist');
@@ -60,26 +120,145 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                 runtimePath = path.resolve(__dirname, '../../runtime/dist');
             }
 
-            // Resolve @vitejs/devtools from project root (where vite.config.ts is)
-            let viteDevtoolsClientPath: string;
+            // Resolve @vitejs/devtools inject.js from project root (Vite allow-list scope)
+            let viteDevtoolsInjectPath: string;
             try {
-                viteDevtoolsClientPath = path.resolve(path.dirname(require.resolve('@vitejs/devtools/package.json')), 'dist/client');
-                console.log('[Svelte DevTools] Found @vitejs/devtools at:', viteDevtoolsClientPath);
+                const devtoolsPkgJson = require.resolve('@vitejs/devtools/package.json', { paths: [root] });
+                const devtoolsPkgDir = path.dirname(devtoolsPkgJson);
+                viteDevtoolsInjectPath = path.resolve(devtoolsPkgDir, 'dist/client/inject.js').replace(/\\/g, '/');
+                if (isDebug) console.log('[Svelte DevTools] Found @vitejs/devtools inject at:', viteDevtoolsInjectPath);
             } catch (e) {
-                viteDevtoolsClientPath = path.resolve(root, 'node_modules/@vitejs/devtools/dist/client');
-                console.log('[Svelte DevTools] Fallback to root node_modules:', viteDevtoolsClientPath);
+                viteDevtoolsInjectPath = '';
+                if (isDebug) console.log('[Svelte DevTools] @vitejs/devtools not found, skipping inject');
             }
 
-            server.middlewares.use('/@fs', (req, res, next) => {
-                if (req.url?.includes('@vitejs/devtools')) {
-                    const filePath = req.url.split('?')[0] || '';
-                    const fullPath = path.join(viteDevtoolsClientPath, '..', filePath.replace('/@fs/', ''));
-                    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
-                        sirv(path.dirname(fullPath), {dev: true})(req, res, next);
+            (globalThis as Record<string, unknown>).__SVELTE_DEVTOOLS_INJECT_PATH__ = viteDevtoolsInjectPath;
+
+            (globalThis as Record<string, unknown>)[GLOBAL_KEY] = (event: unknown) => {
+                import('./server-events.js').then(({ addServerEvent }) => addServerEvent(event as Parameters<typeof addServerEvent>[0]));
+            };
+
+            const markSeenTimestamps = new Map<string, number>();
+            (globalThis as Record<string, unknown>)['__svelte_devtools_markSeen__'] = (key: string) => {
+                markSeenTimestamps.set(key, Date.now());
+            };
+            // Cleanup stale markSeen entries every 60s (evict > 5 min)
+            setInterval(() => {
+                const cutoff = Date.now() - 300_000;
+                for (const [k, ts] of markSeenTimestamps) {
+                    if (ts < cutoff) markSeenTimestamps.delete(k);
+                }
+            }, 60_000);
+
+            server.middlewares.use((req, res, next) => {
+                const url = req.url?.split('?')[0] || '';
+                if (
+                    url.startsWith('/__svelte-devtools') ||
+                    url.startsWith('/@') ||
+                    url.startsWith('/node_modules') ||
+                    /\.(js|css|woff2?|map|ico|svg|png|jpg|webp|avif|ttf|eot)(\?|$)/.test(url)
+                ) {
+                    next();
+                    return;
+                }
+                const start = performance.now();
+                const reqKey = `${req.method}:${url}`;
+                res.on('finish', () => {
+                    const duration = performance.now() - start;
+                    if (markSeenTimestamps.has(reqKey)) {
+                        markSeenTimestamps.delete(reqKey);
                         return;
                     }
-                }
+                    import('./server-events.js').then(({ addServerEvent }) => {
+                        addServerEvent({
+                            id: `srv-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                            type: res.statusCode >= 400 ? 'server:error' : 'server:trace',
+                            timestamp: start,
+                            duration,
+                            data: {
+                                url,
+                                method: req.method || 'GET',
+                                statusCode: res.statusCode
+                            }
+                        });
+                    });
+                });
                 next();
+            });
+
+            server.middlewares.use('/__svelte-devtools/server-events', async (req, res, _next) => {
+                try {
+                    const {method} = req;
+                    if (method === 'GET') {
+                        res.setHeader('Content-Type', 'application/json');
+                        res.setHeader('Cache-Control', 'no-store');
+                        const {getServerEvents} = await import('./server-events.js');
+                        const rawUrl = req.url || '';
+                        const qsIdx = rawUrl.indexOf('?');
+                        const params = new URLSearchParams(qsIdx >= 0 ? rawUrl.slice(qsIdx) : '');
+                        const last = parseInt(params.get('last') || '', 10) || undefined;
+                        const sinceId = params.get('sinceId') || undefined;
+                        res.end(JSON.stringify(getServerEvents({last, sinceId})));
+                    } else if (method === 'DELETE') {
+                        const {clearServerEvents} = await import('./server-events.js');
+                        clearServerEvents();
+                        res.setHeader('Content-Type', 'application/json');
+                        res.end(JSON.stringify({ok: true}));
+                    } else {
+                        res.statusCode = 405;
+                        res.end(JSON.stringify({error: 'Method not allowed'}));
+                    }
+                } catch (e) {
+                    const err = e instanceof Error ? e.message : String(e);
+                    console.error('[Svelte DevTools] server-events error:', err);
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({error: err}));
+                }
+            });
+
+            server.middlewares.use('/__svelte-devtools/open-in-editor', (req, res, _next) => {
+                if (req.method !== 'POST') {
+                    res.statusCode = 405;
+                    res.end(JSON.stringify({error: 'Method not allowed'}));
+                    return;
+                }
+                let body = '';
+                req.on('data', chunk => body += chunk);
+                req.on('end', () => {
+                    try {
+                        const {file, line, column} = JSON.parse(body || '{}');
+                        if (!file) {
+                            res.statusCode = 400;
+                            res.end(JSON.stringify({error: 'Missing file parameter'}));
+                            return;
+                        }
+                        const filePath = path.resolve(root, file);
+                        launchEditor(`${filePath}:${line || 1}:${column || 0}`);
+                        res.statusCode = 200;
+                        res.setHeader('Content-Type', 'application/json');
+                        res.end(JSON.stringify({ok: true}));
+                    } catch (e) {
+                        res.statusCode = 400;
+                        res.end(JSON.stringify({error: 'Invalid JSON body'}));
+                    }
+                });
+            });
+
+            server.middlewares.use('/__svelte-devtools/migration-score', async (req, res, _next) => {
+                if (req.method !== 'GET') {
+                    res.statusCode = 405;
+                    res.end(JSON.stringify({error: 'Method not allowed'}));
+                    return;
+                }
+                const results = Array.from(COMPONENT_REGISTRY.values())
+                    .filter(m => m.migrationResult)
+                    .map(m => m.migrationResult!);
+                const total = results.length;
+                const avgScore = total > 0
+                    ? Math.round(results.reduce((s, r) => s + r.percentage, 0) / total)
+                    : 100;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({overall: avgScore, totalFiles: total, perFile: results}));
             });
 
             server.middlewares.use(DEVTOOLS_PREFIX, (req, res, next) => {
@@ -97,16 +276,6 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                         }
                     }
 
-                    // Serve @vitejs/devtools inject.js for SvelteKit apps
-                    if (filePath === 'vite-inject.js') {
-                        const injectFile = path.join(viteDevtoolsClientPath, 'inject.js');
-                        if (fs.existsSync(injectFile)) {
-                            res.setHeader('Content-Type', 'application/javascript');
-                            fs.createReadStream(injectFile).pipe(res);
-                            return;
-                        }
-                    }
-
                     const fullPath = path.join(distPath, filePath);
                     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
                         sirv(distPath, {dev: true})(req, res, next);
@@ -117,20 +286,18 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
             });
 
             server.ws.on('svelte-devtools:open-in-editor', (data: { file: string; line?: number }) => {
-                const file = path.resolve(root, data.file);
-                if (fs.existsSync(file)) {
-                    launchEditor(`${file}:${data.line || 1}`);
-                }
+                launchEditor(`${path.resolve(root, data.file)}:${data.line || 1}`);
             });
         },
 
         transformIndexHtml(html: string) {
-            return html.replace('</head>', `<script type="module" src="${DEVTOOLS_PREFIX}/svelte-runtime.js"></script></head>`);
+            const runtimeScript = `<script type="module" src="${DEVTOOLS_PREFIX}/svelte-runtime.js"></script>`;
+            return html.replace('</head>', `${runtimeScript}</head>`);
         },
 
 
         devtools: {
-            setup(ctx: DevToolsContext) {
+            setup(ctx: DevToolsNodeContext) {
                 // Register the dock entry
                 ctx.docks.register({
                     id: DOCK_CONFIG.ID,
@@ -140,12 +307,11 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                     url: DOCK_CONFIG.URL
                 });
 
-                // Register RPC methods for event-based communication (replaces polling)
+                // Register RPC methods for event-based communication
                 ctx.rpc.register({
                     name: RPC_METHODS.GET_COMPONENTS,
                     type: RPC_TYPES.QUERY,
                     handler: async () => {
-                        // Return all registered components
                         return Array.from(COMPONENT_REGISTRY.values());
                     }
                 });
@@ -163,22 +329,141 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                         return false;
                     }
                 });
+
+                // Migration score RPC
+                ctx.rpc.register({
+                    name: RPC_METHODS.MIGRATION_SCORE,
+                    type: RPC_TYPES.QUERY,
+                    handler: async () => {
+                        const results = Array.from(COMPONENT_REGISTRY.values())
+                            .filter(m => m.migrationResult)
+                            .map(m => m.migrationResult!);
+                        const total = results.length;
+                        const avgScore = total > 0
+                            ? Math.round(results.reduce((s, r) => s + r.percentage, 0) / total)
+                            : 100;
+                        return { overall: avgScore, totalFiles: total, perFile: results };
+                    }
+                });
+
+                // Agent: build status RPC
+                ctx.rpc.register({
+                    name: RPC_METHODS.BUILD_STATUS,
+                    type: RPC_TYPES.QUERY,
+                    handler: async () => ({
+                        ok: true,
+                        data: {
+                            connected: true,
+                            totalComponents: COMPONENT_REGISTRY.size,
+                            activeComponents: COMPONENT_REGISTRY.size,
+                            trackedRunes: ['$state', '$derived', '$props', '$effect', '$effect.pre', '$bindable', 'untrack', '$host'],
+                            errors: [],
+                            warnings: [],
+                        },
+                        timestamp: Date.now(),
+                    })
+                });
+
+                // Agent: component state RPC
+                ctx.rpc.register({
+                    name: RPC_METHODS.COMPONENT_STATE,
+                    type: RPC_TYPES.QUERY,
+                    handler: async (componentId: unknown) => {
+                        const id = componentId as string;
+                        const meta = COMPONENT_REGISTRY.get(id);
+                        if (!meta) return { ok: false, error: { code: 'NOT_FOUND', message: `Component ${id} not found` }, timestamp: Date.now() };
+                        return { ok: true, data: meta, timestamp: Date.now() };
+                    }
+                });
+
+                // Agent: rescan RPC
+                ctx.rpc.register({
+                    name: RPC_METHODS.RESCAN,
+                    type: RPC_TYPES.MUTATION,
+                    handler: async () => {
+                        if (viteServer) {
+                            viteServer.ws.send({ type: 'full-reload' });
+                        }
+                        const count = COMPONENT_REGISTRY.size;
+                        return { ok: true, data: { rescanned: count }, timestamp: Date.now() };
+                    }
+                });
+
+                // Store messages API and send init notification
+                const ctxAny = ctx as unknown as Record<string, unknown>;
+                if (ctxAny.logs) {
+                    logsApi = ctxAny.logs as Record<string, (arg: unknown) => unknown>;
+                    if (typeof logsApi.add === 'function') {
+                        logsApi.add({
+                            message: 'Svelte DevTools initialized',
+                            description: 'Component tree, state inspection, and migration scoring active',
+                            level: 'info',
+                            category: 'svelte-devtools',
+                        } as unknown);
+                    }
+                }
+
+                // Set up agent shared state for build status tracking
+                const rpcAny = ctx.rpc as unknown as Record<string, unknown>;
+                if (rpcAny.sharedState) {
+                    (rpcAny.sharedState as Record<string, (arg: string, opts: Record<string, unknown>) => Promise<unknown>>).get?.('svelte-devtools:agent-state', {
+                        initialValue: { lastBuildStatus: null, recentErrors: [], componentCount: 0 },
+                    }).catch(() => {});
+                }
             }
         },
 
         transform(code: string, id: string) {
             if (/\.svelte-kit\/generated/.test(id)) return null;
-            if (!shouldProcess(id, include, exclude)) return null;
+            if (!filter(id)) return null;
 
+            if (isDebug) console.log('[Svelte DevTools] Transforming:', id);
             const s = new MagicString(code);
             const componentName = path.basename(id, '.svelte');
             const componentId = getStableId(id, root);
-            COMPONENT_REGISTRY.set(componentId, {id: componentId, name: componentName, filename: id});
+            const runeCounts: Record<string, number> = {};
 
-            // Inject component metadata for runtime registration
-            injectComponentMetadata(s, code, componentId, componentName, id);
-            // Inject $inspect hooks for state tracking
-            injectStateInspection(s, code, id, componentId);
+            try {
+                injectComponentMetadata(s, code, componentId, componentName, id);
+                injectStateInspection(s, code, id, componentId, runeCounts);
+                injectEffectTracking(s, code, id, componentId, runeCounts);
+            } catch (e) {
+                if (logsApi && typeof logsApi.add === 'function') {
+                    logsApi.add({
+                        message: `Transform error in ${componentName}`,
+                        description: e instanceof Error ? e.message : String(e),
+                        level: 'error',
+                        category: 'svelte-devtools',
+                    } as unknown);
+                }
+                return null;
+            }
+
+            const migrationResult = analyzeMigration(code, id, runeCounts);
+            COMPONENT_REGISTRY.set(componentId, {id: componentId, name: componentName, filename: id, runeCounts, migrationResult});
+
+            if (migrationResult && migrationResult.percentage < 50 && logsApi && typeof logsApi.add === 'function') {
+                logsApi.add({
+                    message: `${componentName} is ${migrationResult.percentage}% migrated`,
+                    description: `${migrationResult.patterns.length} Svelte 4 pattern(s) found: ${migrationResult.patterns.map(p => p.svelte4).join(', ')}`,
+                    level: 'warn',
+                    category: 'svelte-migration',
+                } as unknown);
+            }
+
+            if (batchTimer) clearTimeout(batchTimer);
+            batchTimer = setTimeout(() => {
+                if (!logsApi || typeof logsApi.add !== 'function') return;
+                const total = COMPONENT_REGISTRY.size;
+                const totalRunes = Array.from(COMPONENT_REGISTRY.values())
+                    .reduce((sum, m) => sum + Object.values(m.runeCounts ?? {}).reduce((a, b) => a + b, 0), 0);
+                logsApi.add({
+                    message: `Registered ${total} component${total === 1 ? '' : 's'} (${totalRunes} rune trackings)`,
+                    level: 'info',
+                    category: 'svelte-devtools',
+                    autoDelete: 8000,
+                } as unknown);
+            }, 2000);
 
             return s.hasChanged() ? {code: s.toString(), map: s.generateMap({hires: true})} : null;
         }
@@ -192,15 +477,6 @@ interface RpcMethodDefinition {
     handler: (data: unknown) => Promise<unknown>;
 }
 
-interface DevToolsContext {
-    docks: {
-        register: (entry: DockEntry) => void;
-    };
-    rpc: {
-        register: (method: RpcMethodDefinition) => void;
-    };
-}
-
 interface DockEntry {
     id: string;
     title: string;
@@ -209,15 +485,8 @@ interface DockEntry {
     url: string;
 }
 
-function shouldProcess(id: string, include: RegExp[], exclude: RegExp[]): boolean {
-    return !exclude.some(p => p.test(id)) && include.some(p => p.test(id));
-}
-
 function injectComponentMetadata(s: MagicString, code: string, componentId: string, componentName: string, filename: string): void {
-    // Inject registry entry (fallback for runtime)
     const registryInj = `if(typeof window!=='undefined'){window.__SVELTE_DEVTOOLS_REGISTRY__||=new Map();window.__SVELTE_DEVTOOLS_REGISTRY__.set('${componentId}',{id:'${componentId}',name:'${componentName}',filename:'${filename}'})}`;
-
-    // Inject runtime registration call
     const runtimeInj = `if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__){window.__SVELTE_DEVTOOLS_RUNTIME__.registerComponent('${componentId}','${componentName}','${filename}');}`;
 
     const combinedInj = registryInj + runtimeInj;
@@ -237,7 +506,7 @@ function injectComponentMetadata(s: MagicString, code: string, componentId: stri
     }
 }
 
-function injectStateInspection(s: MagicString, code: string, filename: string, componentId: string): void {
+function injectStateInspection(s: MagicString, code: string, filename: string, componentId: string, runeCounts: Record<string, number>): void {
     const ast = parseSvelte(code, filename);
     if (!ast) return;
 
@@ -247,7 +516,7 @@ function injectStateInspection(s: MagicString, code: string, filename: string, c
     const jsAst = parseJavaScript(scriptContent);
     if (!jsAst) return;
 
-    const decls = findStateDeclarations(jsAst, scriptStart);
+    const decls = findStateDeclarations(jsAst, scriptStart, runeCounts);
 
     decls.sort((a, b) => b.injectPos - a.injectPos);
 
@@ -307,7 +576,7 @@ function createInjectCode(d: StateDeclaration, componentId: string): string {
     return `;$inspect(${d.key}).with((t,...v)=>{if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleState){window.__SVELTE_DEVTOOLS_RUNTIME__.handleState('${componentId}','${d.key}',t,v[0])}})`;
 }
 
-function findStateDeclarations(ast: t.File, offset: number): StateDeclaration[] {
+function findStateDeclarations(ast: t.File, offset: number, runeCounts: Record<string, number>): StateDeclaration[] {
     const result: StateDeclaration[] = [];
 
     t.traverse(ast, {
@@ -317,9 +586,8 @@ function findStateDeclarations(ast: t.File, offset: number): StateDeclaration[] 
             for (const decl of node.declarations) {
                 if (!decl.init) continue;
 
-                extractStateDeclaration(decl, offset, result);
+                extractRuneDeclarations(decl, offset, result, runeCounts);
                 extractMotionDeclaration(decl, offset, result);
-                extractPropsDeclaration(decl, offset, result);
             }
         }
     });
@@ -327,17 +595,169 @@ function findStateDeclarations(ast: t.File, offset: number): StateDeclaration[] 
     return result;
 }
 
-function extractStateDeclaration(decl: t.VariableDeclarator, offset: number, result: StateDeclaration[]): void {
-    if (!t.isIdentifier(decl.id)) return;
+/**
+ * Extract declarations for $state, $derived, $props with support for:
+ * - Simple: let count = $state(0)
+ * - Object destructuring: let { a, b } = $state({})
+ * - Array destructuring: let [first, ...rest] = $state([])
+ * - Default values: let { name = 'default' } = $props()
+ * - Renamed keys: let { user: name } = $props()
+ * - Bindable: let { x = $bindable() } = $props()
+ */
+function extractRuneDeclarations(decl: t.VariableDeclarator, offset: number, result: StateDeclaration[], runeCounts: Record<string, number>): void {
     if (!t.isCallExpression(decl.init)) return;
+
+    // Handle MemberExpression: $effect.pre(...)
+    if (t.isMemberExpression(decl.init.callee)) {
+        if (t.isIdentifier(decl.init.callee.object) && decl.init.callee.object.name === '$effect' &&
+            t.isIdentifier(decl.init.callee.property) && decl.init.callee.property.name === 'pre') {
+            runeCounts['$effect.pre'] = (runeCounts['$effect.pre'] || 0) + 1;
+        }
+        return;
+    }
+
     if (!t.isIdentifier(decl.init.callee)) return;
 
     const callee = decl.init.callee.name;
-    if (!['$state', '$derived', '$props'].includes(callee)) return;
+    if (!['$state', '$derived', '$props', '$effect', '$effect.pre', '$bindable', 'untrack', '$host'].includes(callee)) return;
+
+    runeCounts[callee] = (runeCounts[callee] || 0) + 1;
+
+    // untrack and $host are counted but should not produce $inspect injection
+    if (callee === 'untrack' || callee === '$host') return;
 
     const pos = decl.init.end;
-    if (pos != null) {
-        result.push({key: decl.id.name, injectPos: offset + pos, isClassInstance: false});
+    if (pos == null) return;
+
+    if (t.isIdentifier(decl.id)) {
+        result.push({ key: decl.id.name, injectPos: offset + pos, isClassInstance: false });
+        return;
+    }
+
+    if (t.isObjectPattern(decl.id)) {
+        for (const prop of decl.id.properties) {
+            if (t.isObjectProperty(prop)) {
+                if (t.isIdentifier(prop.key)) {
+                    const actualName = t.isIdentifier(prop.value) ? prop.value.name : prop.key.name;
+                    result.push({ key: actualName, injectPos: offset + pos, isClassInstance: false });
+                }
+            } else if (t.isRestElement(prop)) {
+                if (t.isIdentifier(prop.argument)) {
+                    result.push({ key: prop.argument.name, injectPos: offset + pos, isClassInstance: false });
+                }
+            }
+        }
+
+        // Detect $bindable() in default values for $props() destructuring
+        if (callee === '$props') {
+            for (const prop of decl.id.properties) {
+                if (t.isObjectProperty(prop) && t.isAssignmentPattern(prop.value)) {
+                    const right = prop.value.right;
+                    if (t.isCallExpression(right) && t.isIdentifier(right.callee) && right.callee.name === '$bindable') {
+                        runeCounts['$bindable'] = (runeCounts['$bindable'] || 0) + 1;
+                    }
+                }
+            }
+        }
+
+        return;
+    }
+
+    if (t.isArrayPattern(decl.id)) {
+        for (const element of decl.id.elements) {
+            if (t.isIdentifier(element)) {
+                result.push({ key: element.name, injectPos: offset + pos, isClassInstance: false });
+            } else if (t.isRestElement(element)) {
+                if (t.isIdentifier(element.argument)) {
+                    result.push({ key: element.argument.name, injectPos: offset + pos, isClassInstance: false });
+                }
+            } else if (t.isAssignmentPattern(element)) {
+                if (t.isIdentifier(element.left)) {
+                    result.push({ key: element.left.name, injectPos: offset + pos, isClassInstance: false });
+                }
+            }
+        }
+    }
+}
+
+function injectEffectTracking(s: MagicString, code: string, filename: string, componentId: string, runeCounts: Record<string, number>): void {
+    const ast = parseSvelte(code, filename);
+    if (!ast) return;
+
+    const {scriptContent, scriptStart} = extractScript(code, ast);
+    if (!scriptContent) return;
+
+    const jsAst = parseJavaScript(scriptContent);
+    if (!jsAst) return;
+
+    // Track standalone $effect() calls (not variable declarations)
+    const trackedPositions: { start: number; end: number; name: string }[] = [];
+
+    t.traverse(jsAst, {
+        enter(node) {
+            if (!t.isExpressionStatement(node)) return;
+            if (!t.isCallExpression(node.expression)) return;
+
+            let callee: string | null = null;
+
+            // Handle $effect.pre() as MemberExpression
+            if (t.isMemberExpression(node.expression.callee)) {
+                if (t.isIdentifier(node.expression.callee.object) && node.expression.callee.object.name === '$effect' &&
+                    t.isIdentifier(node.expression.callee.property) && node.expression.callee.property.name === 'pre') {
+                    callee = '$effect.pre';
+                }
+            } else if (t.isIdentifier(node.expression.callee)) {
+                callee = node.expression.callee.name;
+            }
+
+            if (!callee) return;
+
+            if (callee === '$effect' || callee === '$effect.pre') {
+                runeCounts[callee] = (runeCounts[callee] || 0) + 1;
+                if (node.expression.start != null && node.expression.end != null) {
+                    trackedPositions.push({
+                        start: node.expression.start,
+                        end: node.expression.end,
+                        name: callee,
+                    });
+                }
+            } else if (callee === 'untrack') {
+                runeCounts['untrack'] = (runeCounts['untrack'] || 0) + 1;
+            }
+        },
+    });
+
+    // Detect $state.snapshot() and $state.fsync() member expressions
+    t.traverse(jsAst, {
+        enter(node) {
+            if (!t.isCallExpression(node)) return;
+            if (!t.isMemberExpression(node.callee)) return;
+            if (!t.isIdentifier(node.callee.object)) return;
+            if (node.callee.object.name !== '$state') return;
+            if (!t.isIdentifier(node.callee.property)) return;
+
+            const member = node.callee.property.name;
+            if (member === 'snapshot' || member === 'fsync') {
+                runeCounts[`$state.${member}`] = (runeCounts[`$state.${member}`] || 0) + 1;
+            }
+        },
+    });
+
+    // Inject tracking code into $effect callbacks
+    trackedPositions.sort((a, b) => b.start - a.start);
+
+    for (const {start, end, name} of trackedPositions) {
+        const bodyStart = scriptStart + start;
+        // Find the opening brace of the callback
+        const callText = code.slice(scriptStart + start, scriptStart + end);
+        const fnMatch = callText.match(/^\$effect(?:\.pre)?\s*\(\s*(?:async\s*)?\(\s*\)\s*(?::\s*\w+\s*)?=>\s*\{/);
+        if (!fnMatch) continue;
+
+        const bodyOffset = scriptStart + start + (fnMatch[0]?.length || 0);
+        const effectKey = `effect_${runeCounts[name]}`;
+        const injectCode = `if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleEffect){window.__SVELTE_DEVTOOLS_RUNTIME__.handleEffect('${componentId}','${effectKey}',[])};`;
+
+        s.appendLeft(bodyOffset, injectCode);
     }
 }
 
@@ -352,22 +772,6 @@ function extractMotionDeclaration(decl: t.VariableDeclarator, offset: number, re
     const pos = decl.init.end;
     if (pos != null) {
         result.push({key: decl.id.name, injectPos: offset + pos, isClassInstance: true});
-    }
-}
-
-function extractPropsDeclaration(decl: t.VariableDeclarator, offset: number, result: StateDeclaration[]): void {
-    if (!t.isObjectPattern(decl.id)) return;
-    if (!t.isCallExpression(decl.init)) return;
-    if (!t.isIdentifier(decl.init.callee)) return;
-    if (decl.init.callee.name !== '$props') return;
-
-    const pos = decl.init.end;
-    if (pos == null) return;
-
-    for (const prop of decl.id.properties) {
-        if (t.isObjectProperty(prop) && t.isIdentifier(prop.key)) {
-            result.push({key: prop.key.name, injectPos: offset + pos, isClassInstance: false});
-        }
     }
 }
 

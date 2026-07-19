@@ -11,6 +11,19 @@ import type {
   EffectRunPayload
 } from '@svelte-devtools/types';
 
+interface ServerEvent {
+  id: string;
+  type: string;
+  timestamp: number;
+  duration?: number;
+  data: {
+    url?: string;
+    method?: string;
+    routeId?: string | null;
+    error?: { message: string; stack?: string };
+  };
+}
+
 function createDevtoolsStore() {
   let components = $state<ComponentNode[]>([]);
   let selectedComponentId = $state<string | null>(null);
@@ -21,11 +34,56 @@ function createDevtoolsStore() {
   const bridge = createWindowBridge();
   const timeTravel = createTimeTravelStore(
     () => components,
-    () => timeline
+    () => timeline,
+    (c) => { components = c; },
+    (t) => { timeline = t; }
   );
+  let serverEvents = $state<unknown[]>([]);
+  let serverEventsPollTimer: ReturnType<typeof setInterval> | null = null;
+
+  async function fetchServerEvents(): Promise<void> {
+    try {
+      const lastEventId = (serverEvents.length > 0) ? (serverEvents[serverEvents.length - 1] as Record<string, unknown>).id as string : undefined;
+      const url = lastEventId
+        ? `/__svelte-devtools/server-events?sinceId=${encodeURIComponent(lastEventId)}`
+        : '/__svelte-devtools/server-events?last=50';
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data)) return;
+      const existingIds = new Set(serverEvents.map((e: unknown) => (e as Record<string, unknown>).id as string));
+      const newEvents = (data as Array<Record<string, unknown>>).filter(e => !existingIds.has(e.id as string));
+      if (newEvents.length > 0) {
+        serverEvents = [...serverEvents, ...newEvents].slice(-1000);
+        for (const evt of newEvents) {
+          const typedEvt = evt as ServerEvent;
+          addToTimeline({
+            id: generateId(),
+            type: typedEvt.type,
+            timestamp: typedEvt.timestamp,
+            data: typedEvt.data,
+            duration: typedEvt.duration
+          });
+        }
+      }
+    } catch {
+      // noop
+    }
+  }
+
+  function startServerEventsPoll(): void {
+    if (serverEventsPollTimer) return;
+    fetchServerEvents();
+    serverEventsPollTimer = setInterval(fetchServerEvents, 1000);
+  }
+
+  function stopServerEventsPoll(): void {
+    if (!serverEventsPollTimer) return;
+    clearInterval(serverEventsPollTimer);
+    serverEventsPollTimer = null;
+  }
 
   function init(): void {
-    console.log('[Store:init] Registering bridge handlers');
     bridge.on('component:mount', handleComponentMount as BridgeHandler);
     bridge.on('component:unmount', handleComponentUnmount as BridgeHandler);
     bridge.on('state:change', handleStateChange as BridgeHandler);
@@ -33,13 +91,11 @@ function createDevtoolsStore() {
     bridge.on('effect:run', handleEffectRun as BridgeHandler);
 
     isConnected = true;
-    console.log('[Store:init] Connected to bridge');
+    startServerEventsPoll();
   }
 
   function handleComponentMount(payload: unknown): void {
-    console.log('[Store:handleComponentMount] Received:', payload);
     const node = ensureComponentNode(payload);
-    console.log('[Store:handleComponentMount] Node:', node.id, 'parentId:', node.parentId);
     const index = components.findIndex(c => c.id === node.id);
     if (index !== -1) {
       components[index] = node;
@@ -53,6 +109,8 @@ function createDevtoolsStore() {
       timestamp: performance.now(),
       data: node
     });
+
+    timeTravel.capture('mount');
   }
 
   function ensureComponentNode(payload: unknown): ComponentNode {
@@ -82,17 +140,14 @@ function createDevtoolsStore() {
   }
 
   function handleStateChange(payload: unknown): void {
-    console.log('[Store:handleStateChange] Received payload:', payload);
     const data = payload as StateChangePayload;
     const existingComponent = components.find(c => c.id === data.componentId);
 
     if (!existingComponent) {
-      console.log('[Store:handleStateChange] Component not found:', data.componentId, '- dropping state change. Available components:', components.map(c => c.id));
       return;
     }
 
     const value = data.value instanceof Map ? Object.fromEntries(data.value) : data.value;
-    console.log('[Store:handleStateChange] Updating component:', data.componentId, 'key:', data.key, 'value:', value);
 
     components = components.map(c => {
       if (c.id === data.componentId) {
@@ -107,6 +162,8 @@ function createDevtoolsStore() {
       timestamp: performance.now(),
       data
     });
+
+    timeTravel.capture('state');
   }
 
   function handleTraceTrigger(payload: unknown): void {
@@ -132,6 +189,10 @@ function createDevtoolsStore() {
 
   function addToTimeline(entry: TimelineEntry): void {
     timeline = [...timeline, entry].slice(-1000);
+  }
+
+  function clearTimeline(): void {
+    timeline = [];
   }
 
   function generateId(): string {
@@ -174,11 +235,18 @@ function createDevtoolsStore() {
     get searchQuery() { return searchQuery; },
     get searchResults() { return searchResults; },
     get timeTravel() { return timeTravel; },
+    get serverEvents() { return serverEvents as ServerEvent[]; },
     init,
     selectComponent,
     setSearchQuery,
     getFilteredComponents,
-    captureState: () => timeTravel.capture()
+    stopServerEventsPoll,
+    clearTimeline,
+    setServerEvents(events: unknown[]) { serverEvents = events; },
+    restoreSnapshot(snapshotComponents: ComponentNode[], snapshotTimeline: TimelineEntry[]) {
+      components = snapshotComponents;
+      timeline = snapshotTimeline;
+    }
   };
 }
 

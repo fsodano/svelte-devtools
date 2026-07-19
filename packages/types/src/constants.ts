@@ -49,6 +49,10 @@ export const RPC_METHODS = {
   OPEN_IN_EDITOR: 'svelte-devtools:open-in-editor',
   GET_TIMELINE: 'svelte-devtools:get-timeline',
   GET_STATE: 'svelte-devtools:get-state',
+  MIGRATION_SCORE: 'svelte-devtools:migration-score',
+  BUILD_STATUS: 'svelte-devtools:build-status',
+  COMPONENT_STATE: 'svelte-devtools:component-state',
+  RESCAN: 'svelte-devtools:rescan',
 } as const;
 
 export type RpcMethod = typeof RPC_METHODS[keyof typeof RPC_METHODS];
@@ -83,7 +87,7 @@ export const DOCK_CONFIG = {
   ICON: 'simple-icons:svelte',
   TYPE: 'iframe' as const,
   URL: '/__svelte-devtools/',
-} as const;
+};
 
 // ============================================================================
 // Component ID Prefix

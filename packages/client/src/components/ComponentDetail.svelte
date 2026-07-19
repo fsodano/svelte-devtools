@@ -1,6 +1,7 @@
 <script lang="ts">
   import { devtoolsStore } from "../lib/stores/devtools-store.svelte";
   import JsonTree from "./JsonTree.svelte";
+  import DomInfo from "./DomInfo.svelte";
 
   let { componentId }: { componentId: string } = $props();
 
@@ -37,16 +38,9 @@
   function openSourceLocation(): void {
     if (!component?.sourceLocation) return;
 
-    const message = {
-      type: "open-source",
-      payload: {
-        filename: component.sourceLocation.filename,
-        line: component.sourceLocation.line,
-        column: component.sourceLocation.column,
-      },
-    };
-
-    chrome.runtime.sendMessage(message);
+    import('../lib/open-in-editor.js').then(({openInEditor}) =>
+      openInEditor(component.sourceLocation!.filename, component.sourceLocation!.line, component.sourceLocation!.column)
+    );
   }
 
   function formatSourceLocation(
@@ -86,6 +80,13 @@
         onclick={() => (activeTab = "state")}
       >
         State
+      </button>
+      <button
+        class="tab"
+        class:active={activeTab === "dom"}
+        onclick={() => (activeTab = "dom")}
+      >
+        DOM
       </button>
       <button
         class="tab"
@@ -135,6 +136,8 @@
         {:else}
           <div class="empty">No state variables (runes) detected</div>
         {/if}
+      {:else if activeTab === "dom"}
+        <DomInfo {componentId} />
       {:else if activeTab === "source"}
         <div class="source-info">
           {#if component.filename}
@@ -166,104 +169,98 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #252526;
+    background: var(--bg-surface);
   }
 
   .header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    border-bottom: 1px solid #333;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border-default);
   }
 
   .title {
     font-size: 14px;
     font-weight: 600;
-    color: #cccccc;
-    font-family: "Monaco", "Menlo", monospace;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
   }
 
   .badge {
-    padding: 2px 8px;
-    background: #37373d;
-    border-radius: 3px;
+    padding: 2px var(--space-2);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
     font-size: 11px;
-    color: #858585;
+    color: var(--text-secondary);
   }
 
   .badge.slow {
-    background: #5a1d1d;
-    color: #f48771;
+    background: var(--bg-error);
+    color: var(--text-error);
   }
 
   .tabs {
     display: flex;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-default);
   }
 
   .tab {
-    padding: 8px 16px;
+    padding: var(--space-2) var(--space-4);
     border: none;
     background: transparent;
-    color: #858585;
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 12px;
-    transition: all 0.15s;
+    transition: all var(--transition-fast);
   }
 
   .tab:hover {
-    color: #cccccc;
-    background: #2a2d2e;
+    color: var(--text-primary);
+    background: var(--bg-hover);
   }
 
   .tab.active {
-    color: #ffffff;
-    background: #37373d;
-    border-bottom: 2px solid #007acc;
+    color: var(--text-primary);
+    background: var(--bg-elevated);
+    border-bottom: 2px solid var(--accent-primary);
   }
 
   .content {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
+    padding: var(--space-4);
   }
 
   .props-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   .prop-row {
     display: grid;
     grid-template-columns: 1fr 2fr auto;
-    gap: 12px;
+    gap: var(--space-3);
     align-items: center;
-    padding: 8px;
-    background: #1e1e1e;
-    border-radius: 4px;
+    padding: var(--space-2);
+    background: var(--bg-inset);
+    border-radius: var(--radius-sm);
   }
 
   .prop-key {
-    font-family: "Monaco", "Menlo", monospace;
-    color: #9cdcfe;
+    font-family: var(--font-mono);
+    color: var(--syntax-key);
     font-size: 12px;
   }
 
   .prop-value {
-    font-family: "Monaco", "Menlo", monospace;
-    color: #ce9178;
+    font-family: var(--font-mono);
+    color: var(--syntax-string);
     font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .prop-value:has(.json-tree) {
-    overflow: visible;
-    text-overflow: unset;
-    white-space: normal;
   }
 
   .empty {
@@ -271,53 +268,54 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: #858585;
+    color: var(--text-secondary);
     font-size: 12px;
   }
 
   .source-info {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-3);
   }
 
   .source-row {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 12px;
-    background: #1e1e1e;
-    border-radius: 4px;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    background: var(--bg-inset);
+    border-radius: var(--radius-sm);
   }
 
   .source-row .label {
     font-size: 11px;
-    color: #858585;
+    color: var(--text-secondary);
     font-weight: 600;
   }
 
   .source-row .value {
-    font-family: "Monaco", "Menlo", monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
-    color: #ce9178;
+    color: var(--syntax-string);
     word-break: break-all;
   }
 
   .source-link {
     display: inline-flex;
     align-items: center;
-    padding: 4px 8px;
-    background: #0e639c;
-    color: white;
+    padding: 4px var(--space-2);
+    background: var(--accent-primary);
+    color: #fff;
     border: none;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     font-size: 11px;
     cursor: pointer;
-    font-family: "Monaco", "Menlo", monospace;
-    transition: background 0.15s;
+    font-family: var(--font-mono);
+    transition: background var(--transition-fast);
   }
 
   .source-link:hover {
-    background: #1177bb;
+    background: var(--accent-hover);
   }
+
 </style>

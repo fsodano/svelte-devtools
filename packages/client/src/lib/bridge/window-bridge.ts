@@ -1,6 +1,8 @@
 import type {BridgeHandler, ComponentInstance, ComponentMountPayload, SvelteDevToolsAPI} from '@svelte-devtools/types';
 import {mapRuntimeEventTypeToBridge, RUNE_TYPES} from '@svelte-devtools/types';
 
+const isDebug = typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>).__SVELTE_DEVTOOLS_DEBUG__;
+
 export function createWindowBridge() {
     const listeners = new Map<string, Set<BridgeHandler>>();
 
@@ -11,14 +13,14 @@ export function createWindowBridge() {
             const data = event.data;
             if (!data || data.source !== 'svelte-devtools') return;
 
-            console.log('[Bridge:postMessage] Received event:', data.type, 'timestamp:', Date.now());
+            if (isDebug) console.log('[Bridge:postMessage] Received event:', data.type, 'timestamp:', Date.now());
             const bridgeType = mapRuntimeEventTypeToBridge(data.type);
-            console.log('[Bridge:postMessage] Mapped to bridge type:', bridgeType);
+            if (isDebug) console.log('[Bridge:postMessage] Mapped to bridge type:', bridgeType);
             const callbacks = listeners.get(bridgeType);
-            console.log('[Bridge:postMessage] Callbacks found:', callbacks?.size || 0);
+            if (isDebug) console.log('[Bridge:postMessage] Callbacks found:', callbacks?.size || 0);
             if (callbacks) {
                 const mappedPayload = mapPostMessagePayload(data.payload, data.type);
-                console.log('[Bridge:postMessage] Mapped payload:', mappedPayload);
+                if (isDebug) console.log('[Bridge:postMessage] Mapped payload:', mappedPayload);
                 callbacks.forEach(fn => {
                     try {
                         fn(mappedPayload);
@@ -27,7 +29,7 @@ export function createWindowBridge() {
                     }
                 });
             } else {
-                console.log('[Bridge:postMessage] No callbacks registered for type:', bridgeType);
+                if (isDebug) console.log('[Bridge:postMessage] No callbacks registered for type:', bridgeType);
             }
         });
 
@@ -74,6 +76,16 @@ export function createWindowBridge() {
             }
 
             setInterval(syncComponents, 100);
+
+            // Listen for unmount events to clean up tracking
+            targetWindow.addEventListener('message', (event) => {
+                const data = event.data;
+                if (data?.source === 'svelte-devtools' && data?.type === 'component-unmount') {
+                    const payload = data.payload as { componentId?: string; id?: string };
+                    const id = payload?.componentId || payload?.id;
+                    if (id) mountedComponents.delete(id);
+                }
+            });
         }
     }
 
@@ -118,7 +130,7 @@ function mapPostMessagePayload(payload: unknown, eventType: string): unknown {
             };
 
         case RUNE_TYPES.COMPONENT_REGISTER:
-            console.log('[Bridge:mapPayload] component-register raw:', _payload);
+            if (isDebug) console.log('[Bridge:mapPayload] component-register raw:', _payload);
             return {
                 id: _payload.componentId || _payload.id,
                 name: _payload.componentName || _payload.name,

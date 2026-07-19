@@ -38,21 +38,15 @@
     const lowerQuery = searchQuery.toLowerCase();
 
     return components.filter(comp => {
-      // Search in component name
       if (comp.name.toLowerCase().includes(lowerQuery)) return true;
-
-      // Search in filename
       if (comp.filename?.toLowerCase().includes(lowerQuery)) return true;
-
-      // Search in state keys
       const stateKeys = Object.keys(comp.state || {});
       if (stateKeys.some(key => key.toLowerCase().includes(lowerQuery))) return true;
 
-      // Search in state values (stringified)
       const stateValues = Object.values(comp.state || {});
-      if (stateValues.some(val => String(val).toLowerCase().includes(lowerQuery))) return true;
+      return stateValues.some(val => String(val).toLowerCase().includes(lowerQuery));
 
-      return false;
+
     });
   }
 
