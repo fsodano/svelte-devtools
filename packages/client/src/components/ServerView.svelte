@@ -11,6 +11,10 @@
         url?: string;
         method?: string;
         routeId?: string | null;
+        statusCode?: number;
+        contentType?: string;
+        responseSize?: number;
+        responsePreview?: string;
         error?: { message: string; stack?: string };
       };
     }>
@@ -25,6 +29,10 @@
       url?: string;
       method?: string;
       routeId?: string | null;
+      statusCode?: number;
+      contentType?: string;
+      responseSize?: number;
+      responsePreview?: string;
       error?: { message: string; stack?: string };
     };
   } | null>(null);
@@ -126,9 +134,27 @@
             <span class="value">{fmtTime(selected.timestamp)}</span>
           </div>
           {#if selected.duration !== undefined}
+          <div class="detail-row">
+            <span class="label">Duration</span>
+            <span class="value">{fmtDuration(selected.duration)}</span>
+          </div>
+          {/if}
+          {#if selected.data.contentType}
             <div class="detail-row">
-              <span class="label">Duration</span>
-              <span class="value">{fmtDuration(selected.duration)}</span>
+              <span class="label">Type</span>
+              <span class="value">{selected.data.contentType}</span>
+            </div>
+          {/if}
+          {#if selected.data.responseSize != null}
+            <div class="detail-row">
+              <span class="label">Size</span>
+              <span class="value">{selected.data.responseSize} bytes</span>
+            </div>
+          {/if}
+          {#if selected.data.responsePreview}
+            <div class="detail-row response-block">
+              <span class="label">Response</span>
+              <pre class="response-body">{selected.data.responsePreview}</pre>
             </div>
           {/if}
           {#if selected.data.error}
@@ -323,6 +349,33 @@
   .error-text {
     color: var(--status-disconnected);
     font-weight: 600;
+  }
+
+  .response-block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    align-items: flex-start;
+  }
+
+  .response-body {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.3;
+    background: var(--bg-inset);
+    padding: var(--space-2);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+    max-width: 100%;
+  }
+
+  .response-block .response-body {
+    width: 100%;
   }
 
   .stack {
