@@ -20,10 +20,10 @@ export interface MigrationResult {
 
 const MIGRATION_PATTERNS = [
 	{ svelte4: 'export let', svelte5: '$props()', detectSvelte4: (c: string) => /\bexport\s+let\s+\w+/.test(c), weight: 5 },
-	{ svelte4: '$: reactive', svelte5: '$derived()', detectSvelte4: (c: string) => /\$\s*:\s*.*\b(?!if\b|switch\b|for\b|try\b)/.test(c), weight: 5 },
+	{ svelte4: '$: reactive', svelte5: '$derived()', detectSvelte4: (c: string) => /\$:\s*(?!\s*(?:if|switch|for|try)\b)(?=[a-zA-Z_$])/.test(c), weight: 5 },
 	{ svelte4: 'on:click', svelte5: 'onclick', detectSvelte4: (c: string) => /\bon:\w+=/.test(c), weight: 3 },
 	{ svelte4: 'createEventDispatcher', svelte5: 'callback props', detectSvelte4: (c: string) => /\bcreateEventDispatcher\b/.test(c), weight: 3 },
-	{ svelte4: 'import { writable }', svelte5: '$state()', detectSvelte4: (c: string) => /\bimport\s+\{[^}]*\bwritable\b/.test(c), weight: 5 },
+	{ svelte4: 'import { writable }', svelte5: '$state()', detectSvelte4: (c: string) => /\bimport\s+\{[^}]*\b(writable|readable|derived|get)\b/.test(c), weight: 5 },
 	{ svelte4: '$store', svelte5: '$state()', detectSvelte4: (c: string) => /\$(?!(?:state|derived|effect|props|bindable|host|inspect|snapshot)\b)\w+/.test(c) && /\bimport\s+\{[^}]*\b(writable|readable|derived|get)\b/.test(c), weight: 5 },
 	{ svelte4: '<slot>', svelte5: '{@render}', detectSvelte4: (c: string) => /<slot\b/.test(c), weight: 5 },
 	{ svelte4: '<slot name>', svelte5: '{#snippet}', detectSvelte4: (c: string) => /<slot\s+name=/.test(c), weight: 5 },
@@ -41,7 +41,7 @@ export function analyzeMigration(code: string, filename: string, runeCounts: Rec
 		detected: p.detectSvelte4(code),
 	}));
 
-	// If no Svelte 4 patterns exist, the file is fully migrated
+	// Always return all patterns (detected or not) for complete migration analysis
 	const detectedPatterns = patterns.filter(p => p.detected);
 	if (detectedPatterns.length === 0) {
 		return {
@@ -49,7 +49,7 @@ export function analyzeMigration(code: string, filename: string, runeCounts: Rec
 			maxScore: 0,
 			actualScore: 0,
 			percentage: 100,
-			patterns: [],
+			patterns,
 		};
 	}
 

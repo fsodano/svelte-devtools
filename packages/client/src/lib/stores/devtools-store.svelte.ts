@@ -206,8 +206,7 @@ function createDevtoolsStore() {
   function setSearchQuery(query: string, allComponents: ComponentNode[]): void {
     searchQuery = query;
     if (!query.trim()) {
-      searchResults = [];
-      return;
+      return; // Skip writing searchResults when query is empty — nothing reads it
     }
 
     const lowerQuery = query.toLowerCase();

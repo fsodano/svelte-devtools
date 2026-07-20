@@ -4,23 +4,10 @@
   let { value, name, seen = null }: { value: unknown; name?: string; seen?: Set<unknown> | null } = $props();
 
   let expanded = $state(true);
-  let isCircular = $state(false);
 
-  let localSeen = $derived(seen ?? new Set<unknown>());
-  let visited = $state(new Set<unknown>());
-
-  // Check for circular reference on mount
-  $effect(() => {
-    visited = new Set(localSeen);
-    if (value && typeof value === "object") {
-      if (visited.has(value)) {
-        isCircular = true;
-      } else {
-        visited.add(value);
-        isCircular = false;
-      }
-    }
-  });
+  // Circular reference detection is handled by the valueNode snippet via the
+  // `currentSeen` parameter — no $effect needed to pre-populate the set.
+  let visited = $derived(seen ?? new Set<unknown>());
 
   function getValueType(val: unknown): "null" | "undefined" | "string" | "number" | "boolean" | "array" | "object" {
     if (val === null) return "null";
