@@ -269,6 +269,27 @@ export const runtime = {
 
     getAllComponents(): ComponentState[] {
         return Array.from(state.components.values());
+    },
+
+    _registerStateStore: new Map<string, Map<string, (v: unknown) => void>>(),
+
+    _registerState(componentId: string, key: string, setter: (v: unknown) => void): void {
+        let compSetters = this._registerStateStore.get(componentId);
+        if (!compSetters) {
+            compSetters = new Map();
+            this._registerStateStore.set(componentId, compSetters);
+        }
+        compSetters.set(key, setter);
+    },
+
+    setComponentState(componentId: string, key: string, value: unknown): void {
+        const compSetters = this._registerStateStore.get(componentId);
+        if (compSetters) {
+            const setter = compSetters.get(key);
+            if (setter) setter(value);
+        }
+        const comp = state.components.get(componentId);
+        if (comp) comp.state.set(key, value);
     }
 };
 
@@ -330,6 +351,8 @@ if (typeof window !== 'undefined') {
     svelteDevToolsRuntime.getState = runtime.getState.bind(runtime);
     svelteDevToolsRuntime.handleEffect = runtime.handleEffect.bind(runtime);
     svelteDevToolsRuntime.reportError = runtime.reportError.bind(runtime);
+    svelteDevToolsRuntime._registerState = runtime._registerState.bind(runtime);
+    svelteDevToolsRuntime.setComponentState = runtime.setComponentState.bind(runtime);
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_RUNTIME__ = svelteDevToolsRuntime;
 
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS__ = {
@@ -408,6 +431,9 @@ if (typeof window !== 'undefined') {
             };
         },
         getTimeline: () => [],
+        setComponentState: (id: string, key: string, value: unknown) => {
+            svelteDevToolsRuntime.setComponentState(id, key, value);
+        },
         subscribe: () => () => {
         },
         trace: () => {

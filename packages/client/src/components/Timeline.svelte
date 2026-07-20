@@ -324,25 +324,42 @@
       </div>
     </div>
 
-    <!-- ── Snapshot branch visualization ── -->
-    <div class="branch-bar">
-      {#each branches as branch}
-        <div class="branch-group">
-          <span class="branch-label" style="color: {branch.color}">{branch.name}</span>
-          {#each snapshots as snap, i (snap.id)}
-            {#if snap.branchId === branch.id}
-              <button
-                class="dot-wrap"
-                class:active={currentSnapshotIndex === i}
-                class:fork={snap.parentId && snap.branchId !== 'main' && snapshots.findIndex(s => s.id === snap.parentId) < i}
-                onclick={() => devtoolsStore.timeTravel.restore(i)}
-                title={`${snap.label || branch.name} @ ${new Date(snap.timestamp).toLocaleString()}`}
-                style="--dot-color: {snap.branchId === currentBranchId ? '#ff3e00' : branch.color}"
-              >
-                <span class="dot"></span>
-              </button>
+    <!-- ── Git-style vertical branch topology ── -->
+    <div class="branch-tree">
+      {#each snapshots as snap, i (snap.id)}
+        {@const isActive = currentSnapshotIndex === i}
+        {@const isFork = snap.parentId && snapshots.findIndex(s => s.id === snap.parentId) < i}
+        {@const branch = branches.find(b => b.id === snap.branchId)}
+        {@const branchColor = branch?.color || '#888'}
+        {@const dotColor = isActive ? '#ff3e00' : branchColor}
+        {@const parentSnap = snap.parentId ? snapshots.find(s => s.id === snap.parentId) : null}
+        <div class="branch-node" class:active={isActive}>
+          <div class="node-gutter">
+            {#if parentSnap}
+              <div class="connector-line" style="background: {branchColor}"></div>
             {/if}
-          {/each}
+            <button
+              class="dot-wrap"
+              class:active={isActive}
+              onclick={() => devtoolsStore.timeTravel.restore(i)}
+              title={`${snap.label || snap.branchId} @ ${new Date(snap.timestamp).toLocaleString()}`}
+              style="--dot-color: {dotColor}"
+            >
+              <span class="dot"></span>
+            </button>
+            {#if i < snapshots.length - 1 && snapshots[i+1].parentId !== snap.id}
+              <div class="connector-end" style="background: {branchColor}; height: 12px"></div>
+            {:else if i < snapshots.length - 1}
+              <div class="connector-line" style="background: {branchColor}"></div>
+            {/if}
+          </div>
+          <div class="node-body">
+            <span class="node-branch" style="color: {branchColor}">{snap.label || snap.branchId}</span>
+            <span class="node-time">{new Date(snap.timestamp).toLocaleTimeString()}</span>
+            {#if isActive}
+              <span class="node-indicator">◀</span>
+            {/if}
+          </div>
         </div>
       {/each}
     </div>
@@ -516,72 +533,119 @@
     user-select: none;
   }
 
-  /* ── Snapshot dots bar ── */
-  .dot-bar {
+  /* ── Git-style vertical branch topology ── */
+  .branch-tree {
     display: flex;
-    align-items: center;
-    gap: 3px;
-    padding: 5px var(--space-3);
+    flex-direction: column;
+    padding: var(--space-2) 0;
     background: var(--bg-inset);
     border-bottom: 1px solid var(--border-default);
-    overflow-x: auto;
+    max-height: 180px;
+    overflow-y: auto;
     flex-shrink: 0;
   }
 
-  .dot-bar::-webkit-scrollbar {
-    height: 3px;
+  .branch-node {
+    display: flex;
+    align-items: stretch;
+    min-height: 28px;
+    transition: background var(--transition-fast);
   }
 
-  .dot-bar::-webkit-scrollbar-track {
-    background: transparent;
+  .branch-node.active {
+    background: var(--bg-hover);
   }
 
-  .dot-bar::-webkit-scrollbar-thumb {
-    background: var(--border-default);
-    border-radius: 2px;
+  .node-gutter {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 32px;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .connector-line {
+    width: 2px;
+    flex: 1;
+    min-height: 4px;
+    border-radius: 1px;
+  }
+
+  .connector-end {
+    width: 2px;
+    border-radius: 1px;
+    flex-shrink: 0;
   }
 
   .dot-wrap {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     padding: 0;
-    border: none;
+    border: 2px solid transparent;
     background: transparent;
     cursor: pointer;
     border-radius: 50%;
-    transition: background var(--transition-fast);
+    transition: border-color var(--transition-fast);
     flex-shrink: 0;
+    z-index: 1;
+    position: relative;
   }
 
-  .dot-wrap:hover {
-    background: var(--bg-hover);
+  .dot-wrap.active {
+    border-color: var(--dot-color, #ff3e00);
   }
 
   .dot {
     display: block;
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    background: var(--border-default);
-    transition: background var(--transition-fast), transform var(--transition-fast);
-  }
-
-  .dot-wrap:hover .dot {
-    background: var(--text-muted);
-    transform: scale(1.15);
+    background: var(--dot-color, var(--border-default));
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
   }
 
   .dot-wrap.active .dot {
-    background: var(--accent-primary);
-    box-shadow: 0 0 0 2px var(--svelte-brand-15);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--dot-color, #ff3e00) 30%, transparent);
   }
 
-  .dot-wrap.active:hover .dot {
-    transform: scale(1.15);
-    box-shadow: 0 0 0 2.5px var(--svelte-brand-15);
+  .dot-wrap:hover .dot {
+    transform: scale(1.2);
+  }
+
+  .node-body {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 2px var(--space-2);
+    font-size: 10px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .node-branch {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .node-time {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    white-space: nowrap;
+  }
+
+  .node-indicator {
+    color: var(--accent-primary);
+    font-size: 10px;
+    margin-left: auto;
   }
 
   /* ── Historical state banner ── */
