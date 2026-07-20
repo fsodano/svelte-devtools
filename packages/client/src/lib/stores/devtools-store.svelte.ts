@@ -38,6 +38,7 @@ function createDevtoolsStore() {
     (c) => { components = c; },
     (t) => { timeline = t; }
   );
+  let isRecording = $state(true);
   let serverEvents = $state<unknown[]>([]);
   let serverEventsPollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -141,7 +142,7 @@ function createDevtoolsStore() {
       data: node
     });
 
-    timeTravel.capture('mount');
+    if (isRecording) timeTravel.capture('mount');
   }
 
   function ensureComponentNode(payload: unknown): ComponentNode {
@@ -201,7 +202,7 @@ function createDevtoolsStore() {
       data: { ...data, prevValue, componentName: existingComponent.name }
     });
 
-    timeTravel.capture('state');
+    if (isRecording) timeTravel.capture('state');
   }
 
   function handleTraceTrigger(payload: unknown): void {
@@ -273,6 +274,8 @@ function createDevtoolsStore() {
     get searchResults() { return searchResults; },
     get timeTravel() { return timeTravel; },
     get serverEvents() { return serverEvents as ServerEvent[]; },
+    get isRecording() { return isRecording; },
+    set isRecording(v: boolean) { isRecording = v; },
     init,
     selectComponent,
     setSearchQuery,

@@ -28,7 +28,7 @@
     timestamp: number;
   }
 
-  interface ServerTraceData {
+  interface ServerRequestData {
     id: string;
     url: string;
     method: string;
@@ -56,7 +56,6 @@
   let canRedo = $derived(devtoolsStore.timeTravel.canRedo);
 
   // --- Local UI state ---
-  let isRecording = $state(true);
   let isPlaying = $state(false);
   let filter = $state<string>('all');
   let selectedEntry = $state<TimelineEntry | null>(null);
@@ -111,8 +110,8 @@
 
   // --- Toolbar action handlers ---
   function toggleRecording(): void {
-    isRecording = !isRecording;
-    if (isRecording) {
+    devtoolsStore.isRecording = !devtoolsStore.isRecording;
+    if (devtoolsStore.isRecording) {
       devtoolsStore.timeTravel.capture();
     }
   }
@@ -151,7 +150,7 @@
   function getFilteredEntries(): TimelineEntry[] {
     const filtered = filter === 'all' ? entries
       : filter === 'trace' ? entries.filter(e => e.type === 'trace:trigger')
-      : filter === 'server' ? entries.filter(e => e.type === 'server:trace')
+      : filter === 'server' ? entries.filter(e => e.type === 'server:request')
       : entries.filter(e => e.type.includes(filter));
     // Newest first
     return filtered.slice().reverse();
@@ -214,7 +213,7 @@
         const name = (d as { effectName?: string }).effectName || 'anonymous';
         return `<span style="color: #c586c0">${name}</span>`;
       }
-      case 'server:trace':
+      case 'server:request':
       case 'server:error': {
         const method = (d as { method?: string }).method || 'GET';
         const url = (d as { url?: string }).url || '';
@@ -236,7 +235,7 @@
       case 'effect:run': return '⚡';
       case 'trace:trigger': return '🔍';
       case 'server:load': return '🖥️';
-      case 'server:trace': return '🖥️';
+      case 'server:request': return '🖥️';
       case 'api:call': return '🌐';
       case 'hydration': return '💧';
       default: return '•';
@@ -258,10 +257,10 @@
       return `<span style="color: #9cdcfe">${traceData.stateKey}</span>`;
     }
     
-    const serverTrace = data as ServerTraceData;
-    if (serverTrace.url) {
-      const methodColor = serverTrace.method === 'GET' ? '#4ec9b0' : '#dcdcaa';
-      return `<span style="color: ${methodColor}">${serverTrace.method}</span> <span style="color: #9cdcfe">${serverTrace.url}</span>`;
+    const serverRequest = data as ServerRequestData;
+    if (serverRequest.url) {
+      const methodColor = serverRequest.method === 'GET' ? '#4ec9b0' : '#dcdcaa';
+      return `<span style="color: ${methodColor}">${serverRequest.method}</span> <span style="color: #9cdcfe">${serverRequest.url}</span>`;
     }
     
     return '';
@@ -276,7 +275,7 @@
         <!-- Record toggle -->
         <button
           class="tb-btn record-btn"
-          class:recording={isRecording}
+          class:recording={devtoolsStore.isRecording}
           onclick={toggleRecording}
           title={isRecording ? 'Recording on \u2014 click to stop' : 'Recording off \u2014 click to start'}
         >
@@ -418,7 +417,7 @@
               <span class="duration">{@html formatDuration(entry.duration)}</span>
             {/if}
           </button>
-          {#if ['component:mount', 'component:unmount', 'state:change', 'effect:run', 'trace:trigger', 'server:trace', 'server:error'].includes(entry.type)}
+          {#if ['component:mount', 'component:unmount', 'state:change', 'effect:run', 'trace:trigger', 'server:request', 'server:error'].includes(entry.type)}
             <div class="entry-summary">
               <span class="detail-text">{@html formatEntryDetail(entry)}</span>
             </div>
