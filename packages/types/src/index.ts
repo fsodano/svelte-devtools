@@ -20,6 +20,7 @@ export interface ComponentMeta {
   name: string;
   filename: string;
   runeCounts?: Record<string, number>;
+  propKeys?: string[];
   migrationResult?: {
     filename: string;
     maxScore: number;

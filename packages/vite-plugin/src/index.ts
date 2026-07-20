@@ -458,10 +458,11 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
             const componentName = path.basename(id, '.svelte');
             const componentId = getStableId(id, root);
             const runeCounts: Record<string, number> = {};
+            const propKeys: string[] = [];
 
             try {
                 injectComponentMetadata(s, code, componentId, componentName, id);
-                injectStateInspection(s, code, id, componentId, runeCounts);
+                injectStateInspection(s, code, id, componentId, runeCounts, propKeys);
                 injectEffectTracking(s, code, id, componentId, runeCounts);
             } catch (e) {
                 if (logsApi && typeof logsApi.add === 'function') {
@@ -476,7 +477,7 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
             }
 
             const migrationResult = analyzeMigration(code, id, runeCounts);
-            COMPONENT_REGISTRY.set(componentId, {id: componentId, name: componentName, filename: id, runeCounts, migrationResult});
+            COMPONENT_REGISTRY.set(componentId, {id: componentId, name: componentName, filename: id, runeCounts, propKeys, migrationResult});
 
             if (migrationResult && migrationResult.percentage < 50 && logsApi && typeof logsApi.add === 'function') {
                 logsApi.add({
@@ -542,7 +543,7 @@ function injectComponentMetadata(s: MagicString, code: string, componentId: stri
     }
 }
 
-function injectStateInspection(s: MagicString, code: string, filename: string, componentId: string, runeCounts: Record<string, number>): void {
+function injectStateInspection(s: MagicString, code: string, filename: string, componentId: string, runeCounts: Record<string, number>, propKeys?: string[]): void {
     const ast = parseSvelte(code, filename);
     if (!ast) return;
 
@@ -552,7 +553,7 @@ function injectStateInspection(s: MagicString, code: string, filename: string, c
     const jsAst = parseJavaScript(scriptContent);
     if (!jsAst) return;
 
-    const decls = findStateDeclarations(jsAst, scriptStart, runeCounts);
+    const decls = findStateDeclarations(jsAst, scriptStart, runeCounts, propKeys);
 
     decls.sort((a, b) => b.injectPos - a.injectPos);
 
@@ -612,7 +613,7 @@ function createInjectCode(d: StateDeclaration, componentId: string): string {
     return `;$inspect(${d.key}).with((t,...v)=>{if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleState){window.__SVELTE_DEVTOOLS_RUNTIME__.handleState('${componentId}','${d.key}',t,v[0])}})`;
 }
 
-function findStateDeclarations(ast: t.File, offset: number, runeCounts: Record<string, number>): StateDeclaration[] {
+function findStateDeclarations(ast: t.File, offset: number, runeCounts: Record<string, number>, propKeys?: string[]): StateDeclaration[] {
     const result: StateDeclaration[] = [];
 
     t.traverse(ast, {
@@ -622,7 +623,7 @@ function findStateDeclarations(ast: t.File, offset: number, runeCounts: Record<s
             for (const decl of node.declarations) {
                 if (!decl.init) continue;
 
-                extractRuneDeclarations(decl, offset, result, runeCounts);
+                extractRuneDeclarations(decl, offset, result, runeCounts, propKeys);
                 extractMotionDeclaration(decl, offset, result);
             }
         }
@@ -640,7 +641,7 @@ function findStateDeclarations(ast: t.File, offset: number, runeCounts: Record<s
  * - Renamed keys: let { user: name } = $props()
  * - Bindable: let { x = $bindable() } = $props()
  */
-function extractRuneDeclarations(decl: t.VariableDeclarator, offset: number, result: StateDeclaration[], runeCounts: Record<string, number>): void {
+function extractRuneDeclarations(decl: t.VariableDeclarator, offset: number, result: StateDeclaration[], runeCounts: Record<string, number>, propKeys?: string[]): void {
     if (!t.isCallExpression(decl.init)) return;
 
     // Handle MemberExpression: $effect.pre(...)
@@ -676,6 +677,9 @@ function extractRuneDeclarations(decl: t.VariableDeclarator, offset: number, res
                 if (t.isIdentifier(prop.key)) {
                     const actualName = t.isIdentifier(prop.value) ? prop.value.name : prop.key.name;
                     result.push({ key: actualName, injectPos: offset + pos, isClassInstance: false });
+                    if (callee === '$props' && propKeys) {
+                        propKeys.push(actualName);
+                    }
                 }
             } else if (t.isRestElement(prop)) {
                 if (t.isIdentifier(prop.argument)) {
