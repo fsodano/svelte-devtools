@@ -322,6 +322,10 @@
                 >
                   {formatSourceLocation(item.component.sourceLocation)}
                 </span>
+              {:else if item.component.filename}
+                <span class="source-filename" title={item.component.filename}>
+                  {item.component.filename.split('/').pop()}
+                </span>
               {/if}
             </div>
           </div>
@@ -523,6 +527,17 @@
 
   .duration.slow {
     color: var(--status-disconnected);
+  }
+
+  .source-filename {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    cursor: default;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
   }
 
   .source-link {
