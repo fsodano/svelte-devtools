@@ -384,3 +384,58 @@ If a `.svelte` file has a syntax error, the plugin logs the error and skips tran
 // Look for: "Transform error in <ComponentName>"
 // Followed by the specific babel or svelte parse error
 ```
+
+## HTTP REST API
+
+The devtools exposes an HTTP API at `/__svelte-devtools/api/` on the dev server. This allows agents to query the application state without browser access — useful for CI, AI tooling, and automation.
+
+### Endpoints
+
+All endpoints return JSON with `Content-Type: application/json` and CORS headers.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/__svelte-devtools/api/` | Plugin status, available endpoints |
+| `GET` | `/__svelte-devtools/api/components` | All registered components and their state |
+| `GET` | `/__svelte-devtools/api/timeline` | Timeline of events (mounts, state changes, effects) |
+| `GET` | `/__svelte-devtools/api/server-events` | Server request traces |
+| `GET` | `/__svelte-devtools/api/migration` | Svelte 4→5 migration scores |
+| `POST` | `/__svelte-devtools/api/sync` | (internal) Client syncs runtime state here |
+
+### Example Usage
+
+```bash
+# Check plugin is loaded
+curl http://localhost:5173/__svelte-devtools/api/
+
+# List all components
+curl http://localhost:5173/__svelte-devtools/api/components
+
+# Get timeline events
+curl http://localhost:5173/__svelte-devtools/api/timeline
+
+# Get server event traces
+curl http://localhost:5173/__svelte-devtools/api/server-events
+
+# Get migration scores (Svelte 4→5)
+curl http://localhost:5173/__svelte-devtools/api/migration
+```
+
+### Response Format
+
+All endpoints return:
+
+```json
+{
+  "ok": true,
+  "count": 3,
+  "components": [],
+  "cachedAt": 1712345678000
+}
+```
+
+### Notes
+
+- Component and timeline data is cached via periodic sync from the browser. If the DevTools panel has not been opened, the cache may be empty.
+- Server events and migration scores are computed server-side and always available.
+- Port numbers (5173, 5174, etc.) vary by project.

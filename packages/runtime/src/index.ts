@@ -190,9 +190,13 @@ export const runtime = {
 
     handleEffect(componentId: string, key: string, dependencies: string[]): void {
         if (isDebug) console.log('[Runtime:handleEffect] Called with:', {componentId, key, dependencies});
-        const component = state.components.get(componentId) || {name: 'Unknown'};
+        const component = state.components.get(componentId);
+        if (!component) return;
+        if (!component.effects.includes(key)) {
+            component.effects.push(key);
+        }
         this.emit({
-            type: 'effect-run',
+            type: 'effect',
             componentId,
             componentName: component.name,
             key,

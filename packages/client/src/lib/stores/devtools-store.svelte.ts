@@ -71,16 +71,40 @@ function createDevtoolsStore() {
     }
   }
 
+  // Sync runtime state to server API cache every 2 seconds so HTTP API
+  // endpoints can serve component/timeline data to AI agents and tooling.
+  async function syncStateToServer(): Promise<void> {
+    try {
+      const payload = JSON.stringify({
+        components: components.map(c => ({ id: c.id, name: c.name, state: c.state, props: c.props, parentId: c.parentId, filename: c.filename })),
+        timeline: timeline.map(e => ({ id: e.id, type: e.type, timestamp: e.timestamp, duration: e.duration, data: e.data })),
+      });
+      // Use sendBeacon for fire-and-forget (doesn't block on page unload)
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/__svelte-devtools/api/sync', payload);
+      } else {
+        await fetch('/__svelte-devtools/api/sync', { method: 'POST', body: payload, headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch {
+      // Server not available yet — skip
+    }
+  }
+
+  let syncTimer: ReturnType<typeof setInterval> | null = null;
+
   function startServerEventsPoll(): void {
     if (serverEventsPollTimer) return;
     fetchServerEvents();
     serverEventsPollTimer = setInterval(fetchServerEvents, 1000);
+    syncStateToServer();
+    syncTimer = setInterval(syncStateToServer, 2000);
   }
 
   function stopServerEventsPoll(): void {
-    if (!serverEventsPollTimer) return;
-    clearInterval(serverEventsPollTimer);
+    if (serverEventsPollTimer) clearInterval(serverEventsPollTimer);
+    if (syncTimer) clearInterval(syncTimer);
     serverEventsPollTimer = null;
+    syncTimer = null;
   }
 
   function init(): void {
