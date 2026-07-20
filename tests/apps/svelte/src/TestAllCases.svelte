@@ -13,6 +13,9 @@
   // ===== $derived with object destructuring =====
   let derivedObj = $derived({ first: 1, second: 2 });
 
+  // ===== $derived with array value =====
+  let derivedArr = $derived([1, 2, 3, 4, 5]);
+
   // ===== $state with object destructuring =====
   let point = $state({ x: 1, y: 2 });
 
@@ -84,6 +87,11 @@
     <h2>$derived with object destructuring (via $derived)</h2>
     <p>first: {first}</p>
     <p>second: {second}</p>
+  </section>
+
+  <section>
+    <h2>$derived with array value</h2>
+    <p>derivedArr: {derivedArr.join(', ')}</p>
   </section>
 
   <section>
