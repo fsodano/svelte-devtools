@@ -13,9 +13,6 @@
   // ===== $derived with object destructuring =====
   let derivedObj = $derived({ first: 1, second: 2 });
 
-  // ===== $derived with array destructuring =====
-  let derivedArr = $derived([1, 2, 3, 4, 5]);
-
   // ===== $state with object destructuring =====
   let point = $state({ x: 1, y: 2 });
 
