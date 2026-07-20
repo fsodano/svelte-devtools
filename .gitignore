@@ -16,5 +16,12 @@ yarn-error.log*
 .idea
 .DS_Store
 
-#AI Agent Temp Files
+#AI Agent Artifacts
 .sisyphus
+**/.playwright-mcp/**
+**/screenshot*
+
+# Playwright
+node_modules/.cache/
+test-results/
+playwright-report/
