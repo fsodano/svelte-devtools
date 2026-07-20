@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
 
   interface Component {
@@ -118,8 +119,17 @@
   const matchCount = $derived(filteredList.length);
 
   // Sync local search term to the store for global state tracking
+  // Only reacts to searchTerm changes, not to components — avoids effect cascades
+  // during rapid bridge syncs at startup
+  let prevSearchTerm = $state(searchTerm);
   $effect(() => {
-    devtoolsStore.setSearchQuery(searchTerm, components as never as import('@svelte-devtools/types').ComponentNode[]);
+    if (searchTerm !== prevSearchTerm) {
+      prevSearchTerm = searchTerm;
+      // Use untrack to prevent `components` from becoming a tracked dependency
+      // (avoids cascading re-runs during bridge syncs after user has searched)
+      const comps = untrack(() => components);
+      devtoolsStore.setSearchQuery(searchTerm, comps as unknown as import('@svelte-devtools/types').ComponentNode[]);
+    }
   });
 
   let visibleStart = $state(0);
@@ -145,8 +155,12 @@
     }
   });
 
+  // Update visible range when the filtered list length changes.
+  // Using untrack to avoid cascading effect re-runs from `listRef` reads.
+  let prevListLength = $state(0);
   $effect(() => {
-    updateVisibleRange();
+    prevListLength = filteredList.length;
+    untrack(() => { if (listRef) updateVisibleRange(); });
   });
 </script>
 
