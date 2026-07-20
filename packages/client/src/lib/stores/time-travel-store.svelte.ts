@@ -159,6 +159,21 @@ export function createTimeTravelStore(
     }
   }
 
+  function pushStateToApp(components: ComponentNode[]): void {
+    // Push restored state back to the running application via the runtime's
+    // setComponentState API. Each snapshot component has state key-value pairs
+    // that are applied to the actual $state variables via injected setters.
+    const parentApi = typeof window !== 'undefined'
+      ? ((window.parent || window) as unknown as { __SVELTE_DEVTOOLS__?: Record<string, unknown> }).__SVELTE_DEVTOOLS__
+      : undefined;
+    if (!parentApi?.setComponentState) return;
+    for (const comp of components) {
+      for (const [key, value] of Object.entries(comp.state || {})) {
+        (parentApi.setComponentState as (id: string, key: string, value: unknown) => void)(comp.id, key, value);
+      }
+    }
+  }
+
   function restore(index: number): void {
     if (index < 0 || index >= snapshots.length) return;
     currentIndex = index;
@@ -167,6 +182,7 @@ export function createTimeTravelStore(
     const snapshot = snapshots[index];
     if (setComponents) setComponents(deepClone(snapshot.components));
     if (setTimeline) setTimeline(deepClone(snapshot.timeline));
+    pushStateToApp(snapshot.components);
   }
 
   function goToSnapshot(id: string): void {

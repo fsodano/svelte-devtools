@@ -242,6 +242,7 @@ export interface SvelteDevToolsAPI {
   getTimeline(): TimelineEntry[];
   subscribe(callback: (event: unknown) => void): () => void;
   trace(name: string, dependencies: string[]): void;
+  setComponentState?(componentId: string, key: string, value: unknown): void;
 }
 
 /**
