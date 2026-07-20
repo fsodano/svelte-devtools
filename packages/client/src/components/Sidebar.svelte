@@ -51,7 +51,7 @@
 
 <style>
   .sidebar {
-    width: 56px;
+    width: 72px;
     background: var(--bg-surface);
     border-right: 1px solid var(--border-default);
     display: flex;
@@ -101,7 +101,7 @@
   }
 
   .label {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 500;
     letter-spacing: 0.02em;
   }
