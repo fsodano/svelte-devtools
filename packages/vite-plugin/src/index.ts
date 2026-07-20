@@ -762,7 +762,10 @@ function injectEffectTracking(s: MagicString, code: string, filename: string, co
 
         const bodyOffset = scriptStart + start + (fnMatch[0]?.length || 0);
         const effectKey = `effect_${runeCounts[name]}`;
-        const injectCode = `if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleEffect){window.__SVELTE_DEVTOOLS_RUNTIME__.handleEffect('${componentId}','${effectKey}',[])};`;
+        // Track effect execution at runtime with a snapshot of current state.
+        // The runtime uses componentId to look up the component and capture
+        // its state values at the moment the effect runs.
+        const injectCode = `if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleEffect){window.__SVELTE_DEVTOOLS_RUNTIME__.handleEffect('${componentId}','${effectKey}','${name}','${filename.replace(/'/g, "\\'")}')};`;
 
         s.appendLeft(bodyOffset, injectCode);
     }
