@@ -113,6 +113,7 @@
     } catch (e) {
       errorMsg = (e as Error).message;
       console.error('[DevTools Test] Caught:', e);
+      (window as any).__SVELTE_DEVTOOLS_RUNTIME__?.reportError?.('test-all-cases', e);
     }
   }
 

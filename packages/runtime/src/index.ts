@@ -195,8 +195,6 @@ export const runtime = {
         if (!component.effects.includes(key)) {
             component.effects.push(key);
         }
-        // Snapshot the component's current state values at the moment the
-        // effect runs so the timeline shows what was actually observed.
         const stateSnapshot: Record<string, unknown> = {};
         for (const [k, v] of component.state) {
             stateSnapshot[k] = v;
@@ -211,6 +209,21 @@ export const runtime = {
                 filename,
                 runCount: component.effects.filter(e => e === key).length + 1,
                 observedState: Object.keys(stateSnapshot).length > 0 ? stateSnapshot : undefined,
+            },
+            timestamp: Date.now()
+        });
+    },
+
+    reportError(componentId: string, error: unknown): void {
+        if (isDebug) console.log('[Runtime:reportError]', {componentId, error});
+        this.emit({
+            type: 'trace:trigger',
+            componentId,
+            componentName: (state.components.get(componentId)?.name) || 'unknown',
+            key: 'error',
+            value: {
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
             },
             timestamp: Date.now()
         });
@@ -302,6 +315,7 @@ if (typeof window !== 'undefined') {
     svelteDevToolsRuntime.emit = runtime.emit.bind(runtime);
     svelteDevToolsRuntime.getState = runtime.getState.bind(runtime);
     svelteDevToolsRuntime.handleEffect = runtime.handleEffect.bind(runtime);
+    svelteDevToolsRuntime.reportError = runtime.reportError.bind(runtime);
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_RUNTIME__ = svelteDevToolsRuntime;
 
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS__ = {
