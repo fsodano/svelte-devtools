@@ -102,6 +102,7 @@ export const runtime = {
             filename,
             el: null,
             state: new Map(),
+            props: {},
             parentId: undefined,
             children: [],
             effects: [],
@@ -166,6 +167,7 @@ export const runtime = {
                 filename: undefined,
                 el: null,
                 state: new Map(),
+                props: {},
                 parentId: undefined,
                 children: [],
                 effects: [],
@@ -176,6 +178,12 @@ export const runtime = {
         }
 
         component.state.set(key, value);
+        // Prop values arrive via $inspect(...).with('props', value).
+        // Store them separately on component.props so the DevTools UI can
+        // display them in their own section.
+        if (typeof type === 'string' && type.includes('prop')) {
+            component.props = { ...component.props, [key]: value };
+        }
         if (isDebug) console.log('[Runtime:handleState] Component state updated:', componentId, 'key:', key, 'value:', value);
 
         this.emit({
@@ -184,6 +192,7 @@ export const runtime = {
             componentName: component.name,
             key,
             value,
+            inspectType: type,  // forward the $inspect type ('state' | 'derived' | 'props')
             timestamp: performance.now()
         });
     },
@@ -236,7 +245,8 @@ export const runtime = {
         filename?: string;
         timestamp: number;
         key?: string;
-        value?: unknown
+        value?: unknown;
+        inspectType?: string;
     }): void {
         if (typeof window !== 'undefined') {
 
@@ -330,6 +340,7 @@ if (typeof window !== 'undefined') {
                 el: Element | null;
                 parentId?: string;
                 children: TreeNode[];
+                props: Record<string, unknown>;
                 state: Map<string, unknown>;
                 effects: string[];
                 mountTime: number;
@@ -345,6 +356,7 @@ if (typeof window !== 'undefined') {
                     el: c.el,
                     parentId: c.parentId,
                     children: [],
+                    props: c.props,
                     state: c.state,
                     effects: [...c.effects],
                     mountTime: c.mountTime,
@@ -370,6 +382,7 @@ if (typeof window !== 'undefined') {
             el: null,
             parentId: c.parentId,
             children: [],
+            props: c.props,
             state: c.state,
             effects: [],
             mountTime: 0
@@ -384,6 +397,7 @@ if (typeof window !== 'undefined') {
                 el: null,
                 parentId: c.parentId,
                 children: [],
+                props: c.props,
                 state: c.state,
                 effects: [],
                 mountTime: 0

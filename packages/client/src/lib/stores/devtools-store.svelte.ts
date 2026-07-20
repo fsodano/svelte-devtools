@@ -174,10 +174,15 @@ function createDevtoolsStore() {
 
     const value = data.value instanceof Map ? Object.fromEntries(data.value) : data.value;
     const prevValue = existingComponent.state?.[data.key];
+    const isProp = (data as Record<string, unknown>).type === 'props';
 
     components = components.map(c => {
       if (c.id === data.componentId) {
-        return { ...c, state: { ...c.state, [data.key]: value } };
+        return {
+          ...c,
+          state: { ...c.state, [data.key]: value },
+          props: isProp ? { ...(c.props || {}), [data.key]: value } : c.props,
+        };
       }
       return c;
     });
