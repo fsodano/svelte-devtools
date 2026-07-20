@@ -163,12 +163,27 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                 }
                 const start = performance.now();
                 const reqKey = `${req.method}:${url}`;
+
+                // Intercept res.end to capture response body for server trace
+                const originalEnd = res.end.bind(res);
+                let bodyChunks: Buffer[] = [];
+                res.end = function (this: typeof res, ...args: unknown[]) {
+                    const chunk = args[0];
+                    if (chunk instanceof Buffer || typeof chunk === 'string') {
+                        bodyChunks.push(Buffer.from(chunk));
+                    }
+                    return originalEnd(chunk as never, args[1] as never, args[2] as never);
+                } as typeof res.end;
+
                 res.on('finish', () => {
                     const duration = performance.now() - start;
                     if (markSeenTimestamps.has(reqKey)) {
                         markSeenTimestamps.delete(reqKey);
                         return;
                     }
+                    const body = Buffer.concat(bodyChunks).toString('utf-8');
+                    const contentType = (res.getHeader('content-type') as string) || '';
+                    const isJson = contentType.includes('json');
                     import('./server-events.js').then(({ addServerEvent }) => {
                         addServerEvent({
                             id: `srv-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
@@ -178,7 +193,10 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                             data: {
                                 url,
                                 method: req.method || 'GET',
-                                statusCode: res.statusCode
+                                statusCode: res.statusCode,
+                                contentType,
+                                responseSize: body.length,
+                                responsePreview: isJson ? body.slice(0, 2000) : body.slice(0, 500),
                             }
                         });
                     });
