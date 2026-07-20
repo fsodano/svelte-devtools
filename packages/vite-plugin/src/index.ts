@@ -197,6 +197,17 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                                 contentType,
                                 responseSize: body.length,
                                 responsePreview: isJson ? body.slice(0, 2000) : body.slice(0, 500),
+                                reqHeaders: {
+                                    'content-type': req.headers['content-type'],
+                                    'user-agent': req.headers['user-agent'],
+                                    'accept': req.headers['accept'],
+                                    'referer': req.headers['referer'],
+                                    'content-length': req.headers['content-length'],
+                                    'cookie': req.headers['cookie'] ? '[present]' : undefined,
+                                },
+                                resHeaders: Object.fromEntries(
+                                    Object.entries(res.getHeaders()).map(([k, v]) => [k, String(v)])
+                                ),
                             }
                         });
                     });

@@ -80,6 +80,7 @@ export async function handleApiRequest(
                         '/__svelte-devtools/api/timeline',
                         '/__svelte-devtools/api/server-events',
                         '/__svelte-devtools/api/migration',
+                        '/__svelte-devtools/api/source',
                         '/__svelte-devtools/api/remote',
                         '/__svelte-devtools/api/sync',
                     ],
@@ -155,6 +156,35 @@ export async function handleApiRequest(
                     ? Math.round(results.reduce((s: number, r: unknown) => s + (r as { percentage: number }).percentage, 0) / total)
                     : 100;
                 json(res, { ok: true, overall: avgScore, totalFiles: total, perFile: results });
+                return;
+            }
+
+            // ── Source file lookup ──
+            case '/source': {
+                const rawUrl = req.url || '';
+                const params = new URLSearchParams(rawUrl.includes('?') ? rawUrl.split('?')[1] : '');
+                const file = params.get('file');
+                if (!file) { json(res, { error: 'Missing ?file= param' }, 400); return; }
+                try {
+                    const { readFileSync, existsSync } = await import('node:fs');
+                    const { resolve, isAbsolute } = await import('node:path');
+                    const root = process.cwd();
+                    // Accept absolute paths, or paths relative to the workspace root
+                    let resolved = isAbsolute(file) ? file : resolve(root, file);
+                    if (!existsSync(resolved)) {
+                        // Try relative to the devtools plugin root
+                        const alt = resolve(root, '../..', file);
+                        if (existsSync(alt)) resolved = alt;
+                    }
+                    if (!resolved.startsWith(root) && !resolved.includes('/svelte-dev-extension/')) {
+                        json(res, { error: 'File outside project' }, 403); return;
+                    }
+                    const code = readFileSync(resolved, 'utf-8');
+                    const lines = code.split('\n').map((l: string, i: number) => ({ line: i + 1, text: l }));
+                    json(res, { ok: true, file: resolved, lines, totalLines: lines.length });
+                } catch (e) {
+                    json(res, { error: `Cannot read file: ${e instanceof Error ? e.message : String(e)}` }, 404);
+                }
                 return;
             }
 
