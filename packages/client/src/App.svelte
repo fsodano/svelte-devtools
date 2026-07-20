@@ -190,6 +190,7 @@
 
   .content {
     flex: 1;
+    min-height: 0;
     overflow: hidden;
     background: var(--bg-base);
   }
@@ -197,13 +198,14 @@
   .split-view {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    height: 100%;
+    min-height: 0;
     gap: 1px;
     background: var(--border-default);
   }
 
   .split-view > :global(*) {
     background: var(--bg-surface);
+    min-height: 0;
   }
 
   .empty {
