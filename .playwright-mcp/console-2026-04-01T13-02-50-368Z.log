@@ -1,0 +1,83 @@
+[      26ms] [LOG] [Runtime:emit] Sending event: runtime-ready payload: {type: runtime-ready, componentId: runtime, componentName: Runtime, timestamp: 9.900000005960464, value: undefined} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      36ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: count, type: init, value: 0} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      36ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: count value: 0 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      36ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: count, value: 0} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      36ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: name, type: init, value: world} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      36ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: name value: world @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      36ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: name, value: world} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      37ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: user, type: init, value: Object} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      37ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: user value: {id: 1, name: Alice} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      37ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: user, value: Object} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      37ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: items, type: init, value: Array(3)} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      37ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: items value: [1, 2, 3] @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      37ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: items, value: Array(3)} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      37ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: doubled, type: init, value: 0} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      37ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: doubled value: 0 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      38ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: doubled, value: 0} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      38ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: greeting, type: init, value: Hello, world!} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      38ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: greeting value: Hello, world! @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      38ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: greeting, value: Hello, world!} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      38ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: total, type: init, value: 6} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      38ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: total value: 6 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      38ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: total, value: 6} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      38ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: derivedObj, type: init, value: Object} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      38ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: derivedObj value: {first: 1, second: 2} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      38ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: derivedObj, value: Object} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      39ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: derivedArr, type: init, value: Array(5)} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      39ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: derivedArr value: [1, 2, 3, 4, 5] @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      39ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: derivedArr, value: Array(5)} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      39ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: point, type: init, value: Object} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      39ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: point value: {x: 1, y: 2} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      39ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: point, value: Object} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      39ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: arrState, type: init, value: Array(2)} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      39ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: arrState value: [10, 20] @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      39ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: arrState, value: Array(2)} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      40ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: first, type: init, value: 1} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      40ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: first value: 1 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      40ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: first, value: 1} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      40ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: second, type: init, value: 2} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      40ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: second value: 2 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      40ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: second, value: 2} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      40ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: head, type: init, value: 1} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      40ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: head value: 1 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      40ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: head, value: 1} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      40ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: tail, type: init, value: Array(4)} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      41ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: tail value: [2, 3, 4, 5] @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      41ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: tail, value: Array(4)} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      41ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: firstItem, type: init, value: 10} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      41ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: firstItem value: 10 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      41ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: firstItem, value: 10} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      41ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: secondItem, type: init, value: 20} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      41ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: secondItem value: 20 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      41ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: secondItem, value: 20} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      41ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: x, type: init, value: 1} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      41ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: x value: 1 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      42ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: x, value: 1} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      42ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: y, type: init, value: 2} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      42ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: y value: 2 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      42ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: y, value: 2} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      42ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: spring, type: update, value: Object} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      42ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: spring value: {current: 0, target: 0, stiffness: 0.15, damping: 0.8} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      42ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: spring, value: Object} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      42ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: tween, type: update, value: Object} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[      43ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: tween value: {current: 100, target: 100, stiffness: 0.15, damping: 0.8} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[      43ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: tween, value: Object} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[      44ms] [LOG] [Runtime:registerComponent] Emitted: svt-qmcnjh App parentId: undefined @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:95
+[      44ms] [LOG] [Runtime:registerComponent] Emitted: svt-x7mp56 TestAllCases parentId: undefined @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:95
+[      49ms] [LOG] [VITE DEVTOOLS] Client injected @ http://localhost:5176/@fs//Users/fsodano/fibradev/svelte-dev-extension/test-app/node_modules/@vitejs/devtools/dist/client/inject.js:368
+[      64ms] [WARNING] Feature flags __VUE_OPTIONS_API__, __VUE_PROD_DEVTOOLS__, __VUE_PROD_HYDRATION_MISMATCH_DETAILS__ are not explicitly defined. You are running the esm-bundler build of Vue, which expects these compile-time feature flags to be globally injected via the bundler config in order to get better tree-shaking in the production bundle.
+
+For more details, see https://link.vuejs.org/feature-flags. @ http://localhost:5176/node_modules/@vue/runtime-core/dist/runtime-core.esm-bundler.js?v=c234f11c:4638
+[      70ms] Error: Unauthorized access to method "devtoolskit:internal:logs:list" from client [2]
+    at unpair (http://localhost:5176/node_modules/structured-clone-es/dist/index.mjs?v=c234f11c:41:15)
+    at unpair (http://localhost:5176/node_modules/structured-clone-es/dist/index.mjs?v=c234f11c:21:61)
+    at deserialize (http://localhost:5176/node_modules/structured-clone-es/dist/index.mjs?v=c234f11c:60:60)
+    at parse (http://localhost:5176/node_modules/structured-clone-es/dist/index.mjs?v=c234f11c:187:9)
+    at onMessage (http://localhost:5176/node_modules/birpc/dist/index.mjs?v=c234f11c:161:10)
+    at WebSocket.<anonymous> (http://localhost:5176/node_modules/@vitejs/devtools-rpc/dist/presets/ws/client.mjs?v=c234f11c:22:5)
+[   15396ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: count, type: update, value: 1} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[   15396ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: count value: 1 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[   15396ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: count, value: 1} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133
+[   15396ms] [LOG] [Runtime:handleState] Called with: {componentId: svt-x7mp56, key: doubled, type: update, value: 2} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:99
+[   15396ms] [LOG] [Runtime:handleState] Component state updated: svt-x7mp56 key: doubled value: 2 @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:117
+[   15396ms] [LOG] [Runtime:emit] Sending event: state payload: {type: state, componentId: svt-x7mp56, componentName: TestAllCases, key: doubled, value: 2} @ http://localhost:5176/__svelte-devtools/svelte-runtime.js:133

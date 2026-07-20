@@ -1,0 +1,13 @@
+- generic [ref=e3]:
+  - generic [ref=e4]: "[plugin:vite-plugin-svelte:compile] src/TestAllCases.svelte:16:18 Cannot use `$props()` more than once https://svelte.dev/e/props_duplicate"
+  - generic [ref=e5]: /Users/fsodano/fibradev/svelte-dev-extension/test-app/src/TestAllCases.svelte:16:18
+  - generic [ref=e6]: "14 | // Note: In a real component, these would come from parent 15 | let propsBasic = $props();$inspect(propsBasic).with((t,...v)=>{if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleState){window.__SVELTE_DEVTOOLS_RUNTIME__.handleState('svt-x7mp56','propsBasic',t,v[0])}}); 16 | let propsName = $props();$inspect(propsName).with((t,...v)=>{if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleState){window.__SVELTE_DEVTOOLS_RUNTIME__.handleState('svt-x7mp56','propsName',t,v[0])}}); ^ 17 | let propsWithDefault = $props();$inspect(propsWithDefault).with((t,...v)=>{if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleState){window.__SVELTE_DEVTOOLS_RUNTIME__.handleState('svt-x7mp56','propsWithDefault',t,v[0])}}); 18 |"
+  - generic [ref=e7]:
+    - text: Click outside, press Esc key, or fix the code to dismiss.
+    - text: You can also disable this overlay by setting
+    - code [ref=e8]: server.hmr.overlay
+    - text: to
+    - code [ref=e9]: "false"
+    - text: in
+    - code [ref=e10]: vite.config.ts
+    - text: .
