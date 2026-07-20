@@ -188,20 +188,31 @@ export const runtime = {
         });
     },
 
-    handleEffect(componentId: string, key: string, dependencies: string[]): void {
-        if (isDebug) console.log('[Runtime:handleEffect] Called with:', {componentId, key, dependencies});
+    handleEffect(componentId: string, key: string, runeName: string, filename: string): void {
+        if (isDebug) console.log('[Runtime:handleEffect] Called with:', {componentId, key, runeName, filename});
         const component = state.components.get(componentId);
         if (!component) return;
         if (!component.effects.includes(key)) {
             component.effects.push(key);
+        }
+        // Snapshot the component's current state values at the moment the
+        // effect runs so the timeline shows what was actually observed.
+        const stateSnapshot: Record<string, unknown> = {};
+        for (const [k, v] of component.state) {
+            stateSnapshot[k] = v;
         }
         this.emit({
             type: 'effect',
             componentId,
             componentName: component.name,
             key,
-            value: {dependencies},
-            timestamp: performance.now()
+            value: {
+                runeName,
+                filename,
+                runCount: component.effects.filter(e => e === key).length + 1,
+                observedState: Object.keys(stateSnapshot).length > 0 ? stateSnapshot : undefined,
+            },
+            timestamp: Date.now()
         });
     },
 
