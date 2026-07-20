@@ -161,12 +161,13 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                     next();
                     return;
                 }
-                const start = performance.now();
+                const startTime = Date.now();
                 const reqKey = `${req.method}:${url}`;
 
                 // Intercept res.end to capture response body for server trace
                 const originalEnd = res.end.bind(res);
                 let bodyChunks: Buffer[] = [];
+                const perfStart = performance.now();
                 res.end = function (this: typeof res, ...args: unknown[]) {
                     const chunk = args[0];
                     if (chunk instanceof Buffer || typeof chunk === 'string') {
@@ -176,7 +177,7 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                 } as typeof res.end;
 
                 res.on('finish', () => {
-                    const duration = performance.now() - start;
+                    const duration = performance.now() - perfStart;
                     if (markSeenTimestamps.has(reqKey)) {
                         markSeenTimestamps.delete(reqKey);
                         return;
@@ -188,7 +189,7 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                         addServerEvent({
                             id: `srv-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
                             type: res.statusCode >= 400 ? 'server:error' : 'server:trace',
-                            timestamp: start,
+                            timestamp: startTime,
                             duration,
                             data: {
                                 url,

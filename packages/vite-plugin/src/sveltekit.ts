@@ -30,7 +30,8 @@ export function svelteDevToolsHandle(): Handle {
             | undefined;
         if (markSeen) markSeen(reqKey);
 
-        const startTime = performance.now();
+        const startTime = Date.now();
+        const perfStart = performance.now();
         let response: Response | undefined;
         let error: Error | undefined;
         let responseBody = '';
@@ -66,7 +67,7 @@ export function svelteDevToolsHandle(): Handle {
             error = e instanceof Error ? e : new Error(String(e));
             throw error;
         } finally {
-            const duration = performance.now() - startTime;
+            const duration = performance.now() - perfStart;
             const addEvent = (globalThis as Record<string, unknown>)[GLOBAL_KEY] as
                 | ((e: ServerEvent) => void)
                 | undefined;
