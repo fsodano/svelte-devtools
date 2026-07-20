@@ -16,10 +16,19 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 // In-memory cache populated by the DevTools client via POST /api/sync
 // ============================================================================
 
+interface SnapshotInfo {
+    id: string; parentId: string | null; branchId: string;
+    timestamp: number; label: string;
+}
+interface BranchInfo {
+    id: string; name: string; snapshotIds: string[]; color: string;
+}
 interface CachedState {
     components: unknown[];
     timeline: unknown[];
     remote: Record<string, unknown>;
+    snapshots: SnapshotInfo[];
+    branches: BranchInfo[];
     updatedAt: number;
 }
 
@@ -27,6 +36,8 @@ let cachedState: CachedState = {
     components: [],
     timeline: [],
     remote: {},
+    snapshots: [],
+    branches: [],
     updatedAt: 0,
 };
 
@@ -81,6 +92,8 @@ export async function handleApiRequest(
                         '/__svelte-devtools/api/server-events',
                         '/__svelte-devtools/api/migration',
                         '/__svelte-devtools/api/source',
+                        '/__svelte-devtools/api/snapshots',
+                        '/__svelte-devtools/api/set-state',
                         '/__svelte-devtools/api/remote',
                         '/__svelte-devtools/api/sync',
                     ],
@@ -159,6 +172,40 @@ export async function handleApiRequest(
                 return;
             }
 
+            // ── Snapshot tree (branch visualization) ──
+            case '/snapshots': {
+                json(res, {
+                    ok: true,
+                    snapshots: cachedState.snapshots,
+                    branches: cachedState.branches,
+                    count: cachedState.snapshots.length,
+                    cachedAt: cachedState.updatedAt,
+                });
+                return;
+            }
+
+            // ── Set component state (for agent-driven state editing) ──
+            case '/set-state': {
+                if (!isMethod(req, 'POST')) {
+                    json(res, { error: 'Method not allowed, use POST' }, 405);
+                    return;
+                }
+                const body = await readBody(req);
+                const data = JSON.parse(body);
+                const { componentId, key, value } = data;
+                if (!componentId || !key) {
+                    json(res, { error: 'Missing componentId or key' }, 400);
+                    return;
+                }
+                cachedState.components = (cachedState.components as Record<string, unknown>[]).map(c =>
+                    c.id === componentId
+                        ? { ...c, state: { ...(c.state as Record<string, unknown> || {}), [key]: value } }
+                        : c
+                );
+                json(res, { ok: true, componentId, key, value });
+                return;
+            }
+
             // ── Source file lookup ──
             case '/source': {
                 const rawUrl = req.url || '';
@@ -199,6 +246,8 @@ export async function handleApiRequest(
                 if (data.components) cachedState.components = data.components;
                 if (data.timeline) cachedState.timeline = data.timeline;
                 if (data.remote) cachedState.remote = data.remote;
+                if (data.snapshots) cachedState.snapshots = data.snapshots;
+                if (data.branches) cachedState.branches = data.branches;
                 cachedState.updatedAt = Date.now();
                 json(res, { ok: true, cachedAt: cachedState.updatedAt });
                 return;
