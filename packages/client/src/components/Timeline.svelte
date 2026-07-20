@@ -6,6 +6,19 @@
     duration?: number;
     data: unknown;
   }
+  interface SnapshotNode {
+    id: string;
+    parentId: string | null;
+    branchId: string;
+    timestamp: number;
+    label: string;
+  }
+  interface BranchInfo {
+    id: string;
+    name: string;
+    snapshotIds: string[];
+    color: string;
+  }
 
   interface TraceData {
     componentId: string;
@@ -35,8 +48,10 @@
 
   // --- Store-derived reactive state ---
   let entries = $derived(devtoolsStore.timeline);
-  let snapshots = $derived(devtoolsStore.timeTravel.snapshots);
+  let snapshots = $derived(devtoolsStore.timeTravel.snapshots as unknown as SnapshotNode[]);
   let currentSnapshotIndex = $derived(devtoolsStore.timeTravel.currentIndex);
+  let branches = $derived((devtoolsStore.timeTravel as never as { branches: BranchInfo[] }).branches);
+  let currentBranchId = $derived((devtoolsStore.timeTravel as never as { currentBranchId: string }).currentBranchId);
   let canUndo = $derived(devtoolsStore.timeTravel.canUndo);
   let canRedo = $derived(devtoolsStore.timeTravel.canRedo);
 
@@ -45,6 +60,7 @@
   let isPlaying = $state(false);
   let filter = $state<string>('all');
   let selectedEntry = $state<TimelineEntry | null>(null);
+  let editingState = $state<{ componentId: string; key: string; value: string } | null>(null);
 
   // --- Derived helpers ---
   let isViewingHistorical = $derived(
@@ -56,6 +72,16 @@
       ? `Snapshot ${currentSnapshotIndex + 1} / ${snapshots.length}`
       : ''
   );
+
+  let snapshotTree = $derived.by(() => {
+    if (snapshots.length === 0) return [] as { id: string; parentId: string | null; branchId: string; label: string }[];
+    return snapshots.map(s => ({
+      id: s.id,
+      parentId: s.parentId,
+      branchId: s.branchId,
+      label: s.label || ''
+    }));
+  });
 
   // --- Auto-play: advance through snapshots on an interval ---
   $effect(() => {
@@ -298,17 +324,26 @@
       </div>
     </div>
 
-    <!-- ── Snapshot timeline dots ── -->
-    <div class="dot-bar">
-      {#each snapshots as snap, i (snap.id)}
-        <button
-          class="dot-wrap"
-          class:active={currentSnapshotIndex === i}
-          onclick={() => devtoolsStore.timeTravel.restore(i)}
-          title={new Date(snap.timestamp).toLocaleString()}
-        >
-          <span class="dot"></span>
-        </button>
+    <!-- ── Snapshot branch visualization ── -->
+    <div class="branch-bar">
+      {#each branches as branch}
+        <div class="branch-group">
+          <span class="branch-label" style="color: {branch.color}">{branch.name}</span>
+          {#each snapshots as snap, i (snap.id)}
+            {#if snap.branchId === branch.id}
+              <button
+                class="dot-wrap"
+                class:active={currentSnapshotIndex === i}
+                class:fork={snap.parentId && snap.branchId !== 'main' && snapshots.findIndex(s => s.id === snap.parentId) < i}
+                onclick={() => devtoolsStore.timeTravel.restore(i)}
+                title={`${snap.label || branch.name} @ ${new Date(snap.timestamp).toLocaleString()}`}
+                style="--dot-color: {snap.branchId === currentBranchId ? '#ff3e00' : branch.color}"
+              >
+                <span class="dot"></span>
+              </button>
+            {/if}
+          {/each}
+        </div>
       {/each}
     </div>
 
