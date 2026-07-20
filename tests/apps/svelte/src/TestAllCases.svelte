@@ -30,11 +30,22 @@
   // ===== $effect tracking =====
   let effectTrigger = $state(0);
   let effectLog = $state('idle');
+  // Basic effect: triggered by a single reactive dependency
   $effect(() => {
     if (effectTrigger === 0) return;
     effectLog = `ran at ${Date.now()}`;
-    // This side effect is tracked by the devtools
     console.log('[DevTools Test] $effect triggered:', effectTrigger);
+  });
+
+  // Multi-dependency effect: re-runs when ANY of its tracked values change
+  let depsCount = $state(0);
+  let depsLabel = $state('a');
+  let depsLog = $state('');
+  $effect(() => {
+    // Reads multiple reactive values — Svelte auto-tracks each one
+    const summary = `${depsLabel} x ${depsCount}`;
+    depsLog = `effect ran: ${summary}`;
+    console.log('[DevTools Test] multi-dep $effect:', summary);
   });
 
   // ===== Computed values from destructuring =====
@@ -75,6 +86,8 @@
   function triggerEffect() {
     effectTrigger++;
   }
+  function incDepsCount() { depsCount++; }
+  function cycleDepsLabel() { depsLabel = depsLabel === 'a' ? 'b' : 'a'; }
 </script>
 
 <main>
@@ -128,10 +141,18 @@
   </section>
 
   <section>
-    <h2>$effect tracking</h2>
+    <h2>$effect tracking (single dependency)</h2>
     <p>effectLog: {effectLog}</p>
     <p>trigger count: {effectTrigger}</p>
     <button onclick={triggerEffect}>Trigger $effect</button>
+  </section>
+
+  <section>
+    <h2>$effect tracking (multiple dependencies)</h2>
+    <p>depsLog: {depsLog}</p>
+    <p>count: {depsCount} | label: {depsLabel}</p>
+    <button onclick={incDepsCount}>Change count</button>
+    <button onclick={cycleDepsLabel}>Toggle label</button>
   </section>
 
   <section>
