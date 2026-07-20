@@ -461,8 +461,8 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
             const propKeys: string[] = [];
 
             try {
-                injectComponentMetadata(s, code, componentId, componentName, id);
                 injectStateInspection(s, code, id, componentId, runeCounts, propKeys);
+                injectComponentMetadata(s, code, componentId, componentName, id, propKeys);
                 injectEffectTracking(s, code, id, componentId, runeCounts);
             } catch (e) {
                 if (logsApi && typeof logsApi.add === 'function') {
@@ -522,8 +522,9 @@ interface DockEntry {
     url: string;
 }
 
-function injectComponentMetadata(s: MagicString, code: string, componentId: string, componentName: string, filename: string): void {
-    const registryInj = `if(typeof window!=='undefined'){window.__SVELTE_DEVTOOLS_REGISTRY__||=new Map();window.__SVELTE_DEVTOOLS_REGISTRY__.set('${componentId}',{id:'${componentId}',name:'${componentName}',filename:'${filename}'})}`;
+function injectComponentMetadata(s: MagicString, code: string, componentId: string, componentName: string, filename: string, propKeys?: string[]): void {
+    const propKeysJson = JSON.stringify(propKeys || []);
+    const registryInj = `if(typeof window!=='undefined'){window.__SVELTE_DEVTOOLS_REGISTRY__||=new Map();window.__SVELTE_DEVTOOLS_REGISTRY__.set('${componentId}',{id:'${componentId}',name:'${componentName}',filename:'${filename}',propKeys:${propKeysJson}})}`;
     const runtimeInj = `if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__){window.__SVELTE_DEVTOOLS_RUNTIME__.registerComponent('${componentId}','${componentName}','${filename}');}`;
 
     const combinedInj = registryInj + runtimeInj;
