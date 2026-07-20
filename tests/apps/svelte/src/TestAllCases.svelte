@@ -27,6 +27,16 @@
   let spring = new Spring(0);
   let tween = new Tween(100);
 
+  // ===== $effect tracking =====
+  let effectTrigger = $state(0);
+  let effectLog = $state('idle');
+  $effect(() => {
+    if (effectTrigger === 0) return;
+    effectLog = `ran at ${Date.now()}`;
+    // This side effect is tracked by the devtools
+    console.log('[DevTools Test] $effect triggered:', effectTrigger);
+  });
+
   // ===== Computed values from destructuring =====
   let first = $derived(derivedObj.first);
   let second = $derived(derivedObj.second);
@@ -60,6 +70,10 @@
   }
   function tweenDown() {
     tween.set(tween.current - 50, { duration: 300 });
+  }
+
+  function triggerEffect() {
+    effectTrigger++;
   }
 </script>
 
@@ -111,6 +125,13 @@
     <h2>$state with array destructuring (via $derived)</h2>
     <p>firstItem: {firstItem}</p>
     <p>secondItem: {secondItem}</p>
+  </section>
+
+  <section>
+    <h2>$effect tracking</h2>
+    <p>effectLog: {effectLog}</p>
+    <p>trigger count: {effectTrigger}</p>
+    <button onclick={triggerEffect}>Trigger $effect</button>
   </section>
 
   <section>
