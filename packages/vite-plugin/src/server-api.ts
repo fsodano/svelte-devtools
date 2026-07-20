@@ -78,10 +78,12 @@ export async function handleApiRequest(
                         '/__svelte-devtools/api/',
                         '/__svelte-devtools/api/components',
                         '/__svelte-devtools/api/timeline',
+                        '/__svelte-devtools/api/server-events',
+                        '/__svelte-devtools/api/migration',
                         '/__svelte-devtools/api/remote',
                         '/__svelte-devtools/api/sync',
                     ],
-                    note: 'server-events at /__svelte-devtools/server-events, migration at /__svelte-devtools/migration-score',
+                    legacyEndpoints: '/__svelte-devtools/server-events, /__svelte-devtools/migration-score',
                 });
                 return;
             }
@@ -115,6 +117,44 @@ export async function handleApiRequest(
                     ...cachedState.remote,
                     cachedAt: cachedState.updatedAt,
                 });
+                return;
+            }
+
+            // ── Server events (from existing server-events module) ──
+            case '/server-events': {
+                const { getServerEvents, clearServerEvents } = await import('./server-events.js');
+                if (req.method === 'GET') {
+                    const rawUrl = req.url || '';
+                    const params = new URLSearchParams(rawUrl.includes('?') ? rawUrl.split('?')[1] : '');
+                    const last = parseInt(params.get('last') || '', 10) || undefined;
+                    const sinceId = params.get('sinceId') || undefined;
+                    json(res, { ok: true, events: getServerEvents({ last, sinceId }) });
+                } else if (req.method === 'DELETE') {
+                    clearServerEvents();
+                    json(res, { ok: true });
+                } else {
+                    json(res, { error: 'Method not allowed' }, 405);
+                }
+                return;
+            }
+
+            // ── Migration score (from existing migration-analyzer) ──
+            case '/migration': {
+                const { readFileSync } = await import('node:fs');
+                const { analyzeMigration } = await import('./migration-analyzer.js');
+                const WORKSPACE_REGISTRY = (globalThis as Record<string, unknown>)['__SVELTE_DEVTOOLS_REGISTRY__'];
+                const registryEntries = (WORKSPACE_REGISTRY as Map<string, { migrationResult?: { filename: string; percentage: number } }> | undefined);
+                const results: unknown[] = [];
+                if (registryEntries) {
+                    for (const [, entry] of registryEntries) {
+                        if (entry.migrationResult) results.push(entry.migrationResult);
+                    }
+                }
+                const total = results.length;
+                const avgScore = total > 0
+                    ? Math.round(results.reduce((s: number, r: unknown) => s + (r as { percentage: number }).percentage, 0) / total)
+                    : 100;
+                json(res, { ok: true, overall: avgScore, totalFiles: total, perFile: results });
                 return;
             }
 
