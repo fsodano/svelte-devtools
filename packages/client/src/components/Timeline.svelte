@@ -175,6 +175,15 @@
         const name = (d as { effectName?: string }).effectName || 'anonymous';
         return `<span style="color: #c586c0">${name}</span>`;
       }
+      case 'server:trace':
+      case 'server:error': {
+        const method = (d as { method?: string }).method || 'GET';
+        const url = (d as { url?: string }).url || '';
+        const statusCode = (d as { statusCode?: number }).statusCode;
+        const methodColor = method === 'GET' ? '#4ec9b0' : method === 'POST' ? '#dcdcaa' : '#ce9178';
+        const statusStr = statusCode ? ` <span style="color:${statusCode >= 400 ? '#f48771' : '#6a9955'}">${statusCode}</span>` : '';
+        return `<span style="color: ${methodColor}">${method}</span> <span style="color: #9cdcfe">${url}</span>${statusStr}`;
+      }
       default:
         return '';
     }
@@ -348,7 +357,7 @@
               <span class="duration">{@html formatDuration(entry.duration)}</span>
             {/if}
           </button>
-          {#if ['component:mount', 'state:change'].includes(entry.type)}
+          {#if ['component:mount', 'component:unmount', 'state:change', 'effect:run', 'trace:trigger', 'server:trace', 'server:error'].includes(entry.type)}
             <div class="entry-summary">
               <span class="detail-text">{@html formatEntryDetail(entry)}</span>
             </div>
