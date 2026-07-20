@@ -261,6 +261,13 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                 res.end(JSON.stringify({overall: avgScore, totalFiles: total, perFile: results}));
             });
 
+            // ── API endpoints (Connect strips /__svelte-devtools/api prefix) ──
+            server.middlewares.use('/__svelte-devtools/api', async (req, res, _next) => {
+                const pathname = req.url?.split('?')[0] || '/';
+                const { handleApiRequest } = await import('./server-api.js');
+                await handleApiRequest(req, res, server, pathname);
+            });
+
             server.middlewares.use(DEVTOOLS_PREFIX, (req, res, next) => {
                 const url = req.url?.split('?')[0] || '';
                 if (url.startsWith('/') && !url.startsWith('//')) {
