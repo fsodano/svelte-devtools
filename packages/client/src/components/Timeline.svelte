@@ -73,14 +73,27 @@
       : ''
   );
 
-  let snapshotTree = $derived.by(() => {
-    if (snapshots.length === 0) return [] as { id: string; parentId: string | null; branchId: string; label: string }[];
-    return snapshots.map(s => ({
-      id: s.id,
-      parentId: s.parentId,
-      branchId: s.branchId,
-      label: s.label || ''
-    }));
+  let branchRows = $derived.by(() => {
+    const rows: { snapIdx: number; snapId: string; branchId: string; branchName: string; color: string; label: string; ts: number; parentId: string | null; hasForkChildren: boolean }[] = [];
+    for (const branch of branches) {
+      for (let idx = 0; idx < snapshots.length; idx++) {
+        const s = snapshots[idx];
+        if (s.branchId !== branch.id) continue;
+        const hasForkChildren = snapshots.some(c => c.parentId === s.id && c.branchId !== branch.id);
+        rows.push({
+          snapIdx: idx,
+          snapId: s.id,
+          branchId: branch.id,
+          branchName: branch.name,
+          color: branch.color,
+          label: s.label || '',
+          ts: s.timestamp,
+          parentId: s.parentId,
+          hasForkChildren,
+        });
+      }
+    }
+    return rows;
   });
 
   // --- Auto-play: advance through snapshots on an interval ---
@@ -324,40 +337,36 @@
       </div>
     </div>
 
-    <!-- ── Git-style vertical branch topology ── -->
     <div class="branch-tree">
-      {#each snapshots as snap, i (snap.id)}
-        {@const isActive = currentSnapshotIndex === i}
-        {@const isFork = snap.parentId && snapshots.findIndex(s => s.id === snap.parentId) < i}
-        {@const branch = branches.find(b => b.id === snap.branchId)}
-        {@const branchColor = branch?.color || '#888'}
-        {@const dotColor = isActive ? '#ff3e00' : branchColor}
-        {@const parentSnap = snap.parentId ? snapshots.find(s => s.id === snap.parentId) : null}
-        <div class="branch-node" class:active={isActive}>
-          <div class="node-gutter">
-            {#if parentSnap}
-              <div class="connector-line" style="background: {branchColor}"></div>
-            {/if}
+      {#each branchRows as row (row.snapId)}
+        <div class="branch-row" class:active={currentSnapshotIndex === row.snapIdx} style="--color: {row.color}">
+          <div class="row-gutter">
+            <div class="gutter-line"></div>
             <button
-              class="dot-wrap"
-              class:active={isActive}
-              onclick={() => devtoolsStore.timeTravel.restore(i)}
-              title={`${snap.label || snap.branchId} @ ${new Date(snap.timestamp).toLocaleString()}`}
-              style="--dot-color: {dotColor}"
+              class="dot-btn"
+              class:active={currentSnapshotIndex === row.snapIdx}
+              onclick={() => devtoolsStore.timeTravel.restore(row.snapIdx)}
+              title={`${row.branchName} @ ${new Date(row.ts).toLocaleString()}`}
+              style="--dot-color: {currentSnapshotIndex === row.snapIdx ? '#ff3e00' : row.color}"
             >
-              <span class="dot"></span>
+              <span class="dot-inner"></span>
             </button>
-            {#if i < snapshots.length - 1 && snapshots[i+1].parentId !== snap.id}
-              <div class="connector-end" style="background: {branchColor}; height: 12px"></div>
-            {:else if i < snapshots.length - 1}
-              <div class="connector-line" style="background: {branchColor}"></div>
-            {/if}
+            <div class="gutter-cont">
+              {#if row.hasForkChildren}
+                <span class="fork-arm left"></span>
+                <span class="fork-arm right"></span>
+              {/if}
+            </div>
           </div>
-          <div class="node-body">
-            <span class="node-branch" style="color: {branchColor}">{snap.label || snap.branchId}</span>
-            <span class="node-time">{new Date(snap.timestamp).toLocaleTimeString()}</span>
-            {#if isActive}
-              <span class="node-indicator">◀</span>
+          <div class="row-body">
+            <span class="branch-tag" style="background: {row.color}">{row.branchName}</span>
+            <span class="label-text">{row.label}</span>
+            <span class="ts-text">{new Date(row.ts).toLocaleTimeString()}</span>
+            {#if currentSnapshotIndex === row.snapIdx}
+              <span class="active-indicator">◀</span>
+            {/if}
+            {#if row.hasForkChildren}
+              <span class="fork-badge">fork</span>
             {/if}
           </div>
         </div>
@@ -533,11 +542,9 @@
     user-select: none;
   }
 
-  /* ── Git-style vertical branch topology ── */
   .branch-tree {
     display: flex;
     flex-direction: column;
-    padding: var(--space-2) 0;
     background: var(--bg-inset);
     border-bottom: 1px solid var(--border-default);
     max-height: 180px;
@@ -545,107 +552,156 @@
     flex-shrink: 0;
   }
 
-  .branch-node {
+  .branch-row {
     display: flex;
-    align-items: stretch;
+    align-items: center;
     min-height: 28px;
-    transition: background var(--transition-fast);
+    padding: 2px 0;
+    transition: background 0.15s;
   }
 
-  .branch-node.active {
+  .branch-row:hover {
     background: var(--bg-hover);
   }
 
-  .node-gutter {
+  .branch-row.active {
+    background: var(--bg-elevated);
+  }
+
+  .row-gutter {
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 32px;
+    width: 28px;
     flex-shrink: 0;
-    position: relative;
   }
 
-  .connector-line {
+  .gutter-line {
     width: 2px;
-    flex: 1;
     min-height: 4px;
+    flex: 1;
+    background: var(--color, var(--border-default));
     border-radius: 1px;
   }
 
-  .connector-end {
-    width: 2px;
-    border-radius: 1px;
-    flex-shrink: 0;
-  }
-
-  .dot-wrap {
-    display: inline-flex;
+  .dot-btn {
+    display: flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     padding: 0;
     border: 2px solid transparent;
     background: transparent;
     cursor: pointer;
     border-radius: 50%;
-    transition: border-color var(--transition-fast);
     flex-shrink: 0;
-    z-index: 1;
-    position: relative;
+    margin: 2px 0;
+    transition: border-color 0.15s;
   }
 
-  .dot-wrap.active {
+  .dot-btn.active {
     border-color: var(--dot-color, #ff3e00);
   }
 
-  .dot {
+  .dot-inner {
     display: block;
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: var(--dot-color, var(--border-default));
-    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    transition: transform 0.15s;
   }
 
-  .dot-wrap.active .dot {
+  .dot-btn:hover .dot-inner {
+    transform: scale(1.3);
+  }
+
+  .dot-btn.active .dot-inner {
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--dot-color, #ff3e00) 30%, transparent);
   }
 
-  .dot-wrap:hover .dot {
-    transform: scale(1.2);
-  }
-
-  .node-body {
+  .gutter-cont {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    padding: 2px var(--space-2);
+    gap: 1px;
+    min-height: 4px;
+    flex: 1;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .fork-arm {
+    display: block;
+    width: 2px;
+    height: 100%;
+    min-height: 10px;
+    background: var(--color, var(--border-default));
+    border-radius: 1px;
+  }
+
+  .fork-arm.left {
+    transform: rotate(-15deg);
+  }
+
+  .fork-arm.right {
+    transform: rotate(15deg);
+  }
+
+  .row-body {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 6px;
     font-size: 10px;
     flex: 1;
     min-width: 0;
+    overflow: hidden;
   }
 
-  .node-branch {
+  .branch-tag {
     font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 500;
+    font-size: 9px;
+    font-weight: 600;
+    color: #fff;
+    padding: 1px 5px;
+    border-radius: 3px;
     white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .label-text {
+    color: var(--text-secondary);
+    font-size: 10px;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .node-time {
+  .ts-text {
     color: var(--text-muted);
     font-family: var(--font-mono);
     font-size: 9px;
     white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: auto;
   }
 
-  .node-indicator {
-    color: var(--accent-primary);
+  .active-indicator {
+    color: #ff3e00;
     font-size: 10px;
-    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .fork-badge {
+    font-size: 8px;
+    color: var(--warning);
+    border: 1px solid var(--warning);
+    border-radius: 3px;
+    padding: 0 4px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   /* ── Historical state banner ── */
