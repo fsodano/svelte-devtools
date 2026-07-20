@@ -178,10 +178,14 @@ export const runtime = {
         }
 
         component.state.set(key, value);
-        // Prop values arrive via $inspect(...).with('props', value).
-        // Store them separately on component.props so the DevTools UI can
-        // display them in their own section.
-        if (typeof type === 'string' && type.includes('prop')) {
+        // Check if this key is a prop by looking at the registry metadata.
+        // The plugin transform records $props() destructured keys in propKeys
+        // and stores them in the registry during compilation.
+        const registry = typeof window !== 'undefined'
+            ? (window as unknown as Record<string, unknown>).__SVELTE_DEVTOOLS_REGISTRY__
+            : undefined;
+        const meta = (registry as Map<string, { propKeys?: string[] }> | undefined)?.get(componentId);
+        if (meta?.propKeys?.includes(key)) {
             component.props = { ...component.props, [key]: value };
         }
         if (isDebug) console.log('[Runtime:handleState] Component state updated:', componentId, 'key:', key, 'value:', value);
