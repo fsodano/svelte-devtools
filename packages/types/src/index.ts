@@ -195,6 +195,7 @@ export interface StateChangePayload {
   componentId: string;
   key: string;
   value: unknown;
+  prevValue?: unknown;
 }
 
 /** Payload for effect:run event */
