@@ -30,6 +30,12 @@ export function svelteDevToolsHandle(): Handle {
             | undefined;
         if (markSeen) markSeen(reqKey);
 
+        let requestBody = '';
+        try {
+            const reqClone = event.request.clone();
+            requestBody = await reqClone.text();
+        } catch { /* body not available */ }
+
         const startTime = Date.now();
         const perfStart = performance.now();
         let response: Response | undefined;
@@ -91,6 +97,7 @@ export function svelteDevToolsHandle(): Handle {
                     data: {
                         url: event.url.pathname + event.url.search,
                         method: event.request.method,
+                        requestBody: requestBody.slice(0, 2000) || undefined,
                         statusCode: response?.status,
                         routeId: event.route.id,
                         contentType,
