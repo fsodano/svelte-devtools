@@ -30,6 +30,7 @@
     duration?: number;
   }
 
+  import JsonTree from "./JsonTree.svelte";
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
 
   // --- Store-derived reactive state ---
@@ -43,6 +44,7 @@
   let isRecording = $state(true);
   let isPlaying = $state(false);
   let filter = $state<string>('all');
+  let selectedEntry = $state<TimelineEntry | null>(null);
 
   // --- Derived helpers ---
   let isViewingHistorical = $derived(
@@ -324,30 +326,56 @@
     <button class="clear-btn" onclick={clearTimeline}>Clear</button>
   </header>
 
-  <!-- ── Event entries (existing) ── -->
-  <div class="entries">
-    {#if getFilteredEntries().length > 0}
-      {#each getFilteredEntries() as entry (entry.id)}
-        <div class="entry">
-          <span class="icon">{getEventIcon(entry.type)}</span>
-          <span class="type">{entry.type}</span>
-          <span class="time">{formatTime(entry.timestamp)}</span>
-          {#if entry.duration}
-            <span class="duration">{@html formatDuration(entry.duration)}</span>
+  <div class="entries-split">
+    <div class="entries-list">
+      {#if getFilteredEntries().length > 0}
+        {#each getFilteredEntries() as entry (entry.id)}
+          <button
+            class="entry-row"
+            class:selected={selectedEntry?.id === entry.id}
+            onclick={() => selectedEntry = entry}
+          >
+            <span class="icon">{getEventIcon(entry.type)}</span>
+            <span class="entry-title">{entry.type}</span>
+            <span class="time">{formatTime(entry.timestamp)}</span>
+            {#if entry.duration}
+              <span class="duration">{@html formatDuration(entry.duration)}</span>
+            {/if}
+          </button>
+          {#if ['component:mount', 'state:change'].includes(entry.type)}
+            <div class="entry-summary">
+              <span class="detail-text">{@html formatEntryDetail(entry)}</span>
+            </div>
+          {/if}
+        {/each}
+      {:else}
+        <div class="empty">No events recorded</div>
+      {/if}
+    </div>
+
+    {#if selectedEntry}
+      <div class="detail-panel">
+        <header class="detail-header">
+          <span class="detail-title">{selectedEntry.type}</span>
+          <button class="detail-close" onclick={() => selectedEntry = null}>✕</button>
+        </header>
+        <div class="detail-meta">
+          <div class="meta-row">
+            <span class="meta-label">Time</span>
+            <span class="meta-value">{new Date(selectedEntry.timestamp).toLocaleString()}</span>
+          </div>
+          {#if selectedEntry.duration}
+            <div class="meta-row">
+              <span class="meta-label">Duration</span>
+              <span class="meta-value">{selectedEntry.duration.toFixed(2)}ms</span>
+            </div>
           {/if}
         </div>
-        {#if ['component:mount', 'component:unmount', 'state:change', 'effect:run', 'trace:trigger'].includes(entry.type)}
-          <div class="entry-detail">
-            {#if entry.type === 'trace:trigger'}
-              <span class="trace-info">{@html formatTraceData(entry.data)}</span>
-            {:else}
-              <span class="detail-text">{@html formatEntryDetail(entry)}</span>
-            {/if}
-          </div>
-        {/if}
-      {/each}
-    {:else}
-      <div class="empty">No events recorded</div>
+        <div class="detail-data">
+          <h4 class="data-heading">Data</h4>
+          <JsonTree value={selectedEntry.data} />
+        </div>
+      </div>
     {/if}
   </div>
 </div>
@@ -595,39 +623,147 @@
     filter: brightness(1.3);
   }
 
-  /* ── Event entries ── */
-  .entries {
+  /* ── Event entries split view ── */
+  .entries-split {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .entries-list {
     flex: 1;
     overflow-y: auto;
     padding: var(--space-2);
   }
 
-  .entry {
+  .entry-row {
     display: grid;
     grid-template-columns: 24px 1fr auto auto;
     gap: var(--space-2);
     align-items: center;
+    width: 100%;
     padding: 6px var(--space-2);
+    border: none;
+    background: transparent;
+    border-bottom: 1px solid var(--border-default);
+    font-size: 11px;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    color: inherit;
+  }
+
+  .entry-row:hover {
+    background: var(--bg-hover);
+  }
+
+  .entry-row.selected {
+    background: var(--bg-elevated);
+    border-left: 2px solid var(--accent-primary);
+  }
+
+  .entry-title {
+    font-family: var(--font-mono);
+    color: var(--syntax-key);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .entry-summary {
+    padding: 2px var(--space-2) 6px 32px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  /* ── Detail panel ── */
+  .detail-panel {
+    width: 280px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border-default);
+    background: var(--bg-surface);
+    overflow-y: auto;
+  }
+
+  .detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  .detail-title {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--syntax-key);
+  }
+
+  .detail-close {
+    padding: 2px 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: var(--radius-sm);
+  }
+
+  .detail-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .detail-meta {
+    padding: var(--space-2) var(--space-3);
     border-bottom: 1px solid var(--border-default);
     font-size: 11px;
   }
 
-  .entry:hover {
-    background: var(--bg-hover);
+  .meta-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+  }
+
+  .meta-label {
+    color: var(--text-muted);
+  }
+
+  .meta-value {
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+
+  .detail-data {
+    flex: 1;
+    padding: var(--space-2) var(--space-3);
+    overflow-y: auto;
+  }
+
+  .data-heading {
+    margin: 0 0 var(--space-2);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
   }
 
   .icon {
     text-align: center;
   }
 
-  .type {
-    font-family: var(--font-mono);
-    color: var(--syntax-key);
-  }
-
   .time {
     color: var(--text-secondary);
     font-size: 10px;
+    white-space: nowrap;
   }
 
   .duration {
