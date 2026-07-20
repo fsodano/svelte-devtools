@@ -270,6 +270,7 @@
 
   .list {
     overflow-y: auto;
+    min-height: 0;
     background: var(--bg-surface);
   }
 
@@ -345,6 +346,7 @@
 
   .detail-scroll {
     overflow-y: auto;
+    min-height: 0;
     background: var(--bg-surface);
   }
 
