@@ -110,14 +110,20 @@
   ];
 
   function getFilteredEntries(): TimelineEntry[] {
-    if (filter === 'all') return entries;
-    if (filter === 'trace') return entries.filter(e => e.type === 'trace:trigger');
-    if (filter === 'server') return entries.filter(e => e.type === 'server:trace');
-    return entries.filter(e => e.type.includes(filter));
+    const filtered = filter === 'all' ? entries
+      : filter === 'trace' ? entries.filter(e => e.type === 'trace:trigger')
+      : filter === 'server' ? entries.filter(e => e.type === 'server:trace')
+      : entries.filter(e => e.type.includes(filter));
+    // Newest first
+    return filtered.slice().reverse();
   }
 
   function formatTime(timestamp: number): string {
-    return new Date(timestamp).toLocaleTimeString();
+    return new Date(timestamp).toLocaleString(undefined, {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    });
   }
 
   function formatDuration(duration: number | undefined): string {

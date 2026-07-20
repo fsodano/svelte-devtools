@@ -130,7 +130,7 @@ function createDevtoolsStore() {
     addToTimeline({
       id: generateId(),
       type: 'component:mount',
-      timestamp: performance.now(),
+      timestamp: Date.now(),
       data: node
     });
 
@@ -159,7 +159,7 @@ function createDevtoolsStore() {
     addToTimeline({
       id: generateId(),
       type: 'component:unmount',
-      timestamp: performance.now(),
+      timestamp: Date.now(),
       data: { id: data.id, name: unmounted?.name || data.name || 'unknown', filename: unmounted?.filename }
     });
   }
@@ -185,7 +185,7 @@ function createDevtoolsStore() {
     addToTimeline({
       id: generateId(),
       type: 'state:change',
-      timestamp: performance.now(),
+      timestamp: Date.now(),
       data: { ...data, prevValue, componentName: existingComponent.name }
     });
 
@@ -197,7 +197,7 @@ function createDevtoolsStore() {
     addToTimeline({
       id: generateId(),
       type: 'trace:trigger',
-      timestamp: performance.now(),
+      timestamp: Date.now(),
       data
     });
   }
@@ -207,7 +207,7 @@ function createDevtoolsStore() {
     addToTimeline({
       id: generateId(),
       type: 'effect:run',
-      timestamp: performance.now(),
+      timestamp: Date.now(),
       data: payload,
       duration: data.duration
     });
