@@ -15,6 +15,8 @@
         contentType?: string;
         responseSize?: number;
         responsePreview?: string;
+        reqHeaders?: Record<string, string | undefined>;
+        resHeaders?: Record<string, string>;
         error?: { message: string; stack?: string };
       };
     }>
@@ -33,6 +35,8 @@
       contentType?: string;
       responseSize?: number;
       responsePreview?: string;
+      reqHeaders?: Record<string, string | undefined>;
+      resHeaders?: Record<string, string>;
       error?: { message: string; stack?: string };
     };
   } | null>(null);
@@ -123,6 +127,12 @@
             <span class="label">Method</span>
             <span class="value">{selected.data.method ?? '—'}</span>
           </div>
+          <div class="detail-row">
+            <span class="label">Status</span>
+            <span class="value">
+              <span class="status-badge" class:error={(selected.data as Record<string, unknown>).statusCode as number >= 400}>{selected.data.statusCode ?? '—'}</span>
+            </span>
+          </div>
           {#if selected.data.routeId !== undefined}
             <div class="detail-row">
               <span class="label">Route</span>
@@ -151,12 +161,30 @@
               <span class="value">{selected.data.responseSize} bytes</span>
             </div>
           {/if}
+
           {#if selected.data.responsePreview}
-            <div class="detail-row response-block">
-              <span class="label">Response</span>
-              <pre class="response-body">{selected.data.responsePreview}</pre>
+            <div class="section-label">Response Body</div>
+            <pre class="code-block">{selected.data.responsePreview}</pre>
+          {/if}
+
+          {#if selected.data.reqHeaders}
+            <div class="section-label">Request Headers</div>
+            <div class="headers-block">
+              {#each Object.entries(selected.data.reqHeaders).filter(([_, v]) => v) as [key, val]}
+                <div class="header-row"><span class="header-key">{key}</span><span class="header-val">{val}</span></div>
+              {/each}
             </div>
           {/if}
+
+          {#if selected.data.resHeaders}
+            <div class="section-label">Response Headers</div>
+            <div class="headers-block">
+              {#each Object.entries(selected.data.resHeaders).filter(([_, v]) => v) as [key, val]}
+                <div class="header-row"><span class="header-key">{key}</span><span class="header-val">{val}</span></div>
+              {/each}
+            </div>
+          {/if}
+
           {#if selected.data.error}
             <div class="detail-row">
               <span class="label">Error</span>
@@ -376,6 +404,71 @@
 
   .response-block .response-body {
     width: 100%;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 11px;
+    background: rgba(76, 175, 80, 0.15);
+    color: #4caf50;
+  }
+  .status-badge.error {
+    background: rgba(244, 67, 54, 0.15);
+    color: #f44336;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-top: var(--space-2);
+    margin-bottom: var(--space-1);
+  }
+
+  .code-block {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.3;
+    background: var(--bg-inset);
+    padding: var(--space-2);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .headers-block {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+
+  .header-row {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .header-key {
+    color: var(--syntax-key);
+    min-width: 120px;
+    flex-shrink: 0;
+  }
+
+  .header-val {
+    color: var(--text-secondary);
+    word-break: break-all;
   }
 
   .stack {

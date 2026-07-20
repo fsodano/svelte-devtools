@@ -31,8 +31,9 @@ export function svelteDevToolsHandle(): Handle {
         if (markSeen) markSeen(reqKey);
 
         const startTime = performance.now();
-        let response: Response;
+        let response: Response | undefined;
         let error: Error | undefined;
+        let responseBody = '';
 
         try {
             response = await resolve(event, {
@@ -41,10 +42,8 @@ export function svelteDevToolsHandle(): Handle {
                     const marker = `</head>`;
                     let idx = html.indexOf(marker);
                     if (idx === -1) {
-                        // Fallback: try </body>
                         const bodyIdx = html.indexOf('</body>');
                         if (bodyIdx === -1) {
-                            // Last resort: append before </html> or at end
                             const htmlIdx = html.lastIndexOf('</html>');
                             if (htmlIdx !== -1) {
                                 return html.slice(0, htmlIdx) + devtoolsInject + svelteRuntime + html.slice(htmlIdx);
@@ -60,6 +59,9 @@ export function svelteDevToolsHandle(): Handle {
                 }
             }
             });
+            // Clone response to read body for the trace
+            const clone = response.clone();
+            responseBody = await clone.text();
         } catch (e) {
             error = e instanceof Error ? e : new Error(String(e));
             throw error;
@@ -70,6 +72,8 @@ export function svelteDevToolsHandle(): Handle {
                 | undefined;
 
             if (addEvent) {
+                const contentType = response?.headers?.get('content-type') || '';
+                const isJson = contentType.includes('json');
                 addEvent({
                     id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
                     type: error ? 'server:error' : 'server:trace',
@@ -78,7 +82,20 @@ export function svelteDevToolsHandle(): Handle {
                     data: {
                         url: event.url.pathname + event.url.search,
                         method: event.request.method,
+                        statusCode: response?.status,
                         routeId: event.route.id,
+                        contentType,
+                        responseSize: responseBody.length,
+                        responsePreview: isJson ? responseBody.slice(0, 2000) : responseBody.slice(0, 500),
+                        reqHeaders: {
+                            'content-type': event.request.headers.get('content-type'),
+                            'user-agent': event.request.headers.get('user-agent'),
+                            'accept': event.request.headers.get('accept'),
+                            'referer': event.request.headers.get('referer'),
+                        },
+                        resHeaders: Object.fromEntries(
+                            response?.headers ? [...response.headers.entries()].map(([k, v]) => [k, v]) : []
+                        ),
                         duration,
                         error: error
                             ? { message: error.message, stack: error.stack }
