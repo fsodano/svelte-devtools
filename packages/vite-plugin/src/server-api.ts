@@ -16,10 +16,19 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 // In-memory cache populated by the DevTools client via POST /api/sync
 // ============================================================================
 
+interface SnapshotInfo {
+    id: string; parentId: string | null; branchId: string;
+    timestamp: number; label: string;
+}
+interface BranchInfo {
+    id: string; name: string; snapshotIds: string[]; color: string;
+}
 interface CachedState {
     components: unknown[];
     timeline: unknown[];
     remote: Record<string, unknown>;
+    snapshots: SnapshotInfo[];
+    branches: BranchInfo[];
     updatedAt: number;
 }
 
@@ -27,6 +36,8 @@ let cachedState: CachedState = {
     components: [],
     timeline: [],
     remote: {},
+    snapshots: [],
+    branches: [],
     updatedAt: 0,
 };
 
@@ -163,12 +174,11 @@ export async function handleApiRequest(
 
             // ── Snapshot tree (branch visualization) ──
             case '/snapshots': {
-                const rawUrl = req.url || '';
-                const params = new URLSearchParams(rawUrl.includes('?') ? rawUrl.split('?')[1] : '');
                 json(res, {
                     ok: true,
-                    snapshots: cachedState.timeline.filter((e: unknown) => (e as Record<string, unknown>).type === 'snapshot:capture'),
-                    count: cachedState.timeline.filter((e: unknown) => (e as Record<string, unknown>).type === 'snapshot:capture').length,
+                    snapshots: cachedState.snapshots,
+                    branches: cachedState.branches,
+                    count: cachedState.snapshots.length,
                     cachedAt: cachedState.updatedAt,
                 });
                 return;
@@ -236,6 +246,8 @@ export async function handleApiRequest(
                 if (data.components) cachedState.components = data.components;
                 if (data.timeline) cachedState.timeline = data.timeline;
                 if (data.remote) cachedState.remote = data.remote;
+                if (data.snapshots) cachedState.snapshots = data.snapshots;
+                if (data.branches) cachedState.branches = data.branches;
                 cachedState.updatedAt = Date.now();
                 json(res, { ok: true, cachedAt: cachedState.updatedAt });
                 return;

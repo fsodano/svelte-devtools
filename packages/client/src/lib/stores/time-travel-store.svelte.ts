@@ -60,7 +60,9 @@ let maxSnapshots = $state(LIMITS.MAX_STATE_SNAPSHOTS);
 let lastCapturedState: { components: ComponentNode[]; timeline: TimelineEntry[] } | null = null;
 
 let captureTimeout: ReturnType<typeof setTimeout> | null = null;
+let captureMaxTimer: ReturnType<typeof setTimeout> | null = null;
 const CAPTURE_DEBOUNCE = 100;
+const CAPTURE_MAX_WAIT = 1000;
 
 function generateSnapshotId(): string {
   return `snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -76,63 +78,85 @@ export function createTimeTravelStore(
   setComponents?: (c: ComponentNode[]) => void,
   setTimeline?: (t: TimelineEntry[]) => void
 ): TimeTravelStore {
+  function doCapture(label?: string): void {
+    const comps = getComponents();
+    const tl = getTimeline();
+
+    if (lastCapturedState) {
+      const componentsChanged = JSON.stringify(comps) !== JSON.stringify(lastCapturedState.components);
+      const timelineChanged = tl.length !== lastCapturedState.timeline.length;
+      if (!componentsChanged && !timelineChanged) return;
+    }
+
+    let branchId = currentBranchId;
+    let parentId: string | null = snapshots.length > 0 && currentIndex >= 0
+      ? snapshots[currentIndex].id
+      : null;
+
+    if (currentIndex < snapshots.length - 1) {
+      branchId = generateBranchId();
+      parentId = snapshots[currentIndex]?.id || null;
+      branches = [...branches, {
+        id: branchId,
+        name: `fork-${branches.length}`,
+        snapshotIds: [],
+        color: nextBranchColor()
+      }];
+    }
+
+    const snapshot: StateSnapshot = {
+      id: generateSnapshotId(),
+      parentId,
+      branchId,
+      timestamp: Date.now(),
+      label: label || '',
+      components: deepClone(comps),
+      timeline: deepClone(tl),
+    };
+
+    snapshots = [...snapshots, snapshot];
+    if (snapshots.length > maxSnapshots) {
+      snapshots = snapshots.slice(snapshots.length - maxSnapshots);
+    }
+
+    const branch = branches.find(b => b.id === branchId);
+    if (branch) {
+      branch.snapshotIds = [...(branch.snapshotIds || []), snapshot.id];
+    }
+
+    currentIndex = snapshots.length - 1;
+    currentBranchId = branchId;
+    isTimeTravelMode = true;
+    lastCapturedState = { components: comps, timeline: tl };
+  }
+
   function capture(label?: string): void {
+    // Leading-edge: capture immediately on first call
+    if (!captureTimeout) {
+      doCapture(label);
+    }
+
+    // Trailing-edge debounce: if more changes come within 100ms,
+    // wait for quiescence before capturing again
     if (captureTimeout) clearTimeout(captureTimeout);
-
     captureTimeout = setTimeout(() => {
-      const components = getComponents();
-      const timeline = getTimeline();
-
-      if (lastCapturedState) {
-        const componentsChanged = JSON.stringify(components) !== JSON.stringify(lastCapturedState.components);
-        const timelineChanged = timeline.length !== lastCapturedState.timeline.length;
-        if (!componentsChanged && !timelineChanged) return;
-      }
-
-      // Detect divergence: if not on the latest snapshot, create a branch
-      let branchId = currentBranchId;
-      let parentId: string | null = snapshots.length > 0 && currentIndex >= 0
-        ? snapshots[currentIndex].id
-        : null;
-
-      if (currentIndex < snapshots.length - 1) {
-        branchId = generateBranchId();
-        parentId = snapshots[currentIndex]?.id || null;
-        branches = [...branches, {
-          id: branchId,
-          name: `fork-${branches.length}`,
-          snapshotIds: [],
-          color: nextBranchColor()
-        }];
-      }
-
-      const snapshot: StateSnapshot = {
-        id: generateSnapshotId(),
-        parentId,
-        branchId,
-        timestamp: Date.now(),
-        label: label || '',
-        components: deepClone(components),
-        timeline: deepClone(timeline),
-      };
-
-      // Append and cap
-      snapshots = [...snapshots, snapshot];
-      if (snapshots.length > maxSnapshots) {
-        snapshots = snapshots.slice(snapshots.length - maxSnapshots);
-      }
-
-      // Track in branch
-      const branch = branches.find(b => b.id === branchId);
-      if (branch) {
-        branch.snapshotIds = [...(branch.snapshotIds || []), snapshot.id];
-      }
-
-      currentIndex = snapshots.length - 1;
-      currentBranchId = branchId;
-      isTimeTravelMode = true;
-      lastCapturedState = { components, timeline };
+      captureTimeout = null;
+      captureMaxTimer = null;
+      doCapture(label);
     }, CAPTURE_DEBOUNCE);
+
+    // Max wait: guarantee a capture at least every 1s even under
+    // continuous events (e.g. bridge polling every 100ms)
+    if (!captureMaxTimer) {
+      captureMaxTimer = setTimeout(() => {
+        if (captureTimeout) {
+          clearTimeout(captureTimeout);
+          captureTimeout = null;
+        }
+        captureMaxTimer = null;
+        doCapture(label);
+      }, CAPTURE_MAX_WAIT);
+    }
   }
 
   function restore(index: number): void {
