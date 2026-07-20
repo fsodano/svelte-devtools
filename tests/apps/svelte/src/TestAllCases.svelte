@@ -264,10 +264,10 @@
 
   <section>
     <h2>404 / Not Found</h2>
-    <p>Try these links (they produce 404s in SvelteKit):</p>
+    <p>Open these in a new tab to trigger a 404 trace (SvelteKit only):</p>
     <ul>
-      <li><a href="/nonexistent-page">/nonexistent-page</a></li>
-      <li><a href="/api/does-not-exist">/api/does-not-exist</a></li>
+      <li><a href="/nonexistent-page" target="_blank">/nonexistent-page</a></li>
+      <li><a href="/api/does-not-exist" target="_blank">/api/does-not-exist</a></li>
     </ul>
   </section>
 </main>
