@@ -72,7 +72,15 @@ export function svelteDevToolsHandle(): Handle {
                 | undefined;
 
             if (addEvent) {
-                const contentType = response?.headers?.get('content-type') || '';
+                const resHeadersRaw = response?.headers;
+                const headersEntries: [string, string][] = typeof resHeadersRaw?.entries === 'function'
+                    ? [...resHeadersRaw.entries()] as [string, string][]
+                    : typeof resHeadersRaw?.forEach === 'function'
+                        ? [] as [string, string][]
+                        : Object.entries(resHeadersRaw || {}) as unknown as [string, string][];
+                const contentType = typeof resHeadersRaw?.get === 'function'
+                    ? resHeadersRaw.get('content-type') || ''
+                    : (resHeadersRaw as unknown as Record<string, string>)?.['content-type'] || '';
                 const isJson = contentType.includes('json');
                 addEvent({
                     id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
@@ -88,14 +96,16 @@ export function svelteDevToolsHandle(): Handle {
                         responseSize: responseBody.length,
                         responsePreview: isJson ? responseBody.slice(0, 2000) : responseBody.slice(0, 500),
                         reqHeaders: {
-                            'content-type': event.request.headers.get('content-type'),
-                            'user-agent': event.request.headers.get('user-agent'),
-                            'accept': event.request.headers.get('accept'),
-                            'referer': event.request.headers.get('referer'),
+                            'content-type': typeof event.request.headers?.get === 'function'
+                                ? event.request.headers.get('content-type') : undefined,
+                            'user-agent': typeof event.request.headers?.get === 'function'
+                                ? event.request.headers.get('user-agent') : undefined,
+                            'accept': typeof event.request.headers?.get === 'function'
+                                ? event.request.headers.get('accept') : undefined,
+                            'referer': typeof event.request.headers?.get === 'function'
+                                ? event.request.headers.get('referer') : undefined,
                         },
-                        resHeaders: Object.fromEntries(
-                            response?.headers ? [...response.headers.entries()].map(([k, v]) => [k, v]) : []
-                        ),
+                        resHeaders: Object.fromEntries(headersEntries),
                         duration,
                         error: error
                             ? { message: error.message, stack: error.stack }
