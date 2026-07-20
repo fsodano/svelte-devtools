@@ -31,10 +31,14 @@ export function svelteDevToolsHandle(): Handle {
         if (markSeen) markSeen(reqKey);
 
         let requestBody = '';
-        try {
-            const reqClone = event.request.clone();
-            requestBody = await reqClone.text();
-        } catch { /* body not available */ }
+        if (event.request.method === 'POST') {
+            try {
+                const reqClone = event.request.clone();
+                requestBody = await reqClone.text();
+            } catch (e) {
+                console.warn('[Svelte DevTools] Could not read request body:', e instanceof Error ? e.message : e);
+            }
+        }
 
         const startTime = Date.now();
         const perfStart = performance.now();
@@ -98,6 +102,7 @@ export function svelteDevToolsHandle(): Handle {
                         url: event.url.pathname + event.url.search,
                         method: event.request.method,
                         requestBody: requestBody.slice(0, 2000) || undefined,
+                        _handler: 'sveltekit',
                         statusCode: response?.status,
                         routeId: event.route.id,
                         contentType,

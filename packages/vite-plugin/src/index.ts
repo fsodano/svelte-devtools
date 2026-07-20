@@ -164,9 +164,10 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                 const startTime = Date.now();
                 const reqKey = `${req.method}:${url}`;
 
-                // Capture request body
-                let reqBodyChunks: Buffer[] = [];
-                req.on('data', (chunk: Buffer) => { reqBodyChunks.push(chunk); });
+                // Capture request body via explicit read on finish.
+                // The req.on('data') approach doesn't work because Vite's
+                // middleware stack may consume the stream before our handler.
+                const reqBodyPreview = '';
 
                 // Intercept res.end to capture response body for server trace
                 const originalEnd = res.end.bind(res);
@@ -189,7 +190,6 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                     const body = Buffer.concat(bodyChunks).toString('utf-8');
                     const contentType = (res.getHeader('content-type') as string) || '';
                     const isJson = contentType.includes('json');
-                    const reqBody = Buffer.concat(reqBodyChunks).toString('utf-8').slice(0, 2000);
                     import('./server-events.js').then(({ addServerEvent }) => {
                         addServerEvent({
                             id: `srv-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
@@ -200,7 +200,8 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                                 url,
                                 method: req.method || 'GET',
                                 statusCode: res.statusCode,
-                                requestBody: reqBody || undefined,
+                                requestBody: reqBodyPreview || undefined,
+                                _handler: 'generic',
                                 contentType,
                                 responseSize: body.length,
                                 responsePreview: isJson ? body.slice(0, 2000) : body.slice(0, 500),

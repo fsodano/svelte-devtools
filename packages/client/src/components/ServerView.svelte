@@ -14,6 +14,7 @@
         statusCode?: number;
         contentType?: string;
         responseSize?: number;
+        requestBody?: string;
         responsePreview?: string;
         reqHeaders?: Record<string, string | undefined>;
         resHeaders?: Record<string, string>;
@@ -34,6 +35,7 @@
       statusCode?: number;
       contentType?: string;
       responseSize?: number;
+      requestBody?: string;
       responsePreview?: string;
       reqHeaders?: Record<string, string | undefined>;
       resHeaders?: Record<string, string>;
@@ -161,6 +163,11 @@
               <span class="label">Size</span>
               <span class="value">{selected.data.responseSize} bytes</span>
             </div>
+          {/if}
+
+          {#if selected.data.requestBody}
+            <div class="section-label">Request Body</div>
+            <pre class="code-block">{selected.data.requestBody}</pre>
           {/if}
 
           {#if selected.data.responsePreview}
