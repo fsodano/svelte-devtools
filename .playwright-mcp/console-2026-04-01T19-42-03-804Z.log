@@ -1,0 +1,41 @@
+[     172ms] [LOG] [Runtime:emit] Sending event: runtime-ready payload: {type: runtime-ready, componentId: runtime, componentName: Runtime, timestamp: 154.69999998807907, value: undefined} @ http://localhost:5173/__svelte-devtools/svelte-runtime.js:133
+[     190ms] [LOG] [VITE DEVTOOLS] Client injected @ http://localhost:5173/@fs//Users/fsodano/fibradev/svelte-dev-extension/test-app/node_modules/@vitejs/devtools/dist/client/inject.js:368
+[     200ms] [LOG] [Svelte DevTools] Starting... @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:3
+[     200ms] [LOG] [Svelte DevTools] Initializing store... @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:3
+[     200ms] [LOG] [Store:init] Registering bridge handlers @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     200ms] [LOG] [Store:init] Connected to bridge @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     200ms] [LOG] [Svelte DevTools] Mounting app... @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:3
+[     202ms] [LOG] [Svelte DevTools] Mounted successfully @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:3
+[     203ms] [LOG] [Svelte DevTools] UI connected to store @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:3
+[     206ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/favicon.ico:0
+[     243ms] [WARNING] Feature flags __VUE_OPTIONS_API__, __VUE_PROD_DEVTOOLS__, __VUE_PROD_HYDRATION_MISMATCH_DETAILS__ are not explicitly defined. You are running the esm-bundler build of Vue, which expects these compile-time feature flags to be globally injected via the bundler config in order to get better tree-shaking in the production bundle.
+
+For more details, see https://link.vuejs.org/feature-flags. @ http://localhost:5173/node_modules/@vue/runtime-core/dist/runtime-core.esm-bundler.js?v=7484dbd2:4638
+[     256ms] Error: Unauthorized access to method "devtoolskit:internal:logs:list" from client [0]
+    at unpair (http://localhost:5173/node_modules/structured-clone-es/dist/index.mjs?v=7484dbd2:41:15)
+    at unpair (http://localhost:5173/node_modules/structured-clone-es/dist/index.mjs?v=7484dbd2:21:61)
+    at deserialize (http://localhost:5173/node_modules/structured-clone-es/dist/index.mjs?v=7484dbd2:60:60)
+    at parse (http://localhost:5173/node_modules/structured-clone-es/dist/index.mjs?v=7484dbd2:187:9)
+    at onMessage (http://localhost:5173/node_modules/birpc/dist/index.mjs?v=7484dbd2:161:10)
+    at WebSocket.<anonymous> (http://localhost:5173/node_modules/@vitejs/devtools-rpc/dist/presets/ws/client.mjs?v=7484dbd2:22:5)
+[     275ms] [LOG] [Runtime:registerComponent] Emitted: svt-qmcnjh App parentId: undefined @ http://localhost:5173/__svelte-devtools/svelte-runtime.js:95
+[     275ms] [LOG] [Runtime:registerComponent] Emitted: svt-x7mp56 TestAllCases parentId: undefined @ http://localhost:5173/__svelte-devtools/svelte-runtime.js:95
+[     275ms] [LOG] [Bridge:postMessage] Received event: component-register timestamp: 1775072524078 @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     275ms] [LOG] [Bridge:postMessage] Mapped to bridge type: component:mount @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     275ms] [LOG] [Bridge:postMessage] Callbacks found: 1 @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     275ms] [LOG] [Bridge:mapPayload] component-register raw: {id: svt-qmcnjh, name: App, filename: /Users/fsodano/fibradev/svelte-dev-extension/test-app/src/App.svelte, parentId: undefined, timestamp: 257.30000001192093} @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     275ms] [LOG] [Bridge:postMessage] Mapped payload: {id: svt-qmcnjh, name: App, filename: /Users/fsodano/fibradev/svelte-dev-extension/test-app/src/App.svelte, parentId: undefined} @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     275ms] [LOG] [Store:handleComponentMount] Received: {id: svt-qmcnjh, name: App, filename: /Users/fsodano/fibradev/svelte-dev-extension/test-app/src/App.svelte, parentId: undefined} @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     275ms] [LOG] [Store:handleComponentMount] Node: svt-qmcnjh parentId: undefined @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     276ms] [LOG] [Bridge:postMessage] Received event: component-register timestamp: 1775072524080 @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     276ms] [LOG] [Bridge:postMessage] Mapped to bridge type: component:mount @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     276ms] [LOG] [Bridge:postMessage] Callbacks found: 1 @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     276ms] [LOG] [Bridge:mapPayload] component-register raw: {id: svt-x7mp56, name: TestAllCases, filename: /Users/fsodano/fibradev/svelte-dev-extension/test-app/src/TestAllCases.svelte, parentId: undefined, timestamp: 257.5} @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     276ms] [LOG] [Bridge:postMessage] Mapped payload: {id: svt-x7mp56, name: TestAllCases, filename: /Users/fsodano/fibradev/svelte-dev-extension/test-app/src/TestAllCases.svelte, parentId: undefined} @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     276ms] [LOG] [Store:handleComponentMount] Received: {id: svt-x7mp56, name: TestAllCases, filename: /Users/fsodano/fibradev/svelte-dev-extension/test-app/src/TestAllCases.svelte, parentId: undefined} @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     276ms] [LOG] [Store:handleComponentMount] Node: svt-x7mp56 parentId: undefined @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     302ms] [LOG] [Store:handleComponentMount] Received: {id: svt-qmcnjh, name: App, state: Object, children: Array(0), parentId: undefined} @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     302ms] [LOG] [Store:handleComponentMount] Node: svt-qmcnjh parentId: undefined @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     302ms] [LOG] [Store:handleComponentMount] Received: {id: svt-x7mp56, name: TestAllCases, state: Object, children: Array(0), parentId: undefined} @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[     302ms] [LOG] [Store:handleComponentMount] Node: svt-x7mp56 parentId: undefined @ http://localhost:5173/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[   11085ms] [INFO] <Suspense> is an experimental feature and its API will likely change. @ http://localhost:5173/node_modules/@vue/runtime-core/dist/runtime-core.esm-bundler.js?v=7484dbd2:5934

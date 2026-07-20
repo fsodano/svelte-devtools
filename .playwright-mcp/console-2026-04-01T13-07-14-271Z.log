@@ -1,0 +1,7 @@
+[      27ms] [LOG] [Svelte DevTools] Starting... @ http://localhost:5176/__svelte-devtools/assets/index-rwc1Dq5S.js:3
+[      27ms] [LOG] [Svelte DevTools] Initializing store... @ http://localhost:5176/__svelte-devtools/assets/index-rwc1Dq5S.js:3
+[      27ms] [LOG] [Store:init] Registering bridge handlers @ http://localhost:5176/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[      27ms] [LOG] [Store:init] Connected to bridge @ http://localhost:5176/__svelte-devtools/assets/index-rwc1Dq5S.js:1
+[      27ms] [LOG] [Svelte DevTools] Mounting app... @ http://localhost:5176/__svelte-devtools/assets/index-rwc1Dq5S.js:3
+[      29ms] [LOG] [Svelte DevTools] Mounted successfully @ http://localhost:5176/__svelte-devtools/assets/index-rwc1Dq5S.js:3
+[      30ms] [LOG] [Svelte DevTools] UI connected to store @ http://localhost:5176/__svelte-devtools/assets/index-rwc1Dq5S.js:3
