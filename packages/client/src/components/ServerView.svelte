@@ -44,11 +44,12 @@
   let filterType = $state<'all' | 'trace' | 'error'>('all');
 
   const filteredEvents = $derived(
-    filterType === 'all'
+    (filterType === 'all'
       ? serverEvents
       : serverEvents.filter(e =>
           filterType === 'error' ? e.type === 'server:error' : e.type !== 'server:error'
         )
+    ).slice().reverse()
   );
 
   async function refresh(): Promise<void> {
