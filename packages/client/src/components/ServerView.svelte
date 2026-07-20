@@ -207,6 +207,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
     background: var(--bg-base);
     color: var(--text-primary);
     font-family: var(--font-ui);
@@ -264,6 +265,8 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     height: 100%;
+    min-height: 0;
+    overflow: hidden;
     gap: 1px;
     background: var(--border-default);
   }
@@ -355,6 +358,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    min-height: 0;
   }
 
   .detail-row {
