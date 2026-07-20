@@ -130,12 +130,13 @@ function createDevtoolsStore() {
 
   function handleComponentUnmount(payload: unknown): void {
     const data = payload as ComponentUnmountPayload;
+    const unmounted = components.find(c => c.id === data.id);
     components = components.filter(c => c.id !== data.id);
     addToTimeline({
       id: generateId(),
       type: 'component:unmount',
       timestamp: performance.now(),
-      data: { id: data.id }
+      data: { id: data.id, name: unmounted?.name || data.name || 'unknown', filename: unmounted?.filename }
     });
   }
 
@@ -148,6 +149,7 @@ function createDevtoolsStore() {
     }
 
     const value = data.value instanceof Map ? Object.fromEntries(data.value) : data.value;
+    const prevValue = existingComponent.state?.[data.key];
 
     components = components.map(c => {
       if (c.id === data.componentId) {
@@ -160,7 +162,7 @@ function createDevtoolsStore() {
       id: generateId(),
       type: 'state:change',
       timestamp: performance.now(),
-      data
+      data: { ...data, prevValue, componentName: existingComponent.name }
     });
 
     timeTravel.capture('state');

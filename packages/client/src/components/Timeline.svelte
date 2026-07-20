@@ -134,6 +134,44 @@
     return '';
   }
 
+  function formatEntryDetail(entry: TimelineEntry): string {
+    const d = entry.data as Record<string, unknown> | undefined;
+    if (!d) return '';
+
+    switch (entry.type) {
+      case 'component:mount': {
+        const name = (d as { name?: string }).name || 'unknown';
+        const filename = (d as { filename?: string }).filename || '';
+        const state = (d as { state?: Record<string, unknown> }).state;
+        const stateCount = state ? Object.keys(state).length : 0;
+        const statePreview = state && stateCount > 0
+          ? ` (${Object.entries(state).slice(0, 3).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ')}${stateCount > 3 ? '…' : ''})`
+          : '';
+        return `<span style="color: #9cdcfe">${name}</span>${filename ? ` <span style="color: #858585">${filename}</span>` : ''}${statePreview}`;
+      }
+      case 'component:unmount': {
+        const name = (d as { name?: string }).name || d.id as string || 'unknown';
+        return `<span style="color: #f48771">${name}</span>`;
+      }
+      case 'state:change': {
+        const key = d.key as string || '?';
+        const val = d.value;
+        const prev = d.prevValue;
+        const comp = d.componentName as string || '';
+        const valStr = val !== undefined ? JSON.stringify(val) : 'undefined';
+        const prevStr = prev !== undefined ? JSON.stringify(prev) : 'undefined';
+        const compInfo = comp ? `<span style="color: #9cdcfe">${comp}</span>.` : '';
+        return `${compInfo}<span style="color: #dcdcaa">${key}</span>: <span style="color: #858585">${prevStr}</span> → <span style="color: #4ec9b0">${valStr}</span>`;
+      }
+      case 'effect:run': {
+        const name = (d as { effectName?: string }).effectName || 'anonymous';
+        return `<span style="color: #c586c0">${name}</span>`;
+      }
+      default:
+        return '';
+    }
+  }
+
   function getEventIcon(type: string): string {
     switch (type) {
       case 'component:mount': return '📦';
@@ -294,16 +332,19 @@
           <span class="icon">{getEventIcon(entry.type)}</span>
           <span class="type">{entry.type}</span>
           <span class="time">{formatTime(entry.timestamp)}</span>
-          {#if entry.type === 'trace:trigger'}
-            <span class="trace-info">{@html formatTraceData(entry.data)}</span>
+          {#if entry.duration}
+            <span class="duration">{@html formatDuration(entry.duration)}</span>
           {/if}
-           {#if entry.duration}
-             <span class="duration">{@html formatDuration(entry.duration)}</span>
-           {/if}
-           {#if entry.type === 'server:trace'}
-             <span class="trace-info">{@html formatTraceData(entry.data)}</span>
-           {/if}
-         </div>
+        </div>
+        {#if ['component:mount', 'component:unmount', 'state:change', 'effect:run', 'trace:trigger'].includes(entry.type)}
+          <div class="entry-detail">
+            {#if entry.type === 'trace:trigger'}
+              <span class="trace-info">{@html formatTraceData(entry.data)}</span>
+            {:else}
+              <span class="detail-text">{@html formatEntryDetail(entry)}</span>
+            {/if}
+          </div>
+        {/if}
       {/each}
     {:else}
       <div class="empty">No events recorded</div>
