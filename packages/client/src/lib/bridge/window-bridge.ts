@@ -47,14 +47,15 @@ export function createWindowBridge() {
                     if (!mountedComponents.has(comp.id)) {
                         mountedComponents.add(comp.id);
                         const callbacks = listeners.get('component:mount');
-                        const payload: ComponentMountPayload = {
-                            id: comp.id,
-                            name: comp.name,
-                            state: Object.fromEntries(comp.state || []),
-                            children: comp.children || [],
-                            parentId: comp.parentId,
-                            filename: comp.filename
-                        };
+const payload: ComponentMountPayload = {
+    id: comp.id,
+    name: comp.name,
+    props: comp.props || {},
+    state: Object.fromEntries(comp.state || []),
+    children: comp.children || [],
+    parentId: comp.parentId,
+    filename: comp.filename
+};
                         callbacks?.forEach(fn => fn(payload));
                     }
                 });
@@ -109,7 +110,8 @@ function mapPostMessagePayload(payload: unknown, eventType: string): unknown {
                 componentId: _payload.componentId,
                 key: _payload.key || 'state',
                 value: _payload.value,
-                prevValue: _payload.prevValue
+                prevValue: _payload.prevValue,
+                type: _payload.inspectType  // forward the $inspect type for prop detection
             };
 
         case RUNE_TYPES.EFFECT:

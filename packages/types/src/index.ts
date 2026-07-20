@@ -50,6 +50,7 @@ export interface ComponentInstance {
   parentId?: string;
   children: string[] | ComponentInstance[];
   state: Map<string, unknown>;
+  props: Record<string, unknown>;
   effects: string[];
   mountTime: number;
   isPlaceholder?: boolean;
