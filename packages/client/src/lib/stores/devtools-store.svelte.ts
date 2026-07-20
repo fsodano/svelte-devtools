@@ -38,6 +38,7 @@ function createDevtoolsStore() {
     (c) => { components = c; },
     (t) => { timeline = t; }
   );
+  let isRecording = $state(true);
   let serverEvents = $state<unknown[]>([]);
   let serverEventsPollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -75,9 +76,16 @@ function createDevtoolsStore() {
   // endpoints can serve component/timeline data to AI agents and tooling.
   async function syncStateToServer(): Promise<void> {
     try {
+      const snapshotTree = timeTravel.snapshots.map(s => ({
+        id: s.id, parentId: s.parentId, branchId: s.branchId,
+        timestamp: s.timestamp, label: s.label,
+      }));
+      const branchList = timeTravel.branches;
       const payload = JSON.stringify({
         components: components.map(c => ({ id: c.id, name: c.name, state: c.state, props: c.props, parentId: c.parentId, filename: c.filename })),
         timeline: timeline.map(e => ({ id: e.id, type: e.type, timestamp: e.timestamp, duration: e.duration, data: e.data })),
+        snapshots: snapshotTree,
+        branches: branchList,
       });
       // Use sendBeacon for fire-and-forget (doesn't block on page unload)
       if (navigator.sendBeacon) {
@@ -134,7 +142,7 @@ function createDevtoolsStore() {
       data: node
     });
 
-    timeTravel.capture('mount');
+    if (isRecording) timeTravel.capture('mount');
   }
 
   function ensureComponentNode(payload: unknown): ComponentNode {
@@ -194,7 +202,7 @@ function createDevtoolsStore() {
       data: { ...data, prevValue, componentName: existingComponent.name }
     });
 
-    timeTravel.capture('state');
+    if (isRecording) timeTravel.capture('state');
   }
 
   function handleTraceTrigger(payload: unknown): void {
@@ -266,6 +274,8 @@ function createDevtoolsStore() {
     get searchResults() { return searchResults; },
     get timeTravel() { return timeTravel; },
     get serverEvents() { return serverEvents as ServerEvent[]; },
+    get isRecording() { return isRecording; },
+    set isRecording(v: boolean) { isRecording = v; },
     init,
     selectComponent,
     setSearchQuery,

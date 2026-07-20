@@ -6,6 +6,19 @@
     duration?: number;
     data: unknown;
   }
+  interface SnapshotNode {
+    id: string;
+    parentId: string | null;
+    branchId: string;
+    timestamp: number;
+    label: string;
+  }
+  interface BranchInfo {
+    id: string;
+    name: string;
+    snapshotIds: string[];
+    color: string;
+  }
 
   interface TraceData {
     componentId: string;
@@ -15,7 +28,7 @@
     timestamp: number;
   }
 
-  interface ServerTraceData {
+  interface ServerRequestData {
     id: string;
     url: string;
     method: string;
@@ -35,16 +48,18 @@
 
   // --- Store-derived reactive state ---
   let entries = $derived(devtoolsStore.timeline);
-  let snapshots = $derived(devtoolsStore.timeTravel.snapshots);
+  let snapshots = $derived(devtoolsStore.timeTravel.snapshots as unknown as SnapshotNode[]);
   let currentSnapshotIndex = $derived(devtoolsStore.timeTravel.currentIndex);
+  let branches = $derived((devtoolsStore.timeTravel as never as { branches: BranchInfo[] }).branches);
+  let currentBranchId = $derived((devtoolsStore.timeTravel as never as { currentBranchId: string }).currentBranchId);
   let canUndo = $derived(devtoolsStore.timeTravel.canUndo);
   let canRedo = $derived(devtoolsStore.timeTravel.canRedo);
 
   // --- Local UI state ---
-  let isRecording = $state(true);
   let isPlaying = $state(false);
   let filter = $state<string>('all');
   let selectedEntry = $state<TimelineEntry | null>(null);
+  let editingState = $state<{ componentId: string; key: string; value: string } | null>(null);
 
   // --- Derived helpers ---
   let isViewingHistorical = $derived(
@@ -56,6 +71,29 @@
       ? `Snapshot ${currentSnapshotIndex + 1} / ${snapshots.length}`
       : ''
   );
+
+  let branchRows = $derived.by(() => {
+    const rows: { snapIdx: number; snapId: string; branchId: string; branchName: string; color: string; label: string; ts: number; parentId: string | null; hasForkChildren: boolean }[] = [];
+    for (const branch of branches) {
+      for (let idx = 0; idx < snapshots.length; idx++) {
+        const s = snapshots[idx];
+        if (s.branchId !== branch.id) continue;
+        const hasForkChildren = snapshots.some(c => c.parentId === s.id && c.branchId !== branch.id);
+        rows.push({
+          snapIdx: idx,
+          snapId: s.id,
+          branchId: branch.id,
+          branchName: branch.name,
+          color: branch.color,
+          label: s.label || '',
+          ts: s.timestamp,
+          parentId: s.parentId,
+          hasForkChildren,
+        });
+      }
+    }
+    return rows;
+  });
 
   // --- Auto-play: advance through snapshots on an interval ---
   $effect(() => {
@@ -72,8 +110,8 @@
 
   // --- Toolbar action handlers ---
   function toggleRecording(): void {
-    isRecording = !isRecording;
-    if (isRecording) {
+    devtoolsStore.isRecording = !devtoolsStore.isRecording;
+    if (devtoolsStore.isRecording) {
       devtoolsStore.timeTravel.capture();
     }
   }
@@ -112,7 +150,7 @@
   function getFilteredEntries(): TimelineEntry[] {
     const filtered = filter === 'all' ? entries
       : filter === 'trace' ? entries.filter(e => e.type === 'trace:trigger')
-      : filter === 'server' ? entries.filter(e => e.type === 'server:trace')
+      : filter === 'server' ? entries.filter(e => e.type === 'server:request')
       : entries.filter(e => e.type.includes(filter));
     // Newest first
     return filtered.slice().reverse();
@@ -175,7 +213,7 @@
         const name = (d as { effectName?: string }).effectName || 'anonymous';
         return `<span style="color: #c586c0">${name}</span>`;
       }
-      case 'server:trace':
+      case 'server:request':
       case 'server:error': {
         const method = (d as { method?: string }).method || 'GET';
         const url = (d as { url?: string }).url || '';
@@ -197,7 +235,7 @@
       case 'effect:run': return '⚡';
       case 'trace:trigger': return '🔍';
       case 'server:load': return '🖥️';
-      case 'server:trace': return '🖥️';
+      case 'server:request': return '🖥️';
       case 'api:call': return '🌐';
       case 'hydration': return '💧';
       default: return '•';
@@ -219,10 +257,10 @@
       return `<span style="color: #9cdcfe">${traceData.stateKey}</span>`;
     }
     
-    const serverTrace = data as ServerTraceData;
-    if (serverTrace.url) {
-      const methodColor = serverTrace.method === 'GET' ? '#4ec9b0' : '#dcdcaa';
-      return `<span style="color: ${methodColor}">${serverTrace.method}</span> <span style="color: #9cdcfe">${serverTrace.url}</span>`;
+    const serverRequest = data as ServerRequestData;
+    if (serverRequest.url) {
+      const methodColor = serverRequest.method === 'GET' ? '#4ec9b0' : '#dcdcaa';
+      return `<span style="color: ${methodColor}">${serverRequest.method}</span> <span style="color: #9cdcfe">${serverRequest.url}</span>`;
     }
     
     return '';
@@ -237,7 +275,7 @@
         <!-- Record toggle -->
         <button
           class="tb-btn record-btn"
-          class:recording={isRecording}
+          class:recording={devtoolsStore.isRecording}
           onclick={toggleRecording}
           title={isRecording ? 'Recording on \u2014 click to stop' : 'Recording off \u2014 click to start'}
         >
@@ -298,17 +336,39 @@
       </div>
     </div>
 
-    <!-- ── Snapshot timeline dots ── -->
-    <div class="dot-bar">
-      {#each snapshots as snap, i (snap.id)}
-        <button
-          class="dot-wrap"
-          class:active={currentSnapshotIndex === i}
-          onclick={() => devtoolsStore.timeTravel.restore(i)}
-          title={new Date(snap.timestamp).toLocaleString()}
-        >
-          <span class="dot"></span>
-        </button>
+    <div class="branch-tree">
+      {#each branchRows as row (row.snapId)}
+        <div class="branch-row" class:active={currentSnapshotIndex === row.snapIdx} style="--color: {row.color}">
+          <div class="row-gutter">
+            <div class="gutter-line"></div>
+            <button
+              class="dot-btn"
+              class:active={currentSnapshotIndex === row.snapIdx}
+              onclick={() => devtoolsStore.timeTravel.restore(row.snapIdx)}
+              title={`${row.branchName} @ ${new Date(row.ts).toLocaleString()}`}
+              style="--dot-color: {currentSnapshotIndex === row.snapIdx ? '#ff3e00' : row.color}"
+            >
+              <span class="dot-inner"></span>
+            </button>
+            <div class="gutter-cont">
+              {#if row.hasForkChildren}
+                <span class="fork-arm left"></span>
+                <span class="fork-arm right"></span>
+              {/if}
+            </div>
+          </div>
+          <div class="row-body">
+            <span class="branch-tag" style="background: {row.color}">{row.branchName}</span>
+            <span class="label-text">{row.label}</span>
+            <span class="ts-text">{new Date(row.ts).toLocaleTimeString()}</span>
+            {#if currentSnapshotIndex === row.snapIdx}
+              <span class="active-indicator">◀</span>
+            {/if}
+            {#if row.hasForkChildren}
+              <span class="fork-badge">fork</span>
+            {/if}
+          </div>
+        </div>
       {/each}
     </div>
 
@@ -357,7 +417,7 @@
               <span class="duration">{@html formatDuration(entry.duration)}</span>
             {/if}
           </button>
-          {#if ['component:mount', 'component:unmount', 'state:change', 'effect:run', 'trace:trigger', 'server:trace', 'server:error'].includes(entry.type)}
+          {#if ['component:mount', 'component:unmount', 'state:change', 'effect:run', 'trace:trigger', 'server:request', 'server:error'].includes(entry.type)}
             <div class="entry-summary">
               <span class="detail-text">{@html formatEntryDetail(entry)}</span>
             </div>
@@ -481,72 +541,166 @@
     user-select: none;
   }
 
-  /* ── Snapshot dots bar ── */
-  .dot-bar {
+  .branch-tree {
     display: flex;
-    align-items: center;
-    gap: 3px;
-    padding: 5px var(--space-3);
+    flex-direction: column;
     background: var(--bg-inset);
     border-bottom: 1px solid var(--border-default);
-    overflow-x: auto;
+    max-height: 180px;
+    overflow-y: auto;
     flex-shrink: 0;
   }
 
-  .dot-bar::-webkit-scrollbar {
-    height: 3px;
+  .branch-row {
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 2px 0;
+    transition: background 0.15s;
   }
 
-  .dot-bar::-webkit-scrollbar-track {
-    background: transparent;
+  .branch-row:hover {
+    background: var(--bg-hover);
   }
 
-  .dot-bar::-webkit-scrollbar-thumb {
-    background: var(--border-default);
-    border-radius: 2px;
+  .branch-row.active {
+    background: var(--bg-elevated);
   }
 
-  .dot-wrap {
-    display: inline-flex;
+  .row-gutter {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 28px;
+    flex-shrink: 0;
+  }
+
+  .gutter-line {
+    width: 2px;
+    min-height: 4px;
+    flex: 1;
+    background: var(--color, var(--border-default));
+    border-radius: 1px;
+  }
+
+  .dot-btn {
+    display: flex;
     align-items: center;
     justify-content: center;
     width: 16px;
     height: 16px;
     padding: 0;
-    border: none;
+    border: 2px solid transparent;
     background: transparent;
     cursor: pointer;
     border-radius: 50%;
-    transition: background var(--transition-fast);
     flex-shrink: 0;
+    margin: 2px 0;
+    transition: border-color 0.15s;
   }
 
-  .dot-wrap:hover {
-    background: var(--bg-hover);
+  .dot-btn.active {
+    border-color: var(--dot-color, #ff3e00);
   }
 
-  .dot {
+  .dot-inner {
     display: block;
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--border-default);
-    transition: background var(--transition-fast), transform var(--transition-fast);
+    background: var(--dot-color, var(--border-default));
+    transition: transform 0.15s;
   }
 
-  .dot-wrap:hover .dot {
-    background: var(--text-muted);
-    transform: scale(1.15);
+  .dot-btn:hover .dot-inner {
+    transform: scale(1.3);
   }
 
-  .dot-wrap.active .dot {
-    background: var(--accent-primary);
-    box-shadow: 0 0 0 2px var(--svelte-brand-15);
+  .dot-btn.active .dot-inner {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--dot-color, #ff3e00) 30%, transparent);
   }
 
-  .dot-wrap.active:hover .dot {
-    transform: scale(1.15);
-    box-shadow: 0 0 0 2.5px var(--svelte-brand-15);
+  .gutter-cont {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    min-height: 4px;
+    flex: 1;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .fork-arm {
+    display: block;
+    width: 2px;
+    height: 100%;
+    min-height: 10px;
+    background: var(--color, var(--border-default));
+    border-radius: 1px;
+  }
+
+  .fork-arm.left {
+    transform: rotate(-15deg);
+  }
+
+  .fork-arm.right {
+    transform: rotate(15deg);
+  }
+
+  .row-body {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 6px;
+    font-size: 10px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .branch-tag {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    color: #fff;
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .label-text {
+    color: var(--text-secondary);
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ts-text {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .active-indicator {
+    color: #ff3e00;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+
+  .fork-badge {
+    font-size: 8px;
+    color: var(--warning);
+    border: 1px solid var(--warning);
+    border-radius: 3px;
+    padding: 0 4px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   /* ── Historical state banner ── */

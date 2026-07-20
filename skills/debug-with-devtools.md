@@ -421,9 +421,29 @@ curl http://localhost:5173/__svelte-devtools/api/server-events
 curl http://localhost:5173/__svelte-devtools/api/migration
 ```
 
-### Response Format
+### State Editing
 
-All endpoints return:
+The API supports editing component state programmatically — useful for AI agents that want to test scenarios:
+
+```bash
+# Set a component's state value
+curl -X POST http://localhost:5173/__svelte-devtools/api/set-state \
+  -H 'Content-Type: application/json' \
+  -d '{"componentId": "svt-xxx", "key": "count", "value": 42}'
+```
+
+This updates the cached component state on the server. The next time the client syncs, it will use this value.
+
+### Snapshot Visualization
+
+```bash
+# Get snapshot / branch tree
+curl http://localhost:5173/__svelte-devtools/api/snapshots
+```
+
+Returns the list of captured snapshots with their branch IDs, parent IDs, and timestamps — enabling agents to reconstruct the branching timeline.
+
+### Response Format
 
 ```json
 {
