@@ -20,9 +20,9 @@
   let arrState = $state([10, 20]);
 
   // ===== Spring and Tween =====
-  import { Spring } from 'svelte/motion';
+  import { Spring, Tween } from 'svelte/motion';
   let spring = new Spring(0);
-  let tween = new Spring(100);
+  let tween = new Tween(100);
 
   // ===== Computed values from destructuring =====
   let first = $derived(derivedObj.first);
@@ -44,6 +44,19 @@
 
   function updatePoint() {
     point = { x: point.x + 1, y: point.y + 1 };
+  }
+
+  function springUp() {
+    spring.target = spring.target + 50;
+  }
+  function springDown() {
+    spring.target = spring.target - 50;
+  }
+  function tweenUp() {
+    tween.set(tween.current + 50, { duration: 300 });
+  }
+  function tweenDown() {
+    tween.set(tween.current - 50, { duration: 300 });
   }
 </script>
 
@@ -95,7 +108,11 @@
   <section>
     <h2>Spring and Tween</h2>
     <p>spring: {spring.current}</p>
+    <button onclick={springDown}>Spring -50</button>
+    <button onclick={springUp}>Spring +50</button>
     <p>tween: {tween.current}</p>
+    <button onclick={tweenDown}>Tween -50</button>
+    <button onclick={tweenUp}>Tween +50</button>
   </section>
 </main>
 
