@@ -66,14 +66,24 @@ export function createTimeTravelStore(
 ): TimeTravelStore {
   // ── Hybrid restore lock ─────────────────────────────────────────
   // Sliding silence window + hard ceiling. After a restore, every
-  // incoming state:change event resets a 50ms timer. The lock lifts
-  // when Svelte 5's $effect re-runs go quiet for 50ms. A 2s hard
+  // incoming state:change event resets a 150ms timer. The lock lifts
+  // when Svelte 5's $effect re-runs go quiet for 150ms. A 2s hard
   // ceiling guarantees release even under continuous signal spam.
+  // 150ms ≈ 9 frames at 60fps, giving a safety net for frame drops
+  // during rapid scrubbing without feeling sluggish.
   let isRestoring = false;
   let _restoreSilenceTimer: ReturnType<typeof setTimeout> | null = null;
   let _restoreCeilingTimer: ReturnType<typeof setTimeout> | null = null;
-  const SILENCE_THRESHOLD = 50;
+  const SILENCE_THRESHOLD = 150;
   const HARD_CEILING = 2000;
+  // Scrub debounce: when the user rapidly clicks undo/redo or
+  // snapshots, the DevTools UI updates instantly (currentIndex,
+  // lock state) but the actual Svelte bridge call is delayed by
+  // 30ms. This prevents thrashing the Spring/Tween physics engine
+  // with multiple conflicting targets in rapid succession — only
+  // the final destination is sent.
+  let scrubDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const SCRUB_DEBOUNCE = 30;
 
   function _resetSilenceTimer(): void {
     if (_restoreSilenceTimer) clearTimeout(_restoreSilenceTimer);
@@ -215,79 +225,66 @@ export function createTimeTravelStore(
 
   function restore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
-    // Activate the hybrid restore lock. Every incoming state:change
-    // while locked resets a 50ms silence timer. The lock lifts after
-    // 50ms of quiet, or at 2s hard ceiling — whichever comes first.
+
+    // ── Instant UI updates (applied every call, no debounce) ──────
     isRestoring = true;
-    _resetSilenceTimer();
-    _restoreCeilingTimer = setTimeout(() => {
-      _unlock();
-    }, HARD_CEILING);
-    // Drain any pending capture timers so they can't race us.
-    if (captureTimeout) { clearTimeout(captureTimeout); captureTimeout = null; }
-    if (captureMaxTimer) { clearTimeout(captureMaxTimer); captureMaxTimer = null; }
-    // True time travel: if truncating, discard all future snapshots.
-    // When a user clicks a snapshot dot the future is thrown away.
     if (truncate) snapshots = snapshots.slice(0, index + 1);
     currentIndex = index;
     isTimeTravelMode = true;
-    const snapshot = snapshots[index];
-    if (setComponents) {
-      // Merge snapshot state into current components rather than replacing.
-      // This preserves components that were discovered after the snapshot was
-      // taken (e.g. child components mounted after the first mount capture).
-      const current = getComponents();
-      const merged = current.map(c => {
-        const sc = snapshot.components.find(s => s.id === c.id);
-        return sc ? { ...c, state: deepClone(sc.state) } : c;
-      });
-      // Add any snapshot-only components that are no longer in current
-      // (e.g. components that were unmounted since the snapshot was taken)
-      for (const sc of snapshot.components) {
-        if (!merged.find(m => m.id === sc.id)) {
-          merged.push(deepClone(sc));
-        }
-      }
-      setComponents(merged);
-    }
-    if (setTimeline) setTimeline(deepClone(snapshot.timeline));
+    // Drain any pending capture timers so they can't race us.
+    if (captureTimeout) { clearTimeout(captureTimeout); captureTimeout = null; }
+    if (captureMaxTimer) { clearTimeout(captureMaxTimer); captureMaxTimer = null; }
+    // Reset the silence window and hard ceiling
+    _resetSilenceTimer();
+    _restoreCeilingTimer = setTimeout(() => { _unlock(); }, HARD_CEILING);
 
     // Lock the page to prevent network requests during time travel
     const parentApi = getParentApi();
+    const snapshot = snapshots[index];
     if (parentApi) {
       parentApi.isTimeTraveling = true;
-      // Set Kit state snapshot for the $app/state Proxy to serve
-      if (snapshot.kitState) {
-        parentApi._kitSnapshot = snapshot.kitState;
-      }
+      if (snapshot.kitState) parentApi._kitSnapshot = snapshot.kitState;
     }
-
     // Monkey-patch fetch to suppress network requests during restore
     if (typeof window !== 'undefined' && !_origFetch) {
       _origFetch = window.fetch.bind(window);
       window.fetch = async (...args) => {
         const api = getParentApi();
-        if (api?.isTimeTraveling) {
-          return new Promise(() => {}); // hang indefinitely
-        }
+        if (api?.isTimeTraveling) return new Promise(() => {});
         return _origFetch!(...args);
       };
     }
-
-    pushStateToApp(snapshot.components);
-
-    // Release fetch-level locks once the hard ceiling ensures all
-    // reactive echoes have settled. The capture lock (isRestoring)
-    // is managed independently by the silence + ceiling timers above.
+    // Release fetch-level locks after hard ceiling
     setTimeout(() => {
       if (parentApi) parentApi.isTimeTraveling = false;
-      if (_origFetch) {
-        window.fetch = _origFetch;
-        _origFetch = null;
-      }
+      if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
     }, HARD_CEILING);
 
-    onRestore?.();
+    // ── Scrub debounced bridge call ──────────────────────────────
+    // Updating Svelte's $state and $effect machinery (pushStateToApp)
+    // on every click during rapid scrubbing thrashes the Spring/Tween
+    // physics engine with conflicting targets. Debounce by 30ms so
+    // only the final destination is sent to the app. The DevTools UI
+    // already shows the correct snapshot via currentIndex above.
+    if (scrubDebounceTimer) clearTimeout(scrubDebounceTimer);
+    scrubDebounceTimer = setTimeout(() => {
+      scrubDebounceTimer = null;
+      const snap = snapshots[index];
+      if (setComponents) {
+        const current = getComponents();
+        const merged = current.map(c => {
+          const sc = snap.components.find(s => s.id === c.id);
+          return sc ? { ...c, state: deepClone(sc.state) } : c;
+        });
+        for (const sc of snap.components) {
+          if (!merged.find(m => m.id === sc.id)) merged.push(deepClone(sc));
+        }
+        setComponents(merged);
+      }
+      if (setTimeline) setTimeline(deepClone(snap.timeline));
+      pushStateToApp(snap.components);
+      onRestore?.();
+    }, SCRUB_DEBOUNCE);
   }
 
   function goToSnapshot(id: string): void {
