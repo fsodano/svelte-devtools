@@ -75,6 +75,17 @@
   function fmtTime(ts: number): string {
     return new Date(ts).toLocaleTimeString();
   }
+
+  function fmtISOTimestamp(ts: number): string {
+    const d = new Date(ts);
+    const Y = d.getFullYear();
+    const M = String(d.getMonth() + 1).padStart(2, '0');
+    const D = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `${Y}-${M}-${D} ${h}:${m}:${s}`;
+  }
 </script>
 
 <div class="server-view">
@@ -104,7 +115,11 @@
             <span class="method" class:error={!!evt.data.error}>
               {evt.data.method ?? '???'}
             </span>
+            <span class="status" class:error={(evt.data.statusCode ?? 0) >= 400}>
+              {evt.data.statusCode ?? '—'}
+            </span>
             <span class="url" title={evt.data.url}>{evt.data.url ?? '???'}</span>
+            <span class="time">{fmtISOTimestamp(evt.timestamp)}</span>
             {#if evt.data.error}
               <span class="badge error">ERROR</span>
             {:else}
@@ -287,11 +302,11 @@
 
   .item {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto auto 1fr auto auto;
     gap: var(--space-2);
     align-items: center;
     width: 100%;
-    padding: 8px var(--space-3);
+    padding: 6px var(--space-3);
     border: none;
     border-bottom: 1px solid var(--border-default);
     background: transparent;
