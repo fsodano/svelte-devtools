@@ -285,6 +285,7 @@ export interface StateDeclaration {
   key: string;
   injectPos: number;
   isClassInstance: boolean;
+  callee?: string;
 }
 
 // ============================================================================

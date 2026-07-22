@@ -617,9 +617,12 @@ function parseJavaScript(code: string): t.File | null {
 
 function createInjectCode(d: StateDeclaration, componentId: string): string {
     if (d.isClassInstance) {
-        return `;{$effect(()=>{const s=${d.key};if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleState){window.__SVELTE_DEVTOOLS_RUNTIME__.handleState('${componentId}','${d.key}','update',{current:s?.current,target:s?.target,stiffness:s?.stiffness,damping:s?.damping})}})}`;
+        return `;if(typeof window!=='undefined'){var _q=window.__SVELTE_DEVTOOLS_QUEUE__=window.__SVELTE_DEVTOOLS_QUEUE__||[];var _fn=function(r){r._registerState('${componentId}','${d.key}',function(v){var s=${d.key};if(s&&v&&typeof v==='object'){var _val=v.current!==void 0?v.current:(v.target!==void 0?v.target:v);if(typeof s.set==='function'){s.set(_val,{hard:true})}else{if(v.target!==void 0)s.target=v.target;if(v.current!==void 0)s.current=v.current}}})};if(window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__._registerState){_fn(window.__SVELTE_DEVTOOLS_RUNTIME__)}else{_q.push(_fn)}};{$effect(()=>{const s=${d.key};if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleState){window.__SVELTE_DEVTOOLS_RUNTIME__.handleState('${componentId}','${d.key}','update',{current:s?.current,target:s?.target,stiffness:s?.stiffness,damping:s?.damping})}})}`;
     }
-    const setterReg = `;if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__._registerState){window.__SVELTE_DEVTOOLS_RUNTIME__._registerState('${componentId}','${d.key}',(v)=>{${d.key}=v})}`;
+    // Skip setter for $derived — assigning to a const throws in Svelte 5 SSR.
+    const setterReg = d.callee !== '$derived'
+        ? `;if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__._registerState){window.__SVELTE_DEVTOOLS_RUNTIME__._registerState('${componentId}','${d.key}',(v)=>{${d.key}=v})}`
+        : '';
     return `${setterReg};$inspect(${d.key}).with((t,...v)=>{if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleState){window.__SVELTE_DEVTOOLS_RUNTIME__.handleState('${componentId}','${d.key}',t,v[0])}})`;
 }
 
@@ -677,7 +680,7 @@ function extractRuneDeclarations(decl: t.VariableDeclarator, offset: number, res
     if (pos == null) return;
 
     if (t.isIdentifier(decl.id)) {
-        result.push({ key: decl.id.name, injectPos: offset + pos, isClassInstance: false });
+        result.push({ key: decl.id.name, injectPos: offset + pos, isClassInstance: false, callee });
         return;
     }
 
@@ -686,7 +689,7 @@ function extractRuneDeclarations(decl: t.VariableDeclarator, offset: number, res
             if (t.isObjectProperty(prop)) {
                 if (t.isIdentifier(prop.key)) {
                     const actualName = t.isIdentifier(prop.value) ? prop.value.name : prop.key.name;
-                    result.push({ key: actualName, injectPos: offset + pos, isClassInstance: false });
+                    result.push({ key: actualName, injectPos: offset + pos, isClassInstance: false, callee });
                     if (callee === '$props' && propKeys) {
                         propKeys.push(actualName);
                     }

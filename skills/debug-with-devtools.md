@@ -398,8 +398,11 @@ All endpoints return JSON with `Content-Type: application/json` and CORS headers
 | `GET` | `/__svelte-devtools/api/` | Plugin status, available endpoints |
 | `GET` | `/__svelte-devtools/api/components` | All registered components and their state |
 | `GET` | `/__svelte-devtools/api/timeline` | Timeline of events (mounts, state changes, effects) |
-| `GET` | `/__svelte-devtools/api/server-events` | Server request traces |
+| `GET` | `/__svelte-devtools/api/server-events` | Server request traces with bodies |
 | `GET` | `/__svelte-devtools/api/migration` | Svelte 4→5 migration scores |
+| `GET` | `/__svelte-devtools/api/snapshots` | Snapshot branch tree (parentId, branchId, timestamps) |
+| `POST` | `/__svelte-devtools/api/set-state` | Edit component state (`{componentId, key, value}`) |
+| `GET` | `/__svelte-devtools/api/source?file=<path>` | Source code file lookup |
 | `POST` | `/__svelte-devtools/api/sync` | (internal) Client syncs runtime state here |
 
 ### Example Usage
@@ -409,16 +412,27 @@ All endpoints return JSON with `Content-Type: application/json` and CORS headers
 curl http://localhost:5173/__svelte-devtools/api/
 
 # List all components
-curl http://localhost:5173/__svelte-devtools/api/components
+curl http://localhost:5173/__svelte-devtools/api/components | jq '.count, .components[].name'
 
 # Get timeline events
-curl http://localhost:5173/__svelte-devtools/api/timeline
+curl http://localhost:5173/__svelte-devtools/api/timeline | jq '.count'
 
 # Get server event traces
-curl http://localhost:5173/__svelte-devtools/api/server-events
+curl http://localhost:5173/__svelte-devtools/api/server-events | jq '.events | length'
 
 # Get migration scores (Svelte 4→5)
 curl http://localhost:5173/__svelte-devtools/api/migration
+
+# Get snapshot branch tree
+curl http://localhost:5173/__svelte-devtools/api/snapshots | jq '.snapshots | length'
+
+# Edit component state
+curl -X POST http://localhost:5173/__svelte-devtools/api/set-state \
+  -H 'Content-Type: application/json' \
+  -d '{"componentId": "svt-xxx", "key": "count", "value": 99}'
+
+# Look up a source file
+curl "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
 ```
 
 ### State Editing
@@ -432,7 +446,7 @@ curl -X POST http://localhost:5173/__svelte-devtools/api/set-state \
   -d '{"componentId": "svt-xxx", "key": "count", "value": 42}'
 ```
 
-This updates the cached component state on the server. The next time the client syncs, it will use this value.
+This updates the cached component state on the server. The next time the client syncs, the DevTools timeline records the change and the new value is displayed.
 
 ### Snapshot Visualization
 
@@ -441,7 +455,14 @@ This updates the cached component state on the server. The next time the client 
 curl http://localhost:5173/__svelte-devtools/api/snapshots
 ```
 
-Returns the list of captured snapshots with their branch IDs, parent IDs, and timestamps — enabling agents to reconstruct the branching timeline.
+Returns the list of captured snapshots with their branch IDs, parent IDs, and timestamps — enabling agents to reconstruct the branching timeline. Each snapshot can have a `parentId` (for linear navigation) and `branchId` (for fork detection), enabling git-style branch topology visualization.
+
+### Source File Lookup
+
+```bash
+# Get source code of a file
+curl "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
+```
 
 ### Response Format
 

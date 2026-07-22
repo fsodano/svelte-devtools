@@ -1,6 +1,14 @@
 import type { ComponentNode, TimelineEntry } from '@svelte-devtools/types';
 import { LIMITS } from '@svelte-devtools/types';
 
+export interface KitState {
+  data?: unknown;
+  form?: unknown;
+  url?: { href: string; origin: string; pathname: string; search: string; hash: string } | null;
+  params?: Record<string, string>;
+  route?: { id: string | null };
+}
+
 export interface StateSnapshot {
   id: string;
   parentId: string | null;
@@ -9,6 +17,7 @@ export interface StateSnapshot {
   label: string;
   components: ComponentNode[];
   timeline: TimelineEntry[];
+  kitState?: KitState | null;
 }
 
 export interface BranchInfo {
@@ -20,13 +29,15 @@ export interface BranchInfo {
 
 export interface TimeTravelStore {
   snapshots: StateSnapshot[];
-  currentIndex: number;
-  currentBranchId: string;
   branches: BranchInfo[];
+  currentIndex: number;
   isTimeTravelMode: boolean;
   maxSnapshots: number;
-  capture: () => void;
-  restore: (index: number) => void;
+  capture: (label?: string) => void;
+  /** Direct capture call — no debounce, no timers. Gate via isTimeTravelMode
+   *  and activeMotions in the DevTools store before calling this. */
+  doCapture: (label?: string) => void;
+  restore: (index: number, truncate?: boolean) => void;
   goToSnapshot: (id: string) => void;
   setStateEdit: (componentId: string, key: string, value: unknown) => void;
   clear: () => void;
@@ -38,31 +49,11 @@ export interface TimeTravelStore {
   setTimeline?: (t: TimelineEntry[]) => void;
 }
 
-const BRANCH_COLORS = ['#ff3e00', '#40b3ff', '#6a9955', '#dcdcaa', '#ce9178', '#c586c0', '#4ec9b0'];
-let branchColorIndex = 0;
-
-function nextBranchColor(): string {
-  return BRANCH_COLORS[branchColorIndex++ % BRANCH_COLORS.length];
-}
-
-function generateBranchId(): string {
-  return `branch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-}
-
 let snapshots = $state<StateSnapshot[]>([]);
 let currentIndex = $state(-1);
-let currentBranchId = $state('main');
-let branches = $state<BranchInfo[]>([
-  { id: 'main', name: 'main', snapshotIds: [], color: BRANCH_COLORS[0] }
-]);
 let isTimeTravelMode = $state(false);
 let maxSnapshots = $state(LIMITS.MAX_STATE_SNAPSHOTS);
 let lastCapturedState: { components: ComponentNode[]; timeline: TimelineEntry[] } | null = null;
-
-let captureTimeout: ReturnType<typeof setTimeout> | null = null;
-let captureMaxTimer: ReturnType<typeof setTimeout> | null = null;
-const CAPTURE_DEBOUNCE = 100;
-const CAPTURE_MAX_WAIT = 1000;
 
 function generateSnapshotId(): string {
   return `snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -76,8 +67,19 @@ export function createTimeTravelStore(
   getComponents: () => ComponentNode[],
   getTimeline: () => TimelineEntry[],
   setComponents?: (c: ComponentNode[]) => void,
-  setTimeline?: (t: TimelineEntry[]) => void
+  setTimeline?: (t: TimelineEntry[]) => void,
+  onRestore?: () => void
 ): TimeTravelStore {
+  function getKitStateFromParent(): KitState | null {
+    try {
+      const parentApi = (typeof window !== 'undefined'
+        ? ((window.parent || window) as unknown as { __SVELTE_DEVTOOLS__?: Record<string, unknown> }).__SVELTE_DEVTOOLS__
+        : undefined) as Record<string, unknown> | undefined;
+      if (!parentApi || !parentApi._readKitState) return null;
+      return (parentApi._readKitState as () => KitState | null)();
+    } catch { return null; }
+  }
+
   function doCapture(label?: string): void {
     const comps = getComponents();
     const tl = getTimeline();
@@ -88,30 +90,27 @@ export function createTimeTravelStore(
       if (!componentsChanged && !timelineChanged) return;
     }
 
-    let branchId = currentBranchId;
-    let parentId: string | null = snapshots.length > 0 && currentIndex >= 0
-      ? snapshots[currentIndex].id
-      : null;
-
+    // If we're in the past, truncate future snapshots (linear timeline)
     if (currentIndex < snapshots.length - 1) {
-      branchId = generateBranchId();
-      parentId = snapshots[currentIndex]?.id || null;
-      branches = [...branches, {
-        id: branchId,
-        name: `fork-${branches.length}`,
-        snapshotIds: [],
-        color: nextBranchColor()
-      }];
+      const snapAtIdx = snapshots[currentIndex];
+      if (snapAtIdx && JSON.stringify(comps) === JSON.stringify(snapAtIdx.components)) {
+        lastCapturedState = { components: comps, timeline: tl };
+        return;
+      }
+      snapshots = snapshots.slice(0, currentIndex + 1);
     }
 
     const snapshot: StateSnapshot = {
       id: generateSnapshotId(),
-      parentId,
-      branchId,
+      parentId: snapshots.length > 0 && currentIndex >= 0
+        ? snapshots[currentIndex].id
+        : null,
+      branchId: 'main',
       timestamp: Date.now(),
       label: label || '',
       components: deepClone(comps),
       timeline: deepClone(tl),
+      kitState: getKitStateFromParent(),
     };
 
     snapshots = [...snapshots, snapshot];
@@ -119,70 +118,111 @@ export function createTimeTravelStore(
       snapshots = snapshots.slice(snapshots.length - maxSnapshots);
     }
 
-    const branch = branches.find(b => b.id === branchId);
-    if (branch) {
-      branch.snapshotIds = [...(branch.snapshotIds || []), snapshot.id];
-    }
-
     currentIndex = snapshots.length - 1;
-    currentBranchId = branchId;
-    isTimeTravelMode = true;
     lastCapturedState = { components: comps, timeline: tl };
   }
 
+  // capture() is a pass-through to doCapture — the devtools-store gates
+  // via isTimeTravelMode + activeMotions before calling either.
   function capture(label?: string): void {
-    // Leading-edge: capture immediately on first call
-    if (!captureTimeout) {
-      doCapture(label);
-    }
-
-    // Trailing-edge debounce: if more changes come within 100ms,
-    // wait for quiescence before capturing again
-    if (captureTimeout) clearTimeout(captureTimeout);
-    captureTimeout = setTimeout(() => {
-      captureTimeout = null;
-      captureMaxTimer = null;
-      doCapture(label);
-    }, CAPTURE_DEBOUNCE);
-
-    // Max wait: guarantee a capture at least every 1s even under
-    // continuous events (e.g. bridge polling every 100ms)
-    if (!captureMaxTimer) {
-      captureMaxTimer = setTimeout(() => {
-        if (captureTimeout) {
-          clearTimeout(captureTimeout);
-          captureTimeout = null;
-        }
-        captureMaxTimer = null;
-        doCapture(label);
-      }, CAPTURE_MAX_WAIT);
-    }
+    doCapture(label);
   }
 
   function pushStateToApp(components: ComponentNode[]): void {
-    // Push restored state back to the running application via the runtime's
-    // setComponentState API. Each snapshot component has state key-value pairs
-    // that are applied to the actual $state variables via injected setters.
     const parentApi = typeof window !== 'undefined'
       ? ((window.parent || window) as unknown as { __SVELTE_DEVTOOLS__?: Record<string, unknown> }).__SVELTE_DEVTOOLS__
       : undefined;
     if (!parentApi?.setComponentState) return;
+    if (parentApi.startInspectBatch) parentApi.startInspectBatch();
+    const isMapOrSet = (v: unknown) => {
+      const tag = Object.prototype.toString.call(v);
+      return tag === '[object Map]' || tag === '[object Set]';
+    };
+    const liveComps = typeof parentApi.getAllComponents === 'function'
+      ? (parentApi.getAllComponents as () => Array<{ id: string; state: Map<string, unknown> }>)()
+      : [];
     for (const comp of components) {
+      const liveComp = liveComps.find(c => c.id === comp.id);
       for (const [key, value] of Object.entries(comp.state || {})) {
+        const liveVal = liveComp?.state?.get(key);
+        if (liveVal !== undefined && isMapOrSet(liveVal)) continue;
         (parentApi.setComponentState as (id: string, key: string, value: unknown) => void)(comp.id, key, value);
       }
     }
+    if (parentApi.endInspectBatch) parentApi.endInspectBatch();
+    parentApi.flushAllEffects?.();
   }
 
-  function restore(index: number): void {
+  function getParentApi(): Record<string, unknown> | undefined {
+    return typeof window !== 'undefined'
+      ? ((window.parent || window) as unknown as { __SVELTE_DEVTOOLS__?: Record<string, unknown> }).__SVELTE_DEVTOOLS__
+      : undefined;
+  }
+
+  let _origFetch: typeof window.fetch | null = null;
+  let pendingRestoreIndex: number | null = null;
+
+  function doRestore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
-    currentIndex = index;
-    currentBranchId = snapshots[index].branchId;
     isTimeTravelMode = true;
+    if (truncate) snapshots = snapshots.slice(0, index + 1);
+    currentIndex = index;
+
+    const parentApi = getParentApi();
     const snapshot = snapshots[index];
-    if (setComponents) setComponents(deepClone(snapshot.components));
+    if (parentApi) {
+      parentApi.isTimeTraveling = true;
+      if (snapshot.kitState) parentApi._kitSnapshot = snapshot.kitState;
+    }
+    if (typeof window !== 'undefined' && !_origFetch) {
+      _origFetch = window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const api = getParentApi();
+        if (api?.isTimeTraveling) return new Promise(() => {});
+        return _origFetch!(...args);
+      };
+    }
+    setTimeout(() => {
+      if (parentApi) parentApi.isTimeTraveling = false;
+      if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
+    }, 2000);
+
+    if (setComponents) {
+      const current = getComponents();
+      const merged = current.map(c => {
+        const sc = snapshot.components.find(s => s.id === c.id);
+        return sc ? { ...c, state: deepClone(sc.state) } : c;
+      });
+      for (const sc of snapshot.components) {
+        if (!merged.find(m => m.id === sc.id)) merged.push(deepClone(sc));
+      }
+      setComponents(merged);
+    }
     if (setTimeline) setTimeline(deepClone(snapshot.timeline));
     pushStateToApp(snapshot.components);
+    onRestore?.();
+
+    // Unlock via macrotask — gives Svelte 5 one event-loop tick to
+    // flush all {hard: true} mutations and $inspect echoes before
+    // the DevTools starts listening again. If another restore was
+    // requested while in-flight, service it immediately after unlock.
+    setTimeout(() => {
+      isTimeTravelMode = false;
+      const next = pendingRestoreIndex;
+      pendingRestoreIndex = null;
+      if (next !== null) doRestore(next, false);
+    }, 0);
+  }
+
+  function restore(index: number, truncate = false): void {
+    if (index < 0 || index >= snapshots.length) return;
+    if (isTimeTravelMode) {
+      // Defer — a restore is already in-flight; avoid racing its
+      // pushStateToApp + setTimeout(0) unlock cycle.
+      pendingRestoreIndex = index;
+      return;
+    }
+    doRestore(index, truncate);
   }
 
   function goToSnapshot(id: string): void {
@@ -202,11 +242,8 @@ export function createTimeTravelStore(
   function clear(): void {
     snapshots = [];
     currentIndex = -1;
-    currentBranchId = 'main';
     isTimeTravelMode = false;
     lastCapturedState = null;
-    branches = [{ id: 'main', name: 'main', snapshotIds: [], color: BRANCH_COLORS[0] }];
-    branchColorIndex = 0;
   }
 
   function undo(): void {
@@ -219,12 +256,27 @@ export function createTimeTravelStore(
 
   return {
     get snapshots() { return snapshots; },
+    get branches(): BranchInfo[] {
+      const branchMap = new Map<string, string[]>();
+      for (const s of snapshots) {
+        const bId = s.branchId || 'main';
+        if (!branchMap.has(bId)) branchMap.set(bId, []);
+        branchMap.get(bId)!.push(s.id);
+      }
+      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+      let colorIdx = 0;
+      return Array.from(branchMap.entries()).map(([id, snapshotIds]) => ({
+        id,
+        name: id === 'main' ? 'Main' : id,
+        snapshotIds,
+        color: colors[(colorIdx++) % colors.length],
+      }));
+    },
     get currentIndex() { return currentIndex; },
-    get currentBranchId() { return currentBranchId; },
-    get branches() { return branches; },
     get isTimeTravelMode() { return isTimeTravelMode; },
     get maxSnapshots() { return maxSnapshots; },
     capture,
+    doCapture,
     restore,
     goToSnapshot,
     setStateEdit,
