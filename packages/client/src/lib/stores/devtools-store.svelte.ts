@@ -52,7 +52,7 @@ function createDevtoolsStore() {
   let hasInitialMountCaptured = false;
   let stateCaptureTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function scheduleStateCapture(label = 'state'): void {
+  function scheduleStateCapture(label = 'state', delayMs = 0): void {
     if (stateCaptureTimer) clearTimeout(stateCaptureTimer);
     stateCaptureTimer = setTimeout(() => {
       stateCaptureTimer = null;
@@ -60,7 +60,7 @@ function createDevtoolsStore() {
         timeTravel.doCapture(label);
         ttTick++;
       }
-    }, 50);
+    }, delayMs);
   }
 
   async function fetchServerEvents(): Promise<void> {
@@ -267,7 +267,7 @@ function createDevtoolsStore() {
     });
 
     if (isRecording) {
-      scheduleStateCapture('state');
+      scheduleStateCapture('state', isMotion ? 50 : 0);
     }
   }
 
