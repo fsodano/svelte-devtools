@@ -31,6 +31,13 @@ function createDevtoolsStore() {
   let isConnected = $state(false);
   let searchQuery = $state('');
   let searchResults = $state<ComponentNode[]>([]);
+  // Semantic motion tracking. Active keys block all timeline recording
+  // until all animations settle. A Spring/Tween is "settled" when the
+  // current value from the $effect stops changing between frames — since
+  // Spring easing is asymptotic, cur === tgt may never fire via $effect.
+  const activeMotions = new Set<string>();
+  const _lastCur = new Map<string, number>();
+  const SETTLE_TOLERANCE = 0.0001;
   const bridge = createWindowBridge();
   const timeTravel = createTimeTravelStore(
     () => components,
@@ -39,8 +46,22 @@ function createDevtoolsStore() {
     (t) => { timeline = t; }
   );
   let isRecording = $state(true);
+  let ttTick = $state(0);
   let serverEvents = $state<unknown[]>([]);
   let serverEventsPollTimer: ReturnType<typeof setInterval> | null = null;
+  let hasInitialMountCaptured = false;
+  let stateCaptureTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function scheduleStateCapture(label = 'state'): void {
+    if (stateCaptureTimer) clearTimeout(stateCaptureTimer);
+    stateCaptureTimer = setTimeout(() => {
+      stateCaptureTimer = null;
+      if (isRecording && !timeTravel.isTimeTravelMode && activeMotions.size === 0) {
+        timeTravel.doCapture(label);
+        ttTick++;
+      }
+    }, 50);
+  }
 
   async function fetchServerEvents(): Promise<void> {
     try {
@@ -142,7 +163,14 @@ function createDevtoolsStore() {
       data: node
     });
 
-    if (isRecording) timeTravel.capture('mount');
+    if (isRecording && !hasInitialMountCaptured) {
+      hasInitialMountCaptured = true;
+      queueMicrotask(() => {
+        if (isRecording && !timeTravel.isTimeTravelMode) {
+          timeTravel.doCapture('mount');
+        }
+      });
+    }
   }
 
   function ensureComponentNode(payload: unknown): ComponentNode {
@@ -181,9 +209,9 @@ function createDevtoolsStore() {
     }
 
     const value = data.value instanceof Map ? Object.fromEntries(data.value) : data.value;
-    const prevValue = existingComponent.state?.[data.key];
     const isProp = (data as Record<string, unknown>).type === 'props';
 
+    // 1. ALWAYS update the live UI — users see numbers spinning mid-animation
     components = components.map(c => {
       if (c.id === data.componentId) {
         return {
@@ -195,14 +223,52 @@ function createDevtoolsStore() {
       return c;
     });
 
+    // 2. TIME TRAVEL GATE: during restore, ignore everything.
+    // The restore unlocks via setTimeout(0) after pushStateToApp completes,
+    // giving Svelte one event-loop tick to flush {hard: true} mutations.
+    if (timeTravel.isTimeTravelMode) return;
+
+    // 3. SEMANTIC MOTION GATE
+    // Spring/Tween frames have {current, target}. While cur !== tgt the
+    // physics engine is in flight — mark the key as active and drop the
+    // frame. When cur === tgt (within JS precision) the motion has settled.
+    // We use a Map to track if current STABILIZED (same cur as last frame),
+    // since Spring easing is asymptotic and === might never trigger.
+    const key = `${data.componentId}::${data.key}`;
+    const isMotion = value && typeof value === 'object'
+      && 'current' in (value as Record<string, unknown>)
+      && 'target' in (value as Record<string, unknown>);
+    if (isMotion) {
+      const cur = (value as Record<string, unknown>).current as number;
+      const tgt = (value as Record<string, unknown>).target as number;
+      const prev = _lastCur.get(key);
+      const settled = cur === tgt || Math.abs(cur - tgt) < SETTLE_TOLERANCE;
+      if (!settled) {
+        _lastCur.set(key, cur);
+        activeMotions.add(key);
+        return; // mid-animation: no timeline entry, no capture
+      }
+      // Settled: remove from active set
+      activeMotions.delete(key);
+      // Dedup: same cur value (within tolerance) as last frame — already recorded
+      if (prev !== undefined && Math.abs(cur - prev) < SETTLE_TOLERANCE) return;
+      _lastCur.set(key, cur);
+    }
+
+    // 4. BARRAGE/SYNC GATE: if any animation is still active, wait.
+    // Multiple Springs settling at different rates all gate on this.
+    if (activeMotions.size > 0) return;
+
     addToTimeline({
       id: generateId(),
       type: 'state:change',
       timestamp: Date.now(),
-      data: { ...data, prevValue, componentName: existingComponent.name }
+      data: { ...data, prevValue: existingComponent.state?.[data.key], componentName: existingComponent.name }
     });
 
-    if (isRecording) timeTravel.capture('state');
+    if (isRecording) {
+      scheduleStateCapture('state');
+    }
   }
 
   function handleTraceTrigger(payload: unknown): void {
@@ -231,6 +297,10 @@ function createDevtoolsStore() {
   }
 
   function clearTimeline(): void {
+    if (stateCaptureTimer) {
+      clearTimeout(stateCaptureTimer);
+      stateCaptureTimer = null;
+    }
     timeline = [];
   }
 

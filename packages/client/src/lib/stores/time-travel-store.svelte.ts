@@ -20,12 +20,23 @@ export interface StateSnapshot {
   kitState?: KitState | null;
 }
 
+export interface BranchInfo {
+  id: string;
+  name: string;
+  snapshotIds: string[];
+  color: string;
+}
+
 export interface TimeTravelStore {
   snapshots: StateSnapshot[];
+  branches: BranchInfo[];
   currentIndex: number;
   isTimeTravelMode: boolean;
   maxSnapshots: number;
-  capture: () => void;
+  capture: (label?: string) => void;
+  /** Direct capture call — no debounce, no timers. Gate via isTimeTravelMode
+   *  and activeMotions in the DevTools store before calling this. */
+  doCapture: (label?: string) => void;
   restore: (index: number, truncate?: boolean) => void;
   goToSnapshot: (id: string) => void;
   setStateEdit: (componentId: string, key: string, value: unknown) => void;
@@ -44,11 +55,6 @@ let isTimeTravelMode = $state(false);
 let maxSnapshots = $state(LIMITS.MAX_STATE_SNAPSHOTS);
 let lastCapturedState: { components: ComponentNode[]; timeline: TimelineEntry[] } | null = null;
 
-let captureTimeout: ReturnType<typeof setTimeout> | null = null;
-let captureMaxTimer: ReturnType<typeof setTimeout> | null = null;
-const CAPTURE_DEBOUNCE = 100;
-const CAPTURE_MAX_WAIT = 1000;
-
 function generateSnapshotId(): string {
   return `snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -64,40 +70,6 @@ export function createTimeTravelStore(
   setTimeline?: (t: TimelineEntry[]) => void,
   onRestore?: () => void
 ): TimeTravelStore {
-  // ── Hybrid restore lock ─────────────────────────────────────────
-  // Sliding silence window + hard ceiling. After a restore, every
-  // incoming state:change event resets a 150ms timer. The lock lifts
-  // when Svelte 5's $effect re-runs go quiet for 150ms. A 2s hard
-  // ceiling guarantees release even under continuous signal spam.
-  // 150ms ≈ 9 frames at 60fps, giving a safety net for frame drops
-  // during rapid scrubbing without feeling sluggish.
-  let isRestoring = false;
-  let _restoreSilenceTimer: ReturnType<typeof setTimeout> | null = null;
-  let _restoreCeilingTimer: ReturnType<typeof setTimeout> | null = null;
-  const SILENCE_THRESHOLD = 150;
-  const HARD_CEILING = 2000;
-  // Scrub debounce: when the user rapidly clicks undo/redo or
-  // snapshots, the DevTools UI updates instantly (currentIndex,
-  // lock state) but the actual Svelte bridge call is delayed by
-  // 30ms. This prevents thrashing the Spring/Tween physics engine
-  // with multiple conflicting targets in rapid succession — only
-  // the final destination is sent.
-  let scrubDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  const SCRUB_DEBOUNCE = 30;
-
-  function _resetSilenceTimer(): void {
-    if (_restoreSilenceTimer) clearTimeout(_restoreSilenceTimer);
-    _restoreSilenceTimer = setTimeout(() => {
-      _unlock();
-    }, SILENCE_THRESHOLD);
-  }
-
-  function _unlock(): void {
-    isRestoring = false;
-    if (_restoreSilenceTimer) { clearTimeout(_restoreSilenceTimer); _restoreSilenceTimer = null; }
-    if (_restoreCeilingTimer) { clearTimeout(_restoreCeilingTimer); _restoreCeilingTimer = null; }
-  }
-
   function getKitStateFromParent(): KitState | null {
     try {
       const parentApi = (typeof window !== 'undefined'
@@ -120,8 +92,6 @@ export function createTimeTravelStore(
 
     // If we're in the past, truncate future snapshots (linear timeline)
     if (currentIndex < snapshots.length - 1) {
-      // Check if this is a restore echo — pushStateToApp echoed the snapshot's
-      // state back through $inspect. The components match, so skip entirely.
       const snapAtIdx = snapshots[currentIndex];
       if (snapAtIdx && JSON.stringify(comps) === JSON.stringify(snapAtIdx.components)) {
         lastCapturedState = { components: comps, timeline: tl };
@@ -149,41 +119,13 @@ export function createTimeTravelStore(
     }
 
     currentIndex = snapshots.length - 1;
-    isTimeTravelMode = true;
     lastCapturedState = { components: comps, timeline: tl };
   }
 
+  // capture() is a pass-through to doCapture — the devtools-store gates
+  // via isTimeTravelMode + activeMotions before calling either.
   function capture(label?: string): void {
-    // While the restore lock is active, every incoming state:change
-    // resets the silence timer. We return early here so no debounce
-    // or capture is started — the snapshot only records once the
-    // engine goes quiet for SILENCE_THRESHOLD ms.
-    if (isRestoring) {
-      _resetSilenceTimer();
-      return;
-    }
-
-    // Trailing-edge only: wait for quiescence so intermediate animation
-    // frames (Spring/Tween $effect re-runs) settle before capturing.
-    if (captureTimeout) clearTimeout(captureTimeout);
-    captureTimeout = setTimeout(() => {
-      captureTimeout = null;
-      captureMaxTimer = null;
-      doCapture(label);
-    }, CAPTURE_DEBOUNCE);
-
-    // Max wait: guarantee a capture at least every 1s even under
-    // continuous events (e.g. bridge polling every 100ms).
-    if (!captureMaxTimer) {
-      captureMaxTimer = setTimeout(() => {
-        if (captureTimeout) {
-          clearTimeout(captureTimeout);
-          captureTimeout = null;
-        }
-        captureMaxTimer = null;
-        doCapture(label);
-      }, CAPTURE_MAX_WAIT);
-    }
+    doCapture(label);
   }
 
   function pushStateToApp(components: ComponentNode[]): void {
@@ -192,10 +134,6 @@ export function createTimeTravelStore(
       : undefined;
     if (!parentApi?.setComponentState) return;
     if (parentApi.startInspectBatch) parentApi.startInspectBatch();
-    // Snapshot values are plain JSON (postMessage serialization), but live
-    // Svelte signals hold Proxied Maps/Sets. Restoring a plain {} to a Map
-    // signal crashes Svelte's proxy engine — detect via toStringTag which
-    // works through Proxies (unlike instanceof).
     const isMapOrSet = (v: unknown) => {
       const tag = Object.prototype.toString.call(v);
       return tag === '[object Map]' || tag === '[object Set]';
@@ -222,30 +160,20 @@ export function createTimeTravelStore(
   }
 
   let _origFetch: typeof window.fetch | null = null;
+  let pendingRestoreIndex: number | null = null;
 
-  function restore(index: number, truncate = false): void {
+  function doRestore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
-
-    // ── Instant UI updates (applied every call, no debounce) ──────
-    isRestoring = true;
+    isTimeTravelMode = true;
     if (truncate) snapshots = snapshots.slice(0, index + 1);
     currentIndex = index;
-    isTimeTravelMode = true;
-    // Drain any pending capture timers so they can't race us.
-    if (captureTimeout) { clearTimeout(captureTimeout); captureTimeout = null; }
-    if (captureMaxTimer) { clearTimeout(captureMaxTimer); captureMaxTimer = null; }
-    // Reset the silence window and hard ceiling
-    _resetSilenceTimer();
-    _restoreCeilingTimer = setTimeout(() => { _unlock(); }, HARD_CEILING);
 
-    // Lock the page to prevent network requests during time travel
     const parentApi = getParentApi();
     const snapshot = snapshots[index];
     if (parentApi) {
       parentApi.isTimeTraveling = true;
       if (snapshot.kitState) parentApi._kitSnapshot = snapshot.kitState;
     }
-    // Monkey-patch fetch to suppress network requests during restore
     if (typeof window !== 'undefined' && !_origFetch) {
       _origFetch = window.fetch.bind(window);
       window.fetch = async (...args) => {
@@ -254,37 +182,47 @@ export function createTimeTravelStore(
         return _origFetch!(...args);
       };
     }
-    // Release fetch-level locks after hard ceiling
     setTimeout(() => {
       if (parentApi) parentApi.isTimeTraveling = false;
       if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
-    }, HARD_CEILING);
+    }, 2000);
 
-    // ── Scrub debounced bridge call ──────────────────────────────
-    // Updating Svelte's $state and $effect machinery (pushStateToApp)
-    // on every click during rapid scrubbing thrashes the Spring/Tween
-    // physics engine with conflicting targets. Debounce by 30ms so
-    // only the final destination is sent to the app. The DevTools UI
-    // already shows the correct snapshot via currentIndex above.
-    if (scrubDebounceTimer) clearTimeout(scrubDebounceTimer);
-    scrubDebounceTimer = setTimeout(() => {
-      scrubDebounceTimer = null;
-      const snap = snapshots[index];
-      if (setComponents) {
-        const current = getComponents();
-        const merged = current.map(c => {
-          const sc = snap.components.find(s => s.id === c.id);
-          return sc ? { ...c, state: deepClone(sc.state) } : c;
-        });
-        for (const sc of snap.components) {
-          if (!merged.find(m => m.id === sc.id)) merged.push(deepClone(sc));
-        }
-        setComponents(merged);
+    if (setComponents) {
+      const current = getComponents();
+      const merged = current.map(c => {
+        const sc = snapshot.components.find(s => s.id === c.id);
+        return sc ? { ...c, state: deepClone(sc.state) } : c;
+      });
+      for (const sc of snapshot.components) {
+        if (!merged.find(m => m.id === sc.id)) merged.push(deepClone(sc));
       }
-      if (setTimeline) setTimeline(deepClone(snap.timeline));
-      pushStateToApp(snap.components);
-      onRestore?.();
-    }, SCRUB_DEBOUNCE);
+      setComponents(merged);
+    }
+    if (setTimeline) setTimeline(deepClone(snapshot.timeline));
+    pushStateToApp(snapshot.components);
+    onRestore?.();
+
+    // Unlock via macrotask — gives Svelte 5 one event-loop tick to
+    // flush all {hard: true} mutations and $inspect echoes before
+    // the DevTools starts listening again. If another restore was
+    // requested while in-flight, service it immediately after unlock.
+    setTimeout(() => {
+      isTimeTravelMode = false;
+      const next = pendingRestoreIndex;
+      pendingRestoreIndex = null;
+      if (next !== null) doRestore(next, false);
+    }, 0);
+  }
+
+  function restore(index: number, truncate = false): void {
+    if (index < 0 || index >= snapshots.length) return;
+    if (isTimeTravelMode) {
+      // Defer — a restore is already in-flight; avoid racing its
+      // pushStateToApp + setTimeout(0) unlock cycle.
+      pendingRestoreIndex = index;
+      return;
+    }
+    doRestore(index, truncate);
   }
 
   function goToSnapshot(id: string): void {
@@ -318,10 +256,27 @@ export function createTimeTravelStore(
 
   return {
     get snapshots() { return snapshots; },
+    get branches(): BranchInfo[] {
+      const branchMap = new Map<string, string[]>();
+      for (const s of snapshots) {
+        const bId = s.branchId || 'main';
+        if (!branchMap.has(bId)) branchMap.set(bId, []);
+        branchMap.get(bId)!.push(s.id);
+      }
+      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+      let colorIdx = 0;
+      return Array.from(branchMap.entries()).map(([id, snapshotIds]) => ({
+        id,
+        name: id === 'main' ? 'Main' : id,
+        snapshotIds,
+        color: colors[(colorIdx++) % colors.length],
+      }));
+    },
     get currentIndex() { return currentIndex; },
     get isTimeTravelMode() { return isTimeTravelMode; },
     get maxSnapshots() { return maxSnapshots; },
     capture,
+    doCapture,
     restore,
     goToSnapshot,
     setStateEdit,
