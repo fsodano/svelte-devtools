@@ -47,6 +47,7 @@ export interface TimeTravelStore {
   redo: () => void;
   setComponents?: (c: ComponentNode[]) => void;
   setTimeline?: (t: TimelineEntry[]) => void;
+  isRestoreCooldown: () => boolean;
 }
 
 let snapshots = $state<StateSnapshot[]>([]);
@@ -161,12 +162,15 @@ export function createTimeTravelStore(
 
   let _origFetch: typeof window.fetch | null = null;
   let pendingRestoreIndex: number | null = null;
+  let restoreCooldownUntil = 0;
+  const RESTORE_COOLDOWN_MS = 600;
 
   function doRestore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
     isTimeTravelMode = true;
     if (truncate) snapshots = snapshots.slice(0, index + 1);
     currentIndex = index;
+    restoreCooldownUntil = Date.now() + RESTORE_COOLDOWN_MS;
 
     const parentApi = getParentApi();
     const snapshot = snapshots[index];
@@ -204,14 +208,20 @@ export function createTimeTravelStore(
 
     // Unlock via macrotask — gives Svelte 5 one event-loop tick to
     // flush all {hard: true} mutations and $inspect echoes before
-    // the DevTools starts listening again. If another restore was
-    // requested while in-flight, service it immediately after unlock.
+    // listening resumes. restoreCooldownUntil lasts longer (600ms)
+    // to block captures while Springs/Tweens ease after the hard set.
+    // If another restore was requested while in-flight, service it
+    // immediately after unlock.
     setTimeout(() => {
       isTimeTravelMode = false;
       const next = pendingRestoreIndex;
       pendingRestoreIndex = null;
       if (next !== null) doRestore(next, false);
     }, 0);
+  }
+
+  function isRestoreCooldown(): boolean {
+    return Date.now() < restoreCooldownUntil;
   }
 
   function restore(index: number, truncate = false): void {
@@ -287,5 +297,6 @@ export function createTimeTravelStore(
     redo,
     setComponents,
     setTimeline,
+    isRestoreCooldown,
   };
 }
