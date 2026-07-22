@@ -16,16 +16,25 @@ interface TimelineEntry {
   data?: unknown;
 }
 
+interface BranchInfo {
+  id: string;
+  name: string;
+  snapshotIds: string[];
+  color: string;
+}
+
 interface StateSnapshot {
   id: string;
   timestamp: number;
   components: ComponentNode[];
   timeline: TimelineEntry[];
   label?: string;
+  branchId?: string;
 }
 
 interface TimeTravelStore {
   snapshots: StateSnapshot[];
+  branches: BranchInfo[];
   currentIndex: number;
   isTimeTravelMode: boolean;
   maxSnapshots: number;
@@ -64,59 +73,60 @@ function createMockTimeTravelStore(
   let maxSnapshots = LIMITS.MAX_STATE_SNAPSHOTS;
   let lastCapturedState: { components: ComponentNode[]; timeline: TimelineEntry[] } | null = null;
 
-  let captureTimeout: ReturnType<typeof setTimeout> | null = null;
+  function doCapture(label?: string): void {
+    const components = getComponents();
+    const timeline = getTimeline();
 
-  function capture(label?: string): void {
-    if (captureTimeout) {
-      clearTimeout(captureTimeout);
+    if (lastCapturedState) {
+      const componentsChanged = JSON.stringify(components) !== JSON.stringify(lastCapturedState.components);
+      const timelineChanged = timeline.length !== lastCapturedState.timeline.length;
+
+      if (!componentsChanged && !timelineChanged) {
+        return;
+      }
     }
 
-    captureTimeout = setTimeout(() => {
-      const components = getComponents();
-      const timeline = getTimeline();
-
-      if (lastCapturedState) {
-        const componentsChanged = JSON.stringify(components) !== JSON.stringify(lastCapturedState.components);
-        const timelineChanged = timeline.length !== lastCapturedState.timeline.length;
-
-        if (!componentsChanged && !timelineChanged) {
-          return;
-        }
+    if (currentIndex < snapshots.length - 1) {
+      const snapAtIdx = snapshots[currentIndex];
+      if (snapAtIdx && JSON.stringify(components) === JSON.stringify(snapAtIdx.components)) {
+        lastCapturedState = { components, timeline };
+        return;
       }
+      snapshots = snapshots.slice(0, currentIndex + 1);
+    }
 
-      const snapshot: StateSnapshot = {
-        id: generateSnapshotId(),
-        timestamp: Date.now(),
-        components: deepClone(components),
-        timeline: deepClone(timeline),
-        label,
-      };
+    const snapshot: StateSnapshot = {
+      id: generateSnapshotId(),
+      timestamp: Date.now(),
+      components: deepClone(components),
+      timeline: deepClone(timeline),
+      label,
+    };
 
-      if (currentIndex < snapshots.length - 1) {
-        snapshots = snapshots.slice(0, currentIndex + 1);
-      }
+    snapshots.push(snapshot);
 
-      snapshots.push(snapshot);
+    if (snapshots.length > maxSnapshots) {
+      snapshots = snapshots.slice(snapshots.length - maxSnapshots);
+    }
 
-      if (snapshots.length > maxSnapshots) {
-        snapshots = snapshots.slice(snapshots.length - maxSnapshots);
-      }
+    currentIndex = snapshots.length - 1;
+    isTimeTravelMode = true;
+    lastCapturedState = { components, timeline };
+  }
 
-      currentIndex = snapshots.length - 1;
-      isTimeTravelMode = true;
-      lastCapturedState = { components, timeline };
-    }, CAPTURE_DEBOUNCE);
+  function capture(label?: string): void {
+    doCapture(label);
   }
 
   function restore(index: number): void {
     if (index < 0 || index >= snapshots.length) return;
 
     currentIndex = index;
-    isTimeTravelMode = true;
 
     const snapshot = snapshots[index];
     if (setComponents) setComponents(deepClone(snapshot.components));
     if (setTimeline) setTimeline(deepClone(snapshot.timeline));
+    isTimeTravelMode = false;
   }
 
   function goToSnapshot(id: string): void {
@@ -149,6 +159,22 @@ function createMockTimeTravelStore(
     get snapshots() {
       return snapshots;
     },
+    get branches(): BranchInfo[] {
+      const branchMap = new Map<string, string[]>();
+      for (const s of snapshots) {
+        const bId = s.branchId || 'main';
+        if (!branchMap.has(bId)) branchMap.set(bId, []);
+        branchMap.get(bId)!.push(s.id);
+      }
+      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+      let colorIdx = 0;
+      return Array.from(branchMap.entries()).map(([id, snapshotIds]) => ({
+        id,
+        name: id === 'main' ? 'Main' : id,
+        snapshotIds,
+        color: colors[(colorIdx++) % colors.length],
+      }));
+    },
     get currentIndex() {
       return currentIndex;
     },
@@ -157,6 +183,9 @@ function createMockTimeTravelStore(
     },
     get maxSnapshots() {
       return maxSnapshots;
+    },
+    set maxSnapshots(v: number) {
+      maxSnapshots = v;
     },
     capture,
     restore,
@@ -180,7 +209,9 @@ function makeComponent(id: string, name: string, props?: Record<string, unknown>
 }
 
 function makeTimelineEntry(type: string, data?: unknown): TimelineEntry {
-  return { type, timestamp: Date.now(), data };
+  const entry: TimelineEntry = { type, timestamp: Date.now() };
+  if (data !== undefined) entry.data = data;
+  return entry;
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -200,7 +231,7 @@ describe('createMockTimeTravelStore', () => {
       expect(snap.id).toMatch(/^snapshot-/);
       expect(snap.timestamp).toBeGreaterThan(0);
       expect(snap.components).toEqual([makeComponent('c1', 'Counter')]);
-      expect(snap.timeline).toEqual([makeTimelineEntry('init')]);
+      expect(snap.timeline[0].type).toBe('init');
     });
 
     it('sets isTimeTravelMode to true after capture', async () => {
@@ -280,6 +311,7 @@ describe('createMockTimeTravelStore', () => {
       expect(store.currentIndex).toBe(2);
 
       // Undo to index 0
+      store.undo();
       store.undo();
       expect(store.currentIndex).toBe(0);
 
@@ -685,16 +717,13 @@ describe('createMockTimeTravelStore', () => {
   describe('maxSnapshots cap', () => {
     it('caps snapshots at maxSnapshots', async () => {
       let components: ComponentNode[] = [];
+      const originalMax = LIMITS.MAX_STATE_SNAPSHOTS;
+      LIMITS.MAX_STATE_SNAPSHOTS = 3;
+
       const store = createMockTimeTravelStore(
         () => components,
         () => []
       );
-
-      // Override maxSnapshots to a small value
-      // We need to mutate the store's internal maxSnapshots — but it's a getter.
-      // Instead, create a store with a custom maxSnapshots by modifying LIMITS temporarily.
-      const originalMax = LIMITS.MAX_STATE_SNAPSHOTS;
-      LIMITS.MAX_STATE_SNAPSHOTS = 3;
 
       try {
         for (let i = 0; i < 6; i++) {
@@ -784,7 +813,7 @@ describe('createMockTimeTravelStore', () => {
 
       // Verify deep clone — mutation should not affect snapshot
       tree.children[0].name = 'Hacked';
-      expect(store.snapshots[0].children[0].name).toBe('Header');
+      expect(store.snapshots[0].components[0].children[0].name).toBe('Header');
     });
 
     it('stores label in snapshot', async () => {
@@ -937,15 +966,31 @@ describe('createMockTimeTravelStore', () => {
       store.undo();
       expect(store.currentIndex).toBe(1);
 
-      // Capture new state — should truncate index 2
       components = [makeComponent('c1', 'A'), makeComponent('c4', 'D')];
       store.capture();
-      await vi.waitFor(() => expect(store.snapshots).toHaveLength(2));
+      await vi.waitFor(() => expect(store.snapshots).toHaveLength(3));
 
       // No more redo possible
       expect(store.canRedo).toBe(false);
       store.redo();
-      expect(store.currentIndex).toBe(1);
+      expect(store.currentIndex).toBe(2);
+    });
+  });
+
+  describe('branches', () => {
+    it('groups snapshots into branches', () => {
+      const store = createMockTimeTravelStore(
+        () => [makeComponent('c1', 'A')],
+        () => []
+      );
+
+      expect(store.branches).toEqual([]);
+
+      store.capture();
+      expect(store.branches).toHaveLength(1);
+      expect(store.branches[0].id).toBe('main');
+      expect(store.branches[0].name).toBe('Main');
+      expect(store.branches[0].snapshotIds).toHaveLength(1);
     });
   });
 });

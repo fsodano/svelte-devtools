@@ -32,3 +32,16 @@ Guide for AI agents to debug Svelte 5 apps using the devtools agent API. Covers:
 - Common scenarios and fixes
 
 Use this skill when the task involves inspecting component state, debugging runes reactivity, or troubleshooting devtools behavior at runtime.
+
+### [verify-devtools.md](./verify-devtools.md)
+
+End-to-end verification workflow for the Svelte DevTools plugin. Covers:
+
+- Building and starting a test app
+- Vite DevTools authorization flow (terminal token, manual auth URL)
+- Opening the DevTools panel via DocumentPictureInPicture
+- Full Playwright automation script
+- HTTP API verification for all endpoints (components, timeline, server-events, snapshots, migration, set-state, source)
+- Common issues and troubleshooting checklist
+
+Use this skill when verifying the devtools work after changes, debugging auth flow problems, or running automated verification in CI.
