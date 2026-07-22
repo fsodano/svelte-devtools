@@ -48,11 +48,6 @@ let captureTimeout: ReturnType<typeof setTimeout> | null = null;
 let captureMaxTimer: ReturnType<typeof setTimeout> | null = null;
 const CAPTURE_DEBOUNCE = 100;
 const CAPTURE_MAX_WAIT = 1000;
-// Suppress all captures for this many ms after a restore starts.
-// This gives Svelte 5's $effect re-runs time to settle before we
-// start recording snapshots again.
-const RESTORE_COOLDOWN = 600;
-let lastRestoreTime = 0;
 
 function generateSnapshotId(): string {
   return `snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -69,6 +64,30 @@ export function createTimeTravelStore(
   setTimeline?: (t: TimelineEntry[]) => void,
   onRestore?: () => void
 ): TimeTravelStore {
+  // ── Hybrid restore lock ─────────────────────────────────────────
+  // Sliding silence window + hard ceiling. After a restore, every
+  // incoming state:change event resets a 50ms timer. The lock lifts
+  // when Svelte 5's $effect re-runs go quiet for 50ms. A 2s hard
+  // ceiling guarantees release even under continuous signal spam.
+  let isRestoring = false;
+  let _restoreSilenceTimer: ReturnType<typeof setTimeout> | null = null;
+  let _restoreCeilingTimer: ReturnType<typeof setTimeout> | null = null;
+  const SILENCE_THRESHOLD = 50;
+  const HARD_CEILING = 2000;
+
+  function _resetSilenceTimer(): void {
+    if (_restoreSilenceTimer) clearTimeout(_restoreSilenceTimer);
+    _restoreSilenceTimer = setTimeout(() => {
+      _unlock();
+    }, SILENCE_THRESHOLD);
+  }
+
+  function _unlock(): void {
+    isRestoring = false;
+    if (_restoreSilenceTimer) { clearTimeout(_restoreSilenceTimer); _restoreSilenceTimer = null; }
+    if (_restoreCeilingTimer) { clearTimeout(_restoreCeilingTimer); _restoreCeilingTimer = null; }
+  }
+
   function getKitStateFromParent(): KitState | null {
     try {
       const parentApi = (typeof window !== 'undefined'
@@ -80,10 +99,6 @@ export function createTimeTravelStore(
   }
 
   function doCapture(label?: string): void {
-    // Suppress captures during restore cooldown to prevent Svelte 5
-    // $effect re-runs (Spring/Tween animations, $inspect echoes) from
-    // creating phantom snapshots after undo/redo.
-    if (Date.now() - lastRestoreTime <= RESTORE_COOLDOWN) return;
     const comps = getComponents();
     const tl = getTimeline();
 
@@ -129,6 +144,15 @@ export function createTimeTravelStore(
   }
 
   function capture(label?: string): void {
+    // While the restore lock is active, every incoming state:change
+    // resets the silence timer. We return early here so no debounce
+    // or capture is started — the snapshot only records once the
+    // engine goes quiet for SILENCE_THRESHOLD ms.
+    if (isRestoring) {
+      _resetSilenceTimer();
+      return;
+    }
+
     // Trailing-edge only: wait for quiescence so intermediate animation
     // frames (Spring/Tween $effect re-runs) settle before capturing.
     if (captureTimeout) clearTimeout(captureTimeout);
@@ -140,9 +164,7 @@ export function createTimeTravelStore(
 
     // Max wait: guarantee a capture at least every 1s even under
     // continuous events (e.g. bridge polling every 100ms).
-    // Must also respect restore cooldown so the max-wait doesn't
-    // create phantom snapshots after the debounce clears.
-    if (!captureMaxTimer && Date.now() - lastRestoreTime > RESTORE_COOLDOWN) {
+    if (!captureMaxTimer) {
       captureMaxTimer = setTimeout(() => {
         if (captureTimeout) {
           clearTimeout(captureTimeout);
@@ -193,9 +215,14 @@ export function createTimeTravelStore(
 
   function restore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
-    // Stamp restore time so doCapture can suppress phantom snapshots
-    // caused by Svelte 5 $effect re-runs echoing restored state back.
-    lastRestoreTime = Date.now();
+    // Activate the hybrid restore lock. Every incoming state:change
+    // while locked resets a 50ms silence timer. The lock lifts after
+    // 50ms of quiet, or at 2s hard ceiling — whichever comes first.
+    isRestoring = true;
+    _resetSilenceTimer();
+    _restoreCeilingTimer = setTimeout(() => {
+      _unlock();
+    }, HARD_CEILING);
     // Drain any pending capture timers so they can't race us.
     if (captureTimeout) { clearTimeout(captureTimeout); captureTimeout = null; }
     if (captureMaxTimer) { clearTimeout(captureMaxTimer); captureMaxTimer = null; }
@@ -249,14 +276,16 @@ export function createTimeTravelStore(
 
     pushStateToApp(snapshot.components);
 
-    // Release locks after state settles.
+    // Release fetch-level locks once the hard ceiling ensures all
+    // reactive echoes have settled. The capture lock (isRestoring)
+    // is managed independently by the silence + ceiling timers above.
     setTimeout(() => {
       if (parentApi) parentApi.isTimeTraveling = false;
       if (_origFetch) {
         window.fetch = _origFetch;
         _origFetch = null;
       }
-    }, RESTORE_LOCK_DELAY);
+    }, HARD_CEILING);
 
     onRestore?.();
   }
