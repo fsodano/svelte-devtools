@@ -632,6 +632,7 @@ describe('analyzeMigration', () => {
           $: doubled = x * 2;
           import { writable } from "svelte/store";
           const store = writable(0);
+          $store;
           import { createEventDispatcher } from "svelte";
           const dispatch = createEventDispatcher();
           import { onMount } from "svelte";
@@ -647,7 +648,7 @@ describe('analyzeMigration', () => {
       expect(result.patterns.filter((p) => p.detected).length).toBe(11);
       // None migrated
       expect(result.actualScore).toBe(0);
-      expect(result.maxScore).toBe(47); // 5+5+3+3+5+5+5+5+4+4+4 = 47
+      expect(result.maxScore).toBe(48);
     });
 
     it('handles component with all 11 patterns fully migrated', () => {
