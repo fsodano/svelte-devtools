@@ -258,7 +258,7 @@
               <span class="dot-fill"></span>
             </button>
             <div class="snap-info">
-              <span class="snap-lbl">{snap.label || 'snapshot'}</span>
+              <span class="snap-lbl"><span class="snap-num">#{idx + 1}</span> {snap.label || 'snapshot'}</span>
               <span class="snap-ts">{new Date(snap.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
           </div>
@@ -404,6 +404,7 @@
 
   .snap-info { display: flex; flex-direction: column; min-width: 0; }
   .snap-lbl { font-size: 10px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .snap-num { color: var(--text-muted); font-family: var(--font-mono); margin-right: 3px; }
   .snap-ts { font-size: 8px; color: var(--text-muted); font-family: var(--font-mono); }
 
   .empty-sm { display: flex; align-items: center; justify-content: center; padding: var(--space-4); color: var(--text-muted); font-size: 11px; }
