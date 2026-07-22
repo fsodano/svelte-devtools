@@ -54,6 +54,7 @@ function createDevtoolsStore() {
 
   function scheduleStateCapture(label = 'state'): void {
     if (stateCaptureTimer) clearTimeout(stateCaptureTimer);
+    if (timeTravel.isRestoreCooldown()) return; // Spring/Tween easing after restore
     stateCaptureTimer = setTimeout(() => {
       stateCaptureTimer = null;
       if (isRecording && !timeTravel.isTimeTravelMode && activeMotions.size === 0) {
