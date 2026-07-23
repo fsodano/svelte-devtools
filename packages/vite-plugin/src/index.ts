@@ -142,7 +142,6 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
             (globalThis as Record<string, unknown>)['__svelte_devtools_markSeen__'] = (key: string) => {
                 markSeenTimestamps.set(key, Date.now());
             };
-            // Cleanup stale markSeen entries every 60s (evict > 5 min)
             setInterval(() => {
                 const cutoff = Date.now() - 300_000;
                 for (const [k, ts] of markSeenTimestamps) {
@@ -164,12 +163,8 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                 const startTime = Date.now();
                 const reqKey = `${req.method}:${url}`;
 
-                // Capture request body via explicit read on finish.
-                // The req.on('data') approach doesn't work because Vite's
-                // middleware stack may consume the stream before our handler.
                 const reqBodyPreview = '';
 
-                // Intercept res.end to capture response body for server trace
                 const originalEnd = res.end.bind(res);
                 let bodyChunks: Buffer[] = [];
                 const perfStart = performance.now();
@@ -187,7 +182,6 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                         markSeenTimestamps.delete(reqKey);
                         return;
                     }
-                    // Skip Vite dev module requests (individual .svelte/.js/.ts/.css files)
                     if (/\.(svelte|js|ts|css|json|ico|svg|png|woff2?)$/.test(url)) return;
                     const body = Buffer.concat(bodyChunks).toString('utf-8');
                     const contentType = (res.getHeader('content-type') as string) || '';

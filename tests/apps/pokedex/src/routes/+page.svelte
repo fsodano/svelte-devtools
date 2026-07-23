@@ -60,7 +60,6 @@
 
 	let hasActiveTypeFilter = $derived(selectedType !== null);
 
-	// Reset page on filter change
 	$effect(() => {
 		searchQuery;
 		selectedType;

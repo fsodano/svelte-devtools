@@ -148,7 +148,7 @@
           <div class="detail-row">
             <span class="label">Status</span>
             <span class="value">
-              <span class="status-badge" class:error={(selected.data as Record<string, unknown>).statusCode as number >= 400}>{selected.data.statusCode ?? '—'}</span>
+              <span class="status-badge" class:error={(selected.data.statusCode ?? 0) >= 400}>{selected.data.statusCode ?? '—'}</span>
             </span>
           </div>
           {#if selected.data.routeId !== undefined}

@@ -52,9 +52,6 @@ function createDevtoolsStore() {
   let hasInitialMountCaptured = false;
   let stateCaptureTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // --- Debounced state change batching ---
-  // Rapid state updates (e.g. 20 PokemonCards firing $inspect on image load)
-  // are batched into a single flush to avoid cascading reactive re-renders.
   const pendingStateChanges: Array<{
     componentId: string; key: string; value: unknown;
     isProp: boolean; prevValue: unknown; type: string;
@@ -66,7 +63,6 @@ function createDevtoolsStore() {
     stateFlushTimer = null;
     if (pendingStateChanges.length === 0) return;
 
-    // Build a map of the latest value per (componentId, key)
     const latest = new Map<string, { value: unknown; isProp: boolean }>();
     const timelineEntries: Array<{
       data: Record<string, unknown>; prevValue: unknown;
@@ -82,7 +78,6 @@ function createDevtoolsStore() {
     }
     pendingStateChanges.length = 0;
 
-    // Apply all latest values to components in a single pass
     components = components.map(c => {
       let mutated = false;
       let state = c.state;
@@ -98,7 +93,6 @@ function createDevtoolsStore() {
       return mutated ? { ...c, state, props } : c;
     });
 
-    // Batch-add timeline entries (single array copy)
     if (timelineEntries.length > 0) {
       const now = Date.now();
       const newEntries: TimelineEntry[] = timelineEntries.map(te => ({
@@ -152,8 +146,6 @@ function createDevtoolsStore() {
     }
   }
 
-  // Sync runtime state to server API cache every 2 seconds so HTTP API
-  // endpoints can serve component/timeline data to AI agents and tooling.
   async function syncStateToServer(): Promise<void> {
     try {
       const snapshotTree = timeTravel.snapshots.map(s => ({
@@ -174,7 +166,6 @@ function createDevtoolsStore() {
         await fetch('/__svelte-devtools/api/sync', { method: 'POST', body: payload, headers: { 'Content-Type': 'application/json' } });
       }
     } catch {
-      // Server not available yet — skip
     }
   }
 
@@ -273,8 +264,6 @@ function createDevtoolsStore() {
     const value = data.value instanceof Map ? Object.fromEntries(data.value) : data.value;
     const isProp = (data as Record<string, unknown>).type === 'props';
 
-    // Queue into debounced batch instead of immediately rebuilding the
-    // entire components array on every single $inspect fire.
     pendingStateChanges.push({
       componentId: data.componentId,
       key: data.key,
@@ -289,7 +278,6 @@ function createDevtoolsStore() {
       stateFlushTimer = setTimeout(() => {
         flushStateChanges();
 
-        // Time-travel and motion gates apply at flush time
         if (timeTravel.isTimeTravelMode) return;
         if (activeMotions.size > 0) return;
 

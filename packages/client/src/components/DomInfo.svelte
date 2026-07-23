@@ -4,8 +4,6 @@
   let domEl = $state<Element | null>(null);
 
   $effect(() => {
-    // The devtools runs in an iframe — the component's DOM element lives
-    // in the parent page. Query through parent.document for real DOM info.
     const doc = typeof window !== 'undefined' && window.parent?.document;
     if (doc) {
       domEl = doc.querySelector(`[data-svelte-devtools-id="${componentId}"]`);

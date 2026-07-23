@@ -49,9 +49,7 @@
 
   function renderDuration(duration: number | undefined): string {
     if (!duration) return '';
-    return duration > 16
-      ? `${duration.toFixed(1)}ms`
-      : `${duration.toFixed(1)}ms`;
+    return `${duration.toFixed(1)}ms`;
   }
 
   function formatSourceLocation(
