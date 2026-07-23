@@ -57,6 +57,27 @@
   });
 
   // --- Handlers ---
+  let detailWidth = $state(280);
+  let isResizing = $state(false);
+
+  function startResize(e: MouseEvent) {
+    e.preventDefault();
+    isResizing = true;
+    const startX = e.clientX;
+    const startW = detailWidth;
+    function onMove(ev: MouseEvent) {
+      if (!isResizing) return;
+      detailWidth = Math.max(160, startW + (ev.clientX - startX));
+    }
+    function onUp() {
+      isResizing = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
   function toggleRecording(): void {
     devtoolsStore.isRecording = !devtoolsStore.isRecording;
     if (devtoolsStore.isRecording) devtoolsStore.timeTravel.capture();
@@ -193,7 +214,12 @@
 
   <!-- ─── Center: event detail panel (shown on selection) ─── -->
   {#if selectedEntry}
-    <div class="tl-detail">
+    <div class="tl-divider"
+      role="separator" tabindex="0"
+      class:resizing={isResizing}
+      onmousedown={startResize}
+    ></div>
+    <div class="tl-detail" style="width: {detailWidth}px">
       <header class="detail-header">
         <span class="detail-title">{selectedEntry.type}</span>
         <button class="detail-close" onclick={() => selectedEntry = null}>✕</button>
@@ -276,10 +302,19 @@
   .tl-main { display: flex; flex-direction: column; flex: 1; min-width: 200px; }
 
   .tl-detail {
-    width: 280px; flex-shrink: 0; display: flex; flex-direction: column;
+    flex-shrink: 0; display: flex; flex-direction: column;
     border-left: 1px solid var(--border-default); background: var(--bg-surface);
     overflow-y: auto;
   }
+
+  /* ─── Resize divider ─── */
+  .tl-divider {
+    width: 4px; flex-shrink: 0; cursor: col-resize;
+    background: transparent;
+    transition: background 0.15s;
+    position: relative; z-index: 1;
+  }
+  .tl-divider:hover, .tl-divider.resizing { background: var(--accent-primary, #ff3e00); }
 
   .toolbar {
     display: flex; justify-content: space-between; align-items: center;
