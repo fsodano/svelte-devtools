@@ -189,21 +189,22 @@
         <div class="empty">No events recorded</div>
       {/if}
     </div>
-
-    {#if selectedEntry}
-      <div class="detail-panel">
-        <header class="detail-header">
-          <span class="detail-title">{selectedEntry.type}</span>
-          <button class="detail-close" onclick={() => selectedEntry = null}>✕</button>
-        </header>
-        <div class="detail-meta">
-          <div class="meta-row"><span class="meta-label">Time</span><span class="meta-value">{new Date(selectedEntry.timestamp).toLocaleString()}</span></div>
-          {#if selectedEntry.duration}<div class="meta-row"><span class="meta-label">Duration</span><span class="meta-value">{selectedEntry.duration.toFixed(2)}ms</span></div>{/if}
-        </div>
-        <div class="detail-data"><h4 class="data-heading">Data</h4><JsonTree value={selectedEntry.data} /></div>
-      </div>
-    {/if}
   </div>
+
+  <!-- ─── Center: event detail panel (shown on selection) ─── -->
+  {#if selectedEntry}
+    <div class="tl-detail">
+      <header class="detail-header">
+        <span class="detail-title">{selectedEntry.type}</span>
+        <button class="detail-close" onclick={() => selectedEntry = null}>✕</button>
+      </header>
+      <div class="detail-meta">
+        <div class="meta-row"><span class="meta-label">Time</span><span class="meta-value">{new Date(selectedEntry.timestamp).toLocaleString()}</span></div>
+        {#if selectedEntry.duration}<div class="meta-row"><span class="meta-label">Duration</span><span class="meta-value">{selectedEntry.duration.toFixed(2)}ms</span></div>{/if}
+      </div>
+      <div class="detail-data"><h4 class="data-heading">Data</h4><JsonTree value={selectedEntry.data} /></div>
+    </div>
+  {/if}
 
   <!-- ─── Right: branch tree ─── -->
   <div class="tl-branch">
@@ -272,7 +273,13 @@
   .timeline-layout { display: flex; height: 100%; background: var(--bg-surface); }
 
   /* ─── Left side: events ─── */
-  .tl-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .tl-main { display: flex; flex-direction: column; flex: 1; min-width: 200px; }
+
+  .tl-detail {
+    width: 280px; flex-shrink: 0; display: flex; flex-direction: column;
+    border-left: 1px solid var(--border-default); background: var(--bg-surface);
+    overflow-y: auto;
+  }
 
   .toolbar {
     display: flex; justify-content: space-between; align-items: center;
@@ -327,11 +334,16 @@
   .entry-title { font-family: var(--font-mono); color: var(--syntax-key); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .entry-summary { padding: 2px var(--space-2) 6px 32px; font-size: 10px; color: var(--text-secondary); border-bottom: 1px solid var(--border-default); }
 
-  .detail-panel {
-    width: 280px; flex-shrink: 0; display: flex; flex-direction: column;
-    border-left: 1px solid var(--border-default); background: var(--bg-surface);
-    overflow-y: auto; border-top: 1px solid var(--border-default);
-  }
+  .icon { text-align: center; }
+  .time { color: var(--text-secondary); font-size: 10px; white-space: nowrap; }
+  .duration { font-family: var(--font-mono); font-size: 10px; }
+  .empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-secondary); font-size: 12px; }
+  .icon { text-align: center; }
+  .time { color: var(--text-secondary); font-size: 10px; white-space: nowrap; }
+  .duration { font-family: var(--font-mono); font-size: 10px; }
+  .empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-secondary); font-size: 12px; }
+
+  /* ─── Event detail column ─── */
   .detail-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-default); }
   .detail-title { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--syntax-key); }
   .detail-close { padding: 2px 6px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 14px; border-radius: var(--radius-sm); }
@@ -342,12 +354,6 @@
   .meta-value { color: var(--text-primary); font-family: var(--font-mono); font-size: 10px; }
   .detail-data { flex: 1; padding: var(--space-2) var(--space-3); overflow-y: auto; }
   .data-heading { margin: 0 0 var(--space-2); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
-  .icon { text-align: center; }
-  .time { color: var(--text-secondary); font-size: 10px; white-space: nowrap; }
-  .duration { font-family: var(--font-mono); font-size: 10px; }
-  .empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-secondary); font-size: 12px; }
-
-  /* ─── Right side: branch tree ─── */
   .tl-branch {
     width: 200px; flex-shrink: 0;
     border-left: 1px solid var(--border-default);
