@@ -52,6 +52,63 @@ function createDevtoolsStore() {
   let hasInitialMountCaptured = false;
   let stateCaptureTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // --- Debounced state change batching ---
+  // Rapid state updates (e.g. 20 PokemonCards firing $inspect on image load)
+  // are batched into a single flush to avoid cascading reactive re-renders.
+  const pendingStateChanges: Array<{
+    componentId: string; key: string; value: unknown;
+    isProp: boolean; prevValue: unknown; type: string;
+    componentName: string;
+  }> = [];
+  let stateFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function flushStateChanges(): void {
+    stateFlushTimer = null;
+    if (pendingStateChanges.length === 0) return;
+
+    // Build a map of the latest value per (componentId, key)
+    const latest = new Map<string, { value: unknown; isProp: boolean }>();
+    const timelineEntries: Array<{
+      data: Record<string, unknown>; prevValue: unknown;
+    }> = [];
+    for (const ch of pendingStateChanges) {
+      const mapKey = `${ch.componentId}::${ch.key}`;
+      latest.set(mapKey, { value: ch.value, isProp: ch.isProp });
+      timelineEntries.push({
+        data: { componentId: ch.componentId, key: ch.key, value: ch.value,
+                type: ch.type, componentName: ch.componentName },
+        prevValue: ch.prevValue
+      });
+    }
+    pendingStateChanges.length = 0;
+
+    // Apply all latest values to components in a single pass
+    components = components.map(c => {
+      let mutated = false;
+      let state = c.state;
+      let props = c.props;
+      for (const [mapKey, { value, isProp }] of latest) {
+        if (mapKey.startsWith(c.id + '::')) {
+          const key = mapKey.slice(c.id.length + 2);
+          state = { ...state, [key]: value };
+          if (isProp) props = { ...props, [key]: value };
+          mutated = true;
+        }
+      }
+      return mutated ? { ...c, state, props } : c;
+    });
+
+    // Add deduplicated timeline entries
+    for (const te of timelineEntries) {
+      addToTimeline({
+        id: generateId(),
+        type: 'state:change',
+        timestamp: Date.now(),
+        data: te.data
+      });
+    }
+  }
+
   function scheduleStateCapture(label = 'state', delayMs = 0): void {
     if (stateCaptureTimer) clearTimeout(stateCaptureTimer);
     stateCaptureTimer = setTimeout(() => {
@@ -203,71 +260,35 @@ function createDevtoolsStore() {
   function handleStateChange(payload: unknown): void {
     const data = payload as StateChangePayload;
     const existingComponent = components.find(c => c.id === data.componentId);
-
-    if (!existingComponent) {
-      return;
-    }
+    if (!existingComponent) return;
 
     const value = data.value instanceof Map ? Object.fromEntries(data.value) : data.value;
     const isProp = (data as Record<string, unknown>).type === 'props';
 
-    // 1. ALWAYS update the live UI — users see numbers spinning mid-animation
-    components = components.map(c => {
-      if (c.id === data.componentId) {
-        return {
-          ...c,
-          state: { ...c.state, [data.key]: value },
-          props: isProp ? { ...(c.props || {}), [data.key]: value } : c.props,
-        };
-      }
-      return c;
+    // Queue into debounced batch instead of immediately rebuilding the
+    // entire components array on every single $inspect fire.
+    pendingStateChanges.push({
+      componentId: data.componentId,
+      key: data.key,
+      value,
+      isProp,
+      prevValue: existingComponent.state?.[data.key],
+      type: (data as Record<string, unknown>).type as string,
+      componentName: existingComponent.name,
     });
 
-    // 2. TIME TRAVEL GATE: during restore, ignore everything.
-    // The restore unlocks via setTimeout(0) after pushStateToApp completes,
-    // giving Svelte one event-loop tick to flush {hard: true} mutations.
-    if (timeTravel.isTimeTravelMode) return;
+    if (!stateFlushTimer) {
+      stateFlushTimer = setTimeout(() => {
+        flushStateChanges();
 
-    // 3. SEMANTIC MOTION GATE
-    // Spring/Tween frames have {current, target}. While cur !== tgt the
-    // physics engine is in flight — mark the key as active and drop the
-    // frame. When cur === tgt (within JS precision) the motion has settled.
-    // We use a Map to track if current STABILIZED (same cur as last frame),
-    // since Spring easing is asymptotic and === might never trigger.
-    const key = `${data.componentId}::${data.key}`;
-    const isMotion = value && typeof value === 'object'
-      && 'current' in (value as Record<string, unknown>)
-      && 'target' in (value as Record<string, unknown>);
-    if (isMotion) {
-      const cur = (value as Record<string, unknown>).current as number;
-      const tgt = (value as Record<string, unknown>).target as number;
-      const prev = _lastCur.get(key);
-      const settled = cur === tgt || Math.abs(cur - tgt) < SETTLE_TOLERANCE;
-      if (!settled) {
-        _lastCur.set(key, cur);
-        activeMotions.add(key);
-        return; // mid-animation: no timeline entry, no capture
-      }
-      // Settled: remove from active set
-      activeMotions.delete(key);
-      // Dedup: same cur value (within tolerance) as last frame — already recorded
-      if (prev !== undefined && Math.abs(cur - prev) < SETTLE_TOLERANCE) return;
-      _lastCur.set(key, cur);
-    }
+        // Time-travel and motion gates apply at flush time
+        if (timeTravel.isTimeTravelMode) return;
+        if (activeMotions.size > 0) return;
 
-    // 4. BARRAGE/SYNC GATE: if any animation is still active, wait.
-    // Multiple Springs settling at different rates all gate on this.
-    if (activeMotions.size > 0) return;
-
-    addToTimeline({
-      id: generateId(),
-      type: 'state:change',
-      timestamp: Date.now(),
-      data: { ...data, prevValue: existingComponent.state?.[data.key], componentName: existingComponent.name }
-    });
-
-    if (isRecording) {
-      scheduleStateCapture('state', isMotion ? 50 : 0);
+        if (isRecording) {
+          scheduleStateCapture('state', 0);
+        }
+      }, 50);
     }
   }
 
@@ -346,6 +367,7 @@ function createDevtoolsStore() {
     get serverEvents() { return serverEvents as ServerEvent[]; },
     get isRecording() { return isRecording; },
     set isRecording(v: boolean) { isRecording = v; },
+    refresh() { bridge.refresh(); },
     init,
     selectComponent,
     setSearchQuery,

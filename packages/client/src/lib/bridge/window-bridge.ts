@@ -76,7 +76,7 @@ const payload: ComponentMountPayload = {
                 syncComponents();
             }
 
-            setInterval(syncComponents, 100);
+            setInterval(syncComponents, 500);
 
             // Listen for unmount events to clean up tracking
             targetWindow.addEventListener('message', (event) => {
@@ -95,6 +95,31 @@ const payload: ComponentMountPayload = {
             if (!listeners.has(type)) listeners.set(type, new Set());
             listeners.get(type)!.add(fn);
             return () => listeners.get(type)!.delete(fn);
+        },
+        refresh() {
+            const parentWindow = window.parent as unknown as { __SVELTE_DEVTOOLS__?: SvelteDevToolsAPI };
+            if (parentWindow.__SVELTE_DEVTOOLS__?.refresh) {
+                parentWindow.__SVELTE_DEVTOOLS__.refresh();
+            }
+            if (parentWindow.__SVELTE_DEVTOOLS__) {
+                const components = parentWindow.__SVELTE_DEVTOOLS__.getAllComponents?.() || [];
+                components.forEach((comp: ComponentInstance) => {
+                    if (!mountedComponents.has(comp.id)) {
+                        mountedComponents.add(comp.id);
+                        const callbacks = listeners.get('component:mount');
+                        const payload: ComponentMountPayload = {
+                            id: comp.id,
+                            name: comp.name,
+                            props: comp.props || {},
+                            state: Object.fromEntries(comp.state || []),
+                            children: comp.children || [],
+                            parentId: comp.parentId,
+                            filename: comp.filename
+                        };
+                        callbacks?.forEach(fn => fn(payload));
+                    }
+                });
+            }
         }
     };
 }

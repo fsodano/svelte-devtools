@@ -3,7 +3,7 @@
 
   let { value, name, seen = null }: { value: unknown; name?: string; seen?: Set<unknown> | null } = $props();
 
-  let expanded = $state(true);
+  let expanded = $state(false);
 
   // Circular reference detection is handled by the valueNode snippet via the
   // `currentSeen` parameter — no $effect needed to pre-populate the set.
