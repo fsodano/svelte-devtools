@@ -24,7 +24,6 @@
   import JsonTree from "./JsonTree.svelte";
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
 
-  // --- Event entries state ---
   let entries = $derived(devtoolsStore.timeline);
   let filter = $state<string>('all');
   let selectedEntry = $state<TimelineEntry | null>(null);
@@ -49,7 +48,6 @@
     window.addEventListener('mouseup', onUp);
   }
 
-  // --- Snapshot / branch state ---
   let snapshots = $derived(devtoolsStore.timeTravel.snapshots as unknown as SnapshotNode[]);
   let currentSnapshotIndex = $derived(devtoolsStore.timeTravel.currentIndex);
   let canUndo = $derived(devtoolsStore.timeTravel.canUndo);

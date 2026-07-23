@@ -112,7 +112,6 @@ export function svelteDevToolsHandle(): Handle {
                 }
             }
             });
-            // Clone response to read body for the trace
             const clone = response.clone();
             responseBody = await clone.text();
         } catch (e) {
