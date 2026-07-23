@@ -73,7 +73,9 @@
             selectedId={selectedComponent}
           />
           {#if selectedComponent}
-            <ComponentDetail componentId={selectedComponent} />
+            {#key selectedComponent}
+              <ComponentDetail componentId={selectedComponent} />
+            {/key}
           {:else}
             <div class="empty">
               {components.length === 0
