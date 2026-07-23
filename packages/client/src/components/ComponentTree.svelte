@@ -304,7 +304,7 @@
 
               {#if item.component.filename}
                 <span class="filepath" title={item.component.filename}>
-                  {item.component.filename}
+                  {item.component.filename.length > 50 ? '...' + item.component.filename.slice(-50) : item.component.filename}
                 </span>
               {/if}
             </div>
