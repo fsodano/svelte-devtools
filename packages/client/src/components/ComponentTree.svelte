@@ -196,7 +196,8 @@
     </div>
   </div>
 
-  <div class="tree" bind:this={listRef} style="height: {virtualizedHeight}px">
+  <!-- Simple scrollable list without virtualization for reliability -->
+  <div class="tree" bind:this={listRef}>
     {#if filteredList.length === 0 && searchTerm.trim()}
       <div class="empty-search">
         <svg
@@ -221,26 +222,25 @@
         <span class="empty-search-hint">Try a different name, filename, or state key</span>
       </div>
     {:else}
-      <div class="tree-content" style="height: {filteredList.length * ITEM_HEIGHT}px">
-        {#each filteredList.slice(visibleStart, visibleEnd) as item, i (item.component.id)}
+      {#each filteredList as item (item.component.id)}
+        <div
+          class="tree-node"
+          style="padding-left: {item.depth * 24 + 8}px"
+        >
           <div
-            class="tree-node"
-            style="transform: translateY({(visibleStart + i) * ITEM_HEIGHT}px); padding-left: {item.depth * 24 + 8}px"
+            class="component-row"
+            class:selected={selectedId === item.component.id}
+            role="button"
+            tabindex="0"
+            aria-label="Select {item.component.name} component"
+            onclick={() => onSelect(item.component.id)}
+            onkeydown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelect(item.component.id);
+              }
+            }}
           >
-            <div
-              class="component-row"
-              class:selected={selectedId === item.component.id}
-              role="button"
-              tabindex="0"
-              aria-label="Select {item.component.name} component"
-              onclick={() => onSelect(item.component.id)}
-              onkeydown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onSelect(item.component.id);
-                }
-              }}
-            >
               <div class="indent-guide">
                 {#each Array(item.depth) as _, idx}
                   <span
@@ -310,7 +310,6 @@
             </div>
           </div>
         {/each}
-      </div>
     {/if}
   </div>
 </div>
