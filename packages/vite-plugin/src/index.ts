@@ -187,13 +187,15 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                         markSeenTimestamps.delete(reqKey);
                         return;
                     }
+                    // Skip Vite dev module requests (individual .svelte/.js/.ts/.css files)
+                    if (/\.(svelte|js|ts|css|json|ico|svg|png|woff2?)$/.test(url)) return;
                     const body = Buffer.concat(bodyChunks).toString('utf-8');
                     const contentType = (res.getHeader('content-type') as string) || '';
                     const isJson = contentType.includes('json');
                     import('./server-events.js').then(({ addServerEvent }) => {
                         addServerEvent({
                             id: `srv-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-                            type: res.statusCode >= 400 ? 'server:error' : 'server:trace',
+                            type: res.statusCode >= 400 ? 'server:error' : 'server:ssr',
                             timestamp: startTime,
                             duration,
                             data: {

@@ -13,6 +13,48 @@ interface ServerEvent {
     data: unknown;
 }
 
+/** Install the fetch interceptor at module load time so it wraps
+ *  globalThis.fetch before SvelteKit caches it for load functions. */
+const _origFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = ((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const urlStr = typeof input === 'string' ? input
+        : input instanceof URL ? input.href
+        : input instanceof Request ? input.url
+        : String(input);
+    const startTime = Date.now();
+    const perfStart = performance.now();
+    const method = init?.method || 'GET';
+    const promise = _origFetch(input, init);
+    promise.then(async (res) => {
+        const addEvent = (globalThis as Record<string, unknown>)[GLOBAL_KEY] as
+            | ((e: ServerEvent) => void)
+            | undefined;
+        if (!addEvent) return;
+        const duration = performance.now() - perfStart;
+        let responseBody = '';
+        try { responseBody = await res.clone().text(); } catch { /* ignore */ }
+        addEvent({
+            id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+            type: 'server:request',
+            timestamp: startTime,
+            duration,
+            data: {
+                url: urlStr,
+                method,
+                statusCode: res.status,
+                _handler: 'fetch-interceptor',
+                requestBody: init?.body instanceof ReadableStream
+                    ? '(stream)'
+                    : (init?.body as string | undefined)?.slice(0, 2000) || undefined,
+                responseSize: responseBody.length,
+                responsePreview: responseBody.slice(0, 2000),
+                reqHeaders: init?.headers,
+            }
+        });
+    }).catch(() => {});
+    return promise;
+}) as typeof globalThis.fetch;
+
 export function svelteDevToolsHandle(): Handle {
     return async ({ event, resolve }) => {
         const svelteRuntime =
@@ -83,6 +125,9 @@ export function svelteDevToolsHandle(): Handle {
                 | undefined;
 
             if (addEvent) {
+                // Skip Vite dev module requests (individual .svelte/.js/.ts/.css files)
+                const path = event.url.pathname;
+                if (/\.(svelte|js|ts|css|json|ico|svg|png|woff2?)$/.test(path)) { return response!; }
                 const resHeadersRaw = response?.headers;
                 const headersEntries: [string, string][] = typeof resHeadersRaw?.entries === 'function'
                     ? [...resHeadersRaw.entries()] as [string, string][]
@@ -95,7 +140,7 @@ export function svelteDevToolsHandle(): Handle {
                 const isJson = contentType.includes('json');
                 addEvent({
                     id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-                    type: error ? 'server:error' : 'server:trace',
+                    type: error ? 'server:error' : 'server:ssr',
                     timestamp: startTime,
                     duration,
                     data: {
