@@ -37,54 +37,90 @@ export const runtime = {
             timestamp: performance.now()
         });
 
-        setInterval(() => {
-            const registry = (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_REGISTRY__;
-            if (!registry) return;
-
-            for (const [id, meta] of registry.entries()) {
-                if (!state.components.has(id)) {
+        // Watch for DOM mutations to detect component mounts and unmounts.
+        // Watches both childList (for new elements) and attributes (for
+        // `data-svelte-devtools-id` which Svelte 5 sets after appending).
+        if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
+            const tryRegister = (el: Element, registry: Map<string, { id: string; name: string; filename: string }> | undefined) => {
+                const id = el.getAttribute('data-svelte-devtools-id');
+                if (id && !state.components.has(id) && registry?.has(id)) {
+                    const meta = registry.get(id)!;
                     this.registerComponent(id, meta.name, meta.filename);
                 }
-            }
-        }, 100);
+                const descendants = el.querySelectorAll('[data-svelte-devtools-id]');
+                for (const desc of descendants) {
+                    const descId = desc.getAttribute('data-svelte-devtools-id');
+                    if (descId && !state.components.has(descId) && registry?.has(descId)) {
+                        const meta = registry.get(descId)!;
+                        this.registerComponent(descId, meta.name, meta.filename);
+                    }
+                }
+            };
+            const tryUnregister = (el: Element) => {
+                const removedId = el.getAttribute('data-svelte-devtools-id');
+                if (removedId && state.components.has(removedId)) {
+                    this.emit({
+                        type: 'component:unmount',
+                        componentId: removedId,
+                        componentName: state.components.get(removedId)!.name,
+                        timestamp: performance.now()
+                    });
+                    state.components.delete(removedId);
+                }
+                const descendants = el.querySelectorAll('[data-svelte-devtools-id]');
+                for (const desc of descendants) {
+                    const descId = desc.getAttribute('data-svelte-devtools-id');
+                    if (descId && state.components.has(descId)) {
+                        this.emit({
+                            type: 'component:unmount',
+                            componentId: descId,
+                            componentName: state.components.get(descId)!.name,
+                            timestamp: performance.now()
+                        });
+                        state.components.delete(descId);
+                    }
+                }
+            };
 
-        // Watch for DOM removals to detect component unmounts
-        if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
             const observer = new MutationObserver((mutations) => {
+                const registry = (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_REGISTRY__;
                 for (const mutation of mutations) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'data-svelte-devtools-id') {
+                        // Svelte 5 often sets the attribute AFTER the element is in the DOM
+                        if (mutation.target instanceof Element) {
+                            tryRegister(mutation.target, registry);
+                        }
+                    }
+                    for (const node of mutation.addedNodes) {
+                        if (node instanceof Element) {
+                            tryRegister(node, registry);
+                        }
+                    }
                     for (const node of mutation.removedNodes) {
                         if (node instanceof Element) {
-                            const removedId = node.getAttribute('data-svelte-devtools-id');
-                            if (removedId && state.components.has(removedId)) {
-                                this.emit({
-                                    type: 'component:unmount',
-                                    componentId: removedId,
-                                    componentName: state.components.get(removedId)!.name,
-                                    timestamp: performance.now()
-                                });
-                                state.components.delete(removedId);
-                            }
-                            // Also check descendants
-                            const descendants = node.querySelectorAll('[data-svelte-devtools-id]');
-                            for (const desc of descendants) {
-                                const descId = desc.getAttribute('data-svelte-devtools-id');
-                                if (descId && state.components.has(descId)) {
-                                    this.emit({
-                                        type: 'component:unmount',
-                                        componentId: descId,
-                                        componentName: state.components.get(descId)!.name,
-                                        timestamp: performance.now()
-                                    });
-                                    state.components.delete(descId);
-                                }
-                            }
+                            tryUnregister(node);
                         }
                     }
                 }
             });
             const startObserver = () => {
                 if (document.body) {
-                    observer.observe(document.body, { childList: true, subtree: true });
+                    // Scan existing elements for components already mounted
+                    const registry = (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_REGISTRY__;
+                    const existing = document.body.querySelectorAll('[data-svelte-devtools-id]');
+                    for (const el of existing) {
+                        const id = el.getAttribute('data-svelte-devtools-id');
+                        if (id && !state.components.has(id) && registry?.has(id)) {
+                            const meta = registry.get(id)!;
+                            this.registerComponent(id, meta.name, meta.filename);
+                        }
+                    }
+                    observer.observe(document.body, {
+                        childList: true,
+                        subtree: true,
+                        attributes: true,
+                        attributeFilter: ['data-svelte-devtools-id']
+                    });
                 } else {
                     document.addEventListener('DOMContentLoaded', startObserver, { once: true });
                 }
@@ -242,6 +278,21 @@ export const runtime = {
         });
     },
 
+    /** Force re-scan the DOM for any components missed by the observer. */
+    refresh(): void {
+        if (typeof document === 'undefined') return;
+        const registry = (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_REGISTRY__;
+        if (!registry) return;
+        const existing = document.body?.querySelectorAll('[data-svelte-devtools-id]') ?? [];
+        for (const el of existing) {
+            const id = el.getAttribute('data-svelte-devtools-id');
+            if (id && !state.components.has(id) && registry.has(id)) {
+                const meta = registry.get(id)!;
+                this.registerComponent(id, meta.name, meta.filename);
+            }
+        }
+    },
+
     emit(event: {
         type: string;
         componentId?: string;
@@ -353,6 +404,7 @@ if (typeof window !== 'undefined') {
     svelteDevToolsRuntime.reportError = runtime.reportError.bind(runtime);
     svelteDevToolsRuntime._registerState = runtime._registerState.bind(runtime);
     svelteDevToolsRuntime.setComponentState = runtime.setComponentState.bind(runtime);
+    svelteDevToolsRuntime.refresh = runtime.refresh.bind(runtime);
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_RUNTIME__ = svelteDevToolsRuntime;
 
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS__ = {
@@ -433,6 +485,9 @@ if (typeof window !== 'undefined') {
         getTimeline: () => [],
         setComponentState: (id: string, key: string, value: unknown) => {
             svelteDevToolsRuntime.setComponentState(id, key, value);
+        },
+        refresh: () => {
+            svelteDevToolsRuntime.refresh();
         },
         subscribe: () => () => {
         },
