@@ -1,7 +1,7 @@
 <script lang="ts">
 	import PokemonCard from '$lib/components/PokemonCard.svelte';
 	import PokemonDetail from '$lib/components/PokemonDetail.svelte';
-	import { fetchPokemonBatch, fetchPokemonDetail, typeColor } from '$lib/pokemon.js';
+	import { fetchPokemonDetail, typeColor, getIdFromUrl } from '$lib/pokemon.js';
 
 	interface PokemonListEntry { id: number; name: string; }
 
@@ -14,48 +14,98 @@
 		cries: { latest: string; legacy: string };
 	}
 
-	interface PageData { list: PokemonListEntry[]; types: string[]; }
+	interface PageData { types: string[]; }
 
 	let { data }: { data: PageData } = $props();
 
 	let searchQuery = $state('');
 	let selectedType = $state<string | null>(null);
 	let currentPage = $state(1);
+	let currentOffset = $state(0);
+	let allNames = $state<PokemonListEntry[]>([]);
+	let pageNames = $state<PokemonListEntry[]>([]);
 	let detailsMap = $state<Record<number, PokemonDetailData>>({});
 	let selectedPokemon = $state<PokemonDetailData | null>(null);
 	let typeNames = $state<Set<string> | null>(null);
 	let isLoadingPage = $state(false);
 	let isLoadingType = $state(false);
+	let totalCount = $state(150);
+	let isLoadingAllNames = $state(true);
 
 	const PAGE_SIZE = 20;
 
+	// Derived: search/type filter over the full all-names list
 	let searchFiltered = $derived.by(() => {
-		if (!searchQuery) return data.list;
+		if (!searchQuery) return allNames;
 		const q = searchQuery.toLowerCase().trim();
-		return data.list.filter((p) => p.id.toString() === q || p.name.includes(q));
+		return allNames.filter((p) => p.id.toString() === q || p.name.includes(q));
 	});
 
 	let typeFiltered = $derived.by(() => {
 		if (!selectedType || !typeNames) return searchFiltered;
-		return searchFiltered.filter((p) => typeNames!.has(p.name));
+		return searchFiltered.filter((p) => typeNames.has(p.name));
 	});
 
 	let totalPages = $derived(Math.max(1, Math.ceil(typeFiltered.length / PAGE_SIZE)));
-	let paginatedIds = $derived(typeFiltered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
-	let hasActiveTypeFilter = $derived(selectedType !== null);
+	let maxOffset = $derived(Math.max(0, typeFiltered.length - PAGE_SIZE));
 
-	$effect(() => { searchQuery; selectedType; currentPage = 1; });
-
-	$effect(() => {
-		const ids = paginatedIds.map((p) => p.id);
-		const uncached = ids.filter((id) => !detailsMap[id]);
-		if (uncached.length === 0) return;
-		isLoadingPage = true;
-		fetchPokemonBatch(uncached, { concurrency: 6 })
-			.then((results) => { for (const r of results) { if (r.status === 'fulfilled') detailsMap[r.value.id] = r.value; } })
-			.finally(() => { isLoadingPage = false; });
+	let paginatedIds = $derived.by(() => {
+		// If search or type filter is active, use the filtered list with client-side pagination
+		if (searchQuery || selectedType) {
+			return typeFiltered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+		}
+		// Otherwise use the API-paginated pageNames list
+		return pageNames;
 	});
 
+	let hasActiveTypeFilter = $derived(selectedType !== null);
+
+	// Reset page on filter change
+	$effect(() => {
+		searchQuery;
+		selectedType;
+		currentPage = 1;
+	});
+
+	// Fetch all 150 names once for search/filter
+	$effect(() => {
+		let cancelled = false;
+		fetch('https://pokeapi.co/api/v2/pokemon?limit=150')
+			.then((r) => r.json())
+			.then((d) => {
+				if (cancelled) return;
+				const list = d.results.map((p: { name: string; url: string }) => ({
+					name: p.name,
+					id: getIdFromUrl(p.url)
+				}));
+				allNames = list;
+				totalCount = list.length;
+				isLoadingAllNames = false;
+			});
+		return () => { cancelled = true; };
+	});
+
+	// Fetch page names from API when page or offset changes
+	// Only fires when no search/filter is active
+	$effect(() => {
+		if (searchQuery || selectedType) return;
+		const offset = (currentPage - 1) * PAGE_SIZE;
+		if (offset === currentOffset && currentPage > 1) return; // already loaded
+		isLoadingPage = true;
+		currentOffset = offset;
+		fetch(`https://pokeapi.co/api/v2/pokemon?limit=${PAGE_SIZE}&offset=${offset}`)
+			.then((r) => r.json())
+			.then((d) => {
+				const list = d.results.map((p: { name: string; url: string }) => ({
+					name: p.name,
+					id: getIdFromUrl(p.url)
+				}));
+				pageNames = list;
+				isLoadingPage = false;
+			});
+	});
+
+	// Fetch type data when filter changes
 	$effect(() => {
 		if (!selectedType) { typeNames = null; return; }
 		isLoadingType = true;
@@ -65,7 +115,7 @@
 				const names = new Set<string>(
 					typeData.pokemon
 						.map((p: { pokemon: { name: string } }) => p.pokemon.name)
-						.filter((name: string) => data.list.some((l) => l.name === name))
+						.filter((name: string) => allNames.some((l) => l.name === name))
 				);
 				typeNames = names;
 			})
@@ -92,7 +142,7 @@
 <main class="container" style="padding-top: 2rem;">
 	<header style="text-align: center; margin-bottom: 1.5rem;">
 		<h1 style="margin-bottom: 0;">Pokédex</h1>
-		<small style="opacity: 0.5;">Kanto region · {data.list.length} Pokémon</small>
+		<small style="opacity: 0.5;">Kanto region · {totalCount} Pokémon</small>
 	</header>
 
 	<!-- search -->
@@ -110,8 +160,7 @@
 				class="filter-type-btn {selectedType === type ? 'active' : ''}"
 				onclick={() => selectType(type)}
 				disabled={isLoadingType}
-				style="width: auto; margin: 0; padding: 0.25rem 0.75rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; background: {typeColor(type)}; border-color: {typeColor(type)}; color: #fff; opacity: {selectedType === type ? 1 : 0.75};"
-			>
+				style="width: auto; margin: 0; padding: 0.25rem 0.75rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; background: {typeColor(type)}; border-color: {typeColor(type)}; color: #fff; opacity: {selectedType === type ? 1 : 0.75};">
 				{type}
 			</button>
 		{/each}
@@ -130,7 +179,11 @@
 				</div>
 			</div>
 
-			{#if paginatedIds.length === 0}
+			{#if isLoadingAllNames && allNames.length === 0}
+				<article style="text-align: center; padding: 3rem;">
+					<p style="opacity: 0.5;">Loading Pokémon…</p>
+				</article>
+			{:else if paginatedIds.length === 0}
 				<article style="text-align: center; padding: 3rem;">
 					<p style="opacity: 0.5;">No Pokémon match your search.</p>
 					<button class="outline" onclick={clearFilters}>Clear filters</button>
@@ -159,13 +212,14 @@
 								{pageNum}
 							</button>
 						{/each}
-						<button class="outline" onclick={() => currentPage = Math.min(totalPages, currentPage + 1)} disabled={currentPage >= totalPages} style="width: auto; margin: 0; font-size: 0.75rem; padding: 0.25rem 0.75rem;">
+						<button class="outline" onclick={() => currentPage = Math.min(totalPages, currentPage + 1)} disabled={currentPage >= totalPages} style="width: auto; margin: 0; font-size: 0.75rem; padding: 0.75rem;">
 							Next →
 						</button>
 					</nav>
 				{/if}
 			{/if}
 		</div>
+
 		<!-- Right (360px, sticky): detail panel -->
 		<aside style="position: sticky; top: 1.5rem; max-height: calc(100vh - 4rem); overflow-y: auto;">
 			{#if selectedPokemon}
