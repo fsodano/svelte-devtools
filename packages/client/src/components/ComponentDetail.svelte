@@ -99,22 +99,22 @@
     <nav class="tabs">
       <button
         class="tab"
-        class:active={activeTab === "props"}
-        onclick={() => (activeTab = "props")}
-      >
-        Props
-        {#if component.props && Object.keys(component.props).length > 0}
-          <span class="badge">{Object.keys(component.props).length}</span>
-        {/if}
-      </button>
-      <button
-        class="tab"
         class:active={activeTab === "state"}
         onclick={() => (activeTab = "state")}
       >
         State
         {#if component.state && Object.keys(component.state).length > 0}
           <span class="badge">{Object.keys(component.state).length}</span>
+        {/if}
+      </button>
+      <button
+        class="tab"
+        class:active={activeTab === "props"}
+        onclick={() => (activeTab = "props")}
+      >
+        Props
+        {#if component.props && Object.keys(component.props).length > 0}
+          <span class="badge">{Object.keys(component.props).length}</span>
         {/if}
       </button>
       <button
@@ -134,26 +134,7 @@
     </nav>
 
     <div class="content">
-      {#if activeTab === "props"}
-        {#if Object.keys(component.props || {}).length > 0}
-          <div class="props-list">
-            {#each Object.entries(component.props || {}) as [key, value] (key)}
-              <div class="prop-row" class:changed={isChanged(key)}>
-                <span class="prop-key">{key}</span>
-                <span class="prop-value">
-                  {#if isExpandable(value)}
-                    <JsonTree value={value} />
-                  {:else}
-                    {formatValue(value)}
-                  {/if}
-                </span>
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <div class="empty">No props</div>
-        {/if}
-      {:else if activeTab === "state"}
+      {#if activeTab === "state"}
         {#if Object.keys(component.state || {}).length > 0}
           <div class="props-list">
             {#each Object.entries(component.state || {}) as [key, value] (key)}
@@ -171,6 +152,25 @@
           </div>
         {:else}
           <div class="empty">No state variables (runes) detected</div>
+        {/if}
+      {:else if activeTab === "props"}
+        {#if Object.keys(component.props || {}).length > 0}
+          <div class="props-list">
+            {#each Object.entries(component.props || {}) as [key, value] (key)}
+              <div class="prop-row" class:changed={isChanged(key)}>
+                <span class="prop-key">{key}</span>
+                <span class="prop-value">
+                  {#if isExpandable(value)}
+                    <JsonTree value={value} />
+                  {:else}
+                    {formatValue(value)}
+                  {/if}
+                </span>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="empty">No props</div>
         {/if}
       {:else if activeTab === "dom"}
         <DomInfo {componentId} />
