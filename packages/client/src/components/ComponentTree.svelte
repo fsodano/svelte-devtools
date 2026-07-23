@@ -135,15 +135,15 @@
   let visibleStart = $state(0);
   let visibleEnd = $state(0);
   let listRef: HTMLDivElement | null = null;
+  const ITEM_HEIGHT = 44;
 
   function updateVisibleRange(): void {
     if (!listRef) return;
     const { scrollTop, clientHeight } = listRef;
-    const itemHeight = 32;
-    visibleStart = Math.max(0, Math.floor(scrollTop / itemHeight));
+    visibleStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT));
     visibleEnd = Math.min(
       filteredList.length,
-      visibleStart + Math.ceil(clientHeight / itemHeight) + 1,
+      visibleStart + Math.ceil(clientHeight / ITEM_HEIGHT) + 1,
     );
   }
 
@@ -221,11 +221,11 @@
         <span class="empty-search-hint">Try a different name, filename, or state key</span>
       </div>
     {:else}
-      <div class="tree-content" style="height: {filteredList.length * 32}px">
+      <div class="tree-content" style="height: {filteredList.length * ITEM_HEIGHT}px">
         {#each filteredList.slice(visibleStart, visibleEnd) as item, i (item.component.id)}
           <div
             class="tree-node"
-            style="transform: translateY({(visibleStart + i) * 32}px); padding-left: {item.depth * 24 + 8}px"
+            style="transform: translateY({(visibleStart + i) * ITEM_HEIGHT}px); padding-left: {item.depth * 24 + 8}px"
           >
             <div
               class="component-row"
@@ -292,7 +292,6 @@
                 {/if}
 
                 <span class="name">{item.component.name}</span>
-
                 {#if item.component.renderDuration}
                   <span
                     class="duration"
@@ -303,28 +302,9 @@
                 {/if}
               </div>
 
-              {#if item.component.sourceLocation}
-                <span
-                  class="source-link"
-                  role="button"
-                  tabindex="0"
-                  onclick={(e) => {
-                    e.stopPropagation();
-                    openSourceLocation(item.component.sourceLocation);
-                  }}
-                  onkeydown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      openSourceLocation(item.component.sourceLocation);
-                    }
-                  }}
-                  title="Click to open source file"
-                >
-                  {formatSourceLocation(item.component.sourceLocation)}
-                </span>
-              {:else if item.component.filename}
-                <span class="source-filename" title={item.component.filename}>
-                  {item.component.filename.split('/').pop()}
+              {#if item.component.filename}
+                <span class="filepath" title={item.component.filename}>
+                  {item.component.filename}
                 </span>
               {/if}
             </div>
@@ -417,18 +397,18 @@
   .tree-node {
     position: absolute;
     width: 100%;
-    height: 32px;
+    height: 44px;
     box-sizing: border-box;
     padding-right: var(--space-4);
   }
 
   .component-row {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    justify-content: center;
     width: 100%;
     height: 100%;
-    padding: 0 var(--space-3);
+    padding: 2px var(--space-3);
     margin: 0 var(--space-2);
     border: none;
     background: transparent;
@@ -529,41 +509,16 @@
     color: var(--status-disconnected);
   }
 
-  .source-filename {
+  .filepath {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 9px;
     color: var(--text-muted);
-    cursor: default;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 200px;
-  }
-
-  .source-link {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 6px;
-    margin-left: var(--space-2);
-    background: var(--svelte-brand-10);
-    color: var(--accent-primary);
-    border-radius: var(--radius-sm);
-    font-size: 10px;
-    cursor: pointer;
-    font-family: var(--font-mono);
-    transition: background var(--transition-fast),
-      color var(--transition-fast);
-    flex-shrink: 0;
-  }
-
-  .source-link:hover {
-    background: var(--accent-primary);
-    color: #fff;
-  }
-
-  .source-link:focus {
-    outline: 2px solid var(--accent-primary);
-    outline-offset: 2px;
+    max-width: 100%;
+    display: block;
+    margin-top: 1px;
   }
 
   .empty-search {
