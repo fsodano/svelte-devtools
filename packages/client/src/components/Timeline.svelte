@@ -85,14 +85,13 @@
   const filters = [
     { id: 'all', label: 'All' }, { id: 'component', label: 'Components' },
     { id: 'state', label: 'State' }, { id: 'effect', label: 'Effects' },
-    { id: 'trace', label: 'Traces' }, { id: 'server', label: 'Server' },
-    { id: 'api', label: 'API' }
+    { id: 'server', label: 'Server' }, { id: 'client', label: 'Client Requests' }
   ];
 
   function getFilteredEntries(): TimelineEntry[] {
     const filtered = filter === 'all' ? entries
-      : filter === 'trace' ? entries.filter(e => e.type === 'trace:trigger')
       : filter === 'server' ? entries.filter(e => e.type.startsWith('server:'))
+      : filter === 'client' ? entries.filter(e => e.type.startsWith('client:'))
       : entries.filter(e => e.type.includes(filter));
     return filtered.slice().reverse();
   }
@@ -137,7 +136,7 @@
         const name = (d as { effectName?: string }).effectName || 'anonymous';
         return `<span style="color: #c586c0">${name}</span>`;
       }
-      case 'server:request': case 'server:trace': case 'server:error': {
+      case 'client:request': case 'server:request': case 'server:ssr': case 'server:trace': case 'server:error': {
         const method = (d as { method?: string }).method || 'GET';
         const url = (d as { url?: string }).url || '';
         const sc = (d as { statusCode?: number }).statusCode;
@@ -155,9 +154,8 @@
       case 'component:unmount': return '🗑️';
       case 'state:change': return '📝';
       case 'effect:run': return '⚡';
-      case 'trace:trigger': return '🔍';
-      case 'server:load': case 'server:trace': case 'server:request': return '🖥️';
-      case 'api:call': return '🌐';
+      case 'server:load': case 'server:ssr': case 'server:request': return '🖥️';
+      case 'client:request': return '🌐';
       case 'hydration': return '💧';
       default: return '•';
     }
@@ -197,7 +195,7 @@
               <span class="time">{formatTime(entry.timestamp)}</span>
               {#if entry.duration}<span class="duration">{@html formatDuration(entry.duration)}</span>{/if}
             </button>
-            {#if ['component:mount','component:unmount','state:change','effect:run','trace:trigger','server:trace','server:request','server:error'].includes(entry.type)}
+            {#if ['component:mount','component:unmount','state:change','effect:run','server:ssr','server:request','server:error','client:request'].includes(entry.type)}
               <div class="entry-summary"><span class="detail-text">{@html formatEntryDetail(entry)}</span></div>
             {/if}
           {/each}

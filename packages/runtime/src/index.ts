@@ -37,6 +37,51 @@ export const runtime = {
             timestamp: performance.now()
         });
 
+        // Intercept client-side fetch calls and emit client:request events
+        if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+            const origFetch = window.fetch.bind(window);
+            const self = this;
+            window.fetch = ((input, init) => {
+                const urlStr = typeof input === 'string' ? input
+                    : input instanceof URL ? input.href
+                    : input instanceof Request ? input.url
+                    : String(input);
+                const method = init?.method || 'GET';
+                const startTime = performance.now();
+                    const promise = origFetch(input, init);
+                    promise.then(async (res) => {
+                    const duration = performance.now() - startTime;
+                    let respBody = '';
+                    try { respBody = await res.clone().text(); } catch {/* ignore */}
+                    const reqHeaders: Record<string, string> = {};
+                    if (init?.headers) {
+                        const h = init.headers;
+                        if (h instanceof Headers) h.forEach((v, k) => { reqHeaders[k] = v; });
+                        else if (Array.isArray(h)) h.forEach(([k, v]) => { reqHeaders[k] = v; });
+                        else Object.assign(reqHeaders, h as Record<string, string>);
+                    }
+                    self.emit({
+                        type: 'client:request',
+                        componentId: '',
+                        componentName: '',
+                        timestamp: Date.now(),
+                        data: {
+                            url: urlStr,
+                            method,
+                            statusCode: res.status,
+                            statusText: res.statusText,
+                            duration,
+                            responseSize: respBody.length,
+                            responseHeaders: Object.fromEntries([...res.headers.entries()]),
+                            requestHeaders: reqHeaders,
+                            responsePreview: respBody.slice(0, 500),
+                        }
+                    });
+                }).catch(() => {});
+                return promise;
+            }) as typeof window.fetch;
+        }
+
         // Watch for DOM mutations to detect component mounts and unmounts.
         // Watches both childList (for new elements) and attributes (for
         // `data-svelte-devtools-id` which Svelte 5 sets after appending).
@@ -302,6 +347,8 @@ export const runtime = {
         key?: string;
         value?: unknown;
         inspectType?: string;
+        data?: unknown;
+        duration?: number;
     }): void {
         if (typeof window !== 'undefined') {
 

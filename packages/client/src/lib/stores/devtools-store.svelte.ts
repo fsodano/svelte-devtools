@@ -201,6 +201,7 @@ function createDevtoolsStore() {
     bridge.on('state:change', handleStateChange as BridgeHandler);
     bridge.on('trace:trigger', handleTraceTrigger as BridgeHandler);
     bridge.on('effect:run', handleEffectRun as BridgeHandler);
+    bridge.on('client:request', handleClientRequest as BridgeHandler);
 
     isConnected = true;
     startServerEventsPoll();
@@ -306,6 +307,26 @@ function createDevtoolsStore() {
       type: 'trace:trigger',
       timestamp: Date.now(),
       data
+    });
+  }
+
+  function handleClientRequest(payload: unknown): void {
+    const p = payload as Record<string, unknown>;
+    const reqData = p.data as Record<string, unknown> || {};
+    addToTimeline({
+      id: generateId(),
+      type: 'client:request',
+      timestamp: Date.now(),
+      duration: reqData.duration as number,
+      data: {
+        url: reqData.url,
+        method: reqData.method,
+        statusCode: reqData.statusCode,
+        duration: reqData.duration,
+        responseSize: reqData.responseSize,
+        responsePreview: reqData.responsePreview,
+        requestBody: reqData.requestBody,
+      }
     });
   }
 
