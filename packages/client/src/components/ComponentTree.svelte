@@ -196,7 +196,6 @@
     </div>
   </div>
 
-  <!-- Simple scrollable list without virtualization for reliability -->
   <div class="tree" bind:this={listRef}>
     {#if filteredList.length === 0 && searchTerm.trim()}
       <div class="empty-search">
@@ -222,25 +221,26 @@
         <span class="empty-search-hint">Try a different name, filename, or state key</span>
       </div>
     {:else}
-      {#each filteredList as item (item.component.id)}
-        <div
-          class="tree-node"
-          style="padding-left: {item.depth * 24 + 8}px"
-        >
+      <div class="tree-content" style="height: {filteredList.length * 32}px">
+        {#each filteredList as item, i (item.component.id)}
           <div
-            class="component-row"
-            class:selected={selectedId === item.component.id}
-            role="button"
-            tabindex="0"
-            aria-label="Select {item.component.name} component"
-            onclick={() => onSelect(item.component.id)}
-            onkeydown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelect(item.component.id);
-              }
-            }}
+            class="tree-node"
+            style="transform: translateY({i * 32}px); padding-left: {item.depth * 24 + 8}px"
           >
+            <div
+              class="component-row"
+              class:selected={selectedId === item.component.id}
+              role="button"
+              tabindex="0"
+              aria-label="Select {item.component.name} component"
+              onclick={() => onSelect(item.component.id)}
+              onkeydown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelect(item.component.id);
+                }
+              }}
+            >
               <div class="indent-guide">
                 {#each Array(item.depth) as _, idx}
                   <span
@@ -304,12 +304,13 @@
 
               {#if item.component.filename}
                 <span class="filepath" title={item.component.filename}>
-                  {item.component.filename.length > 50 ? '...' + item.component.filename.slice(-50) : item.component.filename}
+                  {item.component.filename.length > 30 ? '...' + item.component.filename.slice(-30) : item.component.filename}
                 </span>
               {/if}
             </div>
           </div>
         {/each}
+      </div>
     {/if}
   </div>
 </div>
@@ -396,18 +397,18 @@
   .tree-node {
     position: absolute;
     width: 100%;
-    height: 44px;
+    height: 32px;
     box-sizing: border-box;
     padding-right: var(--space-4);
   }
 
   .component-row {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
+    align-items: center;
+    justify-content: space-between;
     width: 100%;
     height: 100%;
-    padding: 2px var(--space-3);
+    padding: 0 var(--space-3);
     margin: 0 var(--space-2);
     border: none;
     background: transparent;
@@ -515,9 +516,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 100%;
-    display: block;
-    margin-top: 1px;
+    max-width: 180px;
+    flex-shrink: 0;
+    margin-left: auto;
+    text-align: right;
   }
 
   .empty-search {
