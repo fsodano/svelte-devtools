@@ -118,12 +118,7 @@
       case 'component:mount': {
         const name = (d as { name?: string }).name || 'unknown';
         const filename = (d as { filename?: string }).filename || '';
-        const state = (d as { state?: Record<string, unknown> }).state;
-        const stateCount = state ? Object.keys(state).length : 0;
-        const preview = state && stateCount > 0
-          ? ` (${Object.entries(state).slice(0, 3).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ')}${stateCount > 3 ? '…' : ''})`
-          : '';
-        return `<span style="color: #9cdcfe">${name}</span>${filename ? ` <span style="color: #858585">${filename}</span>` : ''}${preview}`;
+        return `<span style="color: #9cdcfe">${name}</span>${filename ? ` <span style="color: #858585">${filename}</span>` : ''}`;
       }
       case 'component:unmount': {
         const name = (d as { name?: string }).name || (d.id as string) || 'unknown';

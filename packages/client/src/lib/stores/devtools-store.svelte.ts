@@ -98,14 +98,16 @@ function createDevtoolsStore() {
       return mutated ? { ...c, state, props } : c;
     });
 
-    // Add deduplicated timeline entries
-    for (const te of timelineEntries) {
-      addToTimeline({
-        id: generateId(),
-        type: 'state:change',
-        timestamp: Date.now(),
+    // Batch-add timeline entries (single array copy)
+    if (timelineEntries.length > 0) {
+      const now = Date.now();
+      const newEntries: TimelineEntry[] = timelineEntries.map(te => ({
+        id: `evt-${now}-${Math.random().toString(36).substring(2, 11)}`,
+        type: 'state:change' as const,
+        timestamp: now,
         data: te.data
-      });
+      }));
+      timeline = [...timeline, ...newEntries].slice(-1000);
     }
   }
 
@@ -217,7 +219,12 @@ function createDevtoolsStore() {
       id: generateId(),
       type: 'component:mount',
       timestamp: Date.now(),
-      data: node
+      data: {
+        id: node.id,
+        name: node.name,
+        filename: node.filename,
+        parentId: node.parentId
+      }
     });
 
     if (isRecording && !hasInitialMountCaptured) {
@@ -315,6 +322,12 @@ function createDevtoolsStore() {
 
   function addToTimeline(entry: TimelineEntry): void {
     timeline = [...timeline, entry].slice(-1000);
+  }
+
+  /** Add multiple timeline entries in one array copy (avoids O(n²) behavior). */
+  function addTimelineBatch(entries: TimelineEntry[]): void {
+    if (entries.length === 0) return;
+    timeline = [...timeline, ...entries].slice(-1000);
   }
 
   function clearTimeline(): void {

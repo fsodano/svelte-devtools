@@ -21,8 +21,8 @@
 	let searchQuery = $state('');
 	let selectedType = $state<string | null>(null);
 	let currentPage = $state(1);
-	let detailsMap = $state<Record<number, PokemonDetail>>({});
-	let selectedPokemon = $state<PokemonDetail | null>(null);
+	let detailsMap = $state<Record<number, PokemonDetailData>>({});
+	let selectedPokemon = $state<PokemonDetailData | null>(null);
 	let typeNames = $state<Set<string> | null>(null);
 	let isLoadingPage = $state(false);
 	let isLoadingType = $state(false);
@@ -37,7 +37,7 @@
 
 	let typeFiltered = $derived.by(() => {
 		if (!selectedType || !typeNames) return searchFiltered;
-		return searchFiltered.filter((p) => typeNames.has(p.name));
+		return searchFiltered.filter((p) => typeNames!.has(p.name));
 	});
 
 	let totalPages = $derived(Math.max(1, Math.ceil(typeFiltered.length / PAGE_SIZE)));
