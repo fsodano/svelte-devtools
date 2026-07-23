@@ -10,6 +10,10 @@
   let activeTab = $state("components");
   let selectedComponent = $state<string | null>(null);
 
+  function handleSelectComponent(id: string) {
+    selectedComponent = id;
+  }
+
   const components = $derived(devtoolsStore.components);
   const isConnected = $derived(devtoolsStore.isConnected);
 
@@ -69,11 +73,15 @@
         <div class="split-view">
           <ComponentTree
             {components}
-            onSelect={(id) => (selectedComponent = id)}
+            onSelect={handleSelectComponent}
             selectedId={selectedComponent}
           />
           {#if selectedComponent}
-            <ComponentDetail componentId={selectedComponent} />
+            <div class="key-wrap">
+              {#key selectedComponent}
+                <ComponentDetail componentId={selectedComponent} />
+              {/key}
+            </div>
           {:else}
             <div class="empty">
               {components.length === 0

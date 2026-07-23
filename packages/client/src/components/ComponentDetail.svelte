@@ -5,10 +5,12 @@
 
   let { componentId }: { componentId: string } = $props();
 
+  let activeTab = $state<"props" | "state" | "dom" | "source">("state");
   const component = $derived(
     devtoolsStore.components.find((c) => c.id === componentId),
   );
-  let activeTab = $state<"props" | "state" | "dom" | "source">("props");
+  let stateEntries = $derived(Object.entries(component?.state || {}));
+  let propsEntries = $derived(Object.entries(component?.props || {}));
   // Track recently changed keys for highlight animation
   let changedKeys = $state<Set<string>>(new Set());
 
@@ -43,10 +45,21 @@
   function formatValue(value: unknown): string {
     if (value === null) return "null";
     if (value === undefined) return "undefined";
+    if (typeof value === "function") return "[Snippet]";
     if (typeof value === "string") return `"${value}"`;
     if (typeof value === "number" || typeof value === "boolean")
       return String(value);
-    if (Array.isArray(value)) return `[Array(${value.length})]`;
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '[]';
+      const preview = value.slice(0, 3).map(v => {
+        if (typeof v === 'string') return `"${v}"`;
+        if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+        if (v === null) return 'null';
+        if (typeof v === 'object') return Array.isArray(v) ? `[…]` : `{…}`;
+        return String(v);
+      }).join(', ');
+      return `[${preview}${value.length > 3 ? ', …' : ''}]`;
+    }
     if (typeof value === "object") {
       try {
         return JSON.stringify(value);
@@ -54,7 +67,7 @@
         return "{...}";
       }
     }
-    return String(value);
+    try { return String(value); } catch (e) { return '{...}'; }
   }
 
   function isExpandable(value: unknown): boolean {
@@ -103,8 +116,8 @@
         onclick={() => (activeTab = "state")}
       >
         State
-        {#if component.state && Object.keys(component.state).length > 0}
-          <span class="badge">{Object.keys(component.state).length}</span>
+        {#if stateEntries.length > 0}
+          <span class="badge">{stateEntries.length}</span>
         {/if}
       </button>
       <button
@@ -113,8 +126,8 @@
         onclick={() => (activeTab = "props")}
       >
         Props
-        {#if component.props && Object.keys(component.props).length > 0}
-          <span class="badge">{Object.keys(component.props).length}</span>
+        {#if propsEntries.length > 0}
+          <span class="badge">{propsEntries.length}</span>
         {/if}
       </button>
       <button
@@ -137,7 +150,7 @@
       {#if activeTab === "state"}
         {#if Object.keys(component.state || {}).length > 0}
           <div class="props-list">
-            {#each Object.entries(component.state || {}) as [key, value] (key)}
+            {#each stateEntries as [key, value] (key)}
               <div class="prop-row" class:changed={isChanged(key)}>
                 <span class="prop-key">{key}</span>
                 <span class="prop-value">
@@ -156,7 +169,7 @@
       {:else if activeTab === "props"}
         {#if Object.keys(component.props || {}).length > 0}
           <div class="props-list">
-            {#each Object.entries(component.props || {}) as [key, value] (key)}
+            {#each propsEntries as [key, value] (key)}
               <div class="prop-row" class:changed={isChanged(key)}>
                 <span class="prop-key">{key}</span>
                 <span class="prop-value">

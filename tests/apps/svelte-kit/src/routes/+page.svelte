@@ -3,6 +3,7 @@
 	import welcome from '$lib/images/svelte-welcome.webp';
 
 	import Counter from './Counter.svelte';
+	import SimpleCounter from './SimpleCounter.svelte';
 </script>
 
 <svelte:head>
@@ -27,6 +28,7 @@
 	</h2>
 
 	<Counter />
+	<SimpleCounter />
 </section>
 
 <style>
