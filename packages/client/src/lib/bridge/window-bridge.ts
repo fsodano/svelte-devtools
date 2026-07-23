@@ -78,7 +78,6 @@ const payload: ComponentMountPayload = {
 
             setInterval(syncComponents, 500);
 
-            // Listen for unmount events to clean up tracking
             targetWindow.addEventListener('message', (event) => {
                 const data = event.data;
                 if (data?.source === 'svelte-devtools' && data?.type === 'component-unmount') {

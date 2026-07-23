@@ -37,7 +37,6 @@ export const runtime = {
             timestamp: performance.now()
         });
 
-        // Intercept client-side fetch calls and emit client:request events
         if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
             const origFetch = window.fetch.bind(window);
             const self = this;
@@ -82,9 +81,6 @@ export const runtime = {
             }) as typeof window.fetch;
         }
 
-        // Watch for DOM mutations to detect component mounts and unmounts.
-        // Watches both childList (for new elements) and attributes (for
-        // `data-svelte-devtools-id` which Svelte 5 sets after appending).
         if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
             const tryRegister = (el: Element, registry: Map<string, { id: string; name: string; filename: string }> | undefined) => {
                 const id = el.getAttribute('data-svelte-devtools-id');

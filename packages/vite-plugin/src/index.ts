@@ -163,7 +163,6 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                 const startTime = Date.now();
                 const reqKey = `${req.method}:${url}`;
 
-                // req.on('data') doesn't work — Vite's middleware stack may consume the stream first
                 const reqBodyPreview = '';
 
                 const originalEnd = res.end.bind(res);
@@ -183,7 +182,6 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
                         markSeenTimestamps.delete(reqKey);
                         return;
                     }
-                    // Skip Vite dev module requests (individual .svelte/.js/.ts/.css files)
                     if (/\.(svelte|js|ts|css|json|ico|svg|png|woff2?)$/.test(url)) return;
                     const body = Buffer.concat(bodyChunks).toString('utf-8');
                     const contentType = (res.getHeader('content-type') as string) || '';

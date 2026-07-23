@@ -13,8 +13,6 @@ interface ServerEvent {
     data: unknown;
 }
 
-/** Install the fetch interceptor at module load time so it wraps
- *  globalThis.fetch before SvelteKit caches it for load functions. */
 const _origFetch = globalThis.fetch.bind(globalThis);
 globalThis.fetch = ((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const urlStr = typeof input === 'string' ? input
@@ -60,7 +58,6 @@ export function svelteDevToolsHandle(): Handle {
         const svelteRuntime =
             `<script type="module" src="/__svelte-devtools/svelte-runtime.js"></script>`;
 
-        // Inject @vitejs/devtools client for SvelteKit SSR (Vite's transformIndexHtml is bypassed by SSR)
         const devtoolsInjectPath = (globalThis as Record<string, unknown>).__SVELTE_DEVTOOLS_INJECT_PATH__ as string | undefined;
         const devtoolsInject = devtoolsInjectPath
             ? `<script type="module" src="/@fs${devtoolsInjectPath}"></script>`
@@ -124,7 +121,6 @@ export function svelteDevToolsHandle(): Handle {
                 | undefined;
 
             if (addEvent) {
-                // Skip Vite dev module requests (individual .svelte/.js/.ts/.css files)
                 const path = event.url.pathname;
                 if (/\.(svelte|js|ts|css|json|ico|svg|png|woff2?)$/.test(path)) { return response!; }
                 const resHeadersRaw = response?.headers;
