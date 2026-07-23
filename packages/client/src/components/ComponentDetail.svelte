@@ -9,6 +9,36 @@
     devtoolsStore.components.find((c) => c.id === componentId),
   );
   let activeTab = $state<"props" | "state" | "dom" | "source">("props");
+  // Track recently changed keys for highlight animation
+  let changedKeys = $state<Set<string>>(new Set());
+
+  function detectChanges(prev: Record<string, unknown> | undefined, curr: Record<string, unknown>) {
+    if (!prev) return;
+    const keys = new Set([...Object.keys(prev), ...Object.keys(curr)]);
+    const changed = new Set<string>();
+    for (const k of keys) {
+      if (JSON.stringify(prev[k]) !== JSON.stringify(curr[k])) {
+        changed.add(k);
+      }
+    }
+    if (changed.size > 0) {
+      changedKeys = changed;
+      setTimeout(() => { changedKeys = new Set(); }, 1500);
+    }
+  }
+
+  let prevState: Record<string, unknown> | undefined;
+  let prevProps: Record<string, unknown> | undefined;
+  $effect(() => {
+    const c = component;
+    if (!c) return;
+    if (prevState) detectChanges(prevState, c.state || {});
+    if (prevProps) detectChanges(prevProps, c.props || {});
+    prevState = c.state || {};
+    prevProps = c.props || {};
+  });
+
+  function isChanged(key: string): boolean { return changedKeys.has(key); }
 
   function formatValue(value: unknown): string {
     if (value === null) return "null";
@@ -73,6 +103,9 @@
         onclick={() => (activeTab = "props")}
       >
         Props
+        {#if component.props && Object.keys(component.props).length > 0}
+          <span class="badge">{Object.keys(component.props).length}</span>
+        {/if}
       </button>
       <button
         class="tab"
@@ -80,6 +113,9 @@
         onclick={() => (activeTab = "state")}
       >
         State
+        {#if component.state && Object.keys(component.state).length > 0}
+          <span class="badge">{Object.keys(component.state).length}</span>
+        {/if}
       </button>
       <button
         class="tab"
@@ -102,7 +138,7 @@
         {#if Object.keys(component.props || {}).length > 0}
           <div class="props-list">
             {#each Object.entries(component.props || {}) as [key, value] (key)}
-              <div class="prop-row">
+              <div class="prop-row" class:changed={isChanged(key)}>
                 <span class="prop-key">{key}</span>
                 <span class="prop-value">
                   {#if isExpandable(value)}
@@ -121,7 +157,7 @@
         {#if Object.keys(component.state || {}).length > 0}
           <div class="props-list">
             {#each Object.entries(component.state || {}) as [key, value] (key)}
-              <div class="prop-row">
+              <div class="prop-row" class:changed={isChanged(key)}>
                 <span class="prop-key">{key}</span>
                 <span class="prop-value">
                   {#if isExpandable(value)}
@@ -225,6 +261,15 @@
     background: var(--bg-elevated);
     border-bottom: 2px solid var(--accent-primary);
   }
+  .tab .badge {
+    margin-left: 6px; padding: 0 6px; line-height: 16px;
+    background: var(--bg-inset); color: var(--text-muted);
+    border-radius: 10px; font-size: 10px; font-weight: 500;
+    display: inline-block;
+  }
+  .tab.active .badge {
+    background: var(--accent-primary); color: #fff;
+  }
 
   .content {
     flex: 1;
@@ -246,6 +291,14 @@
     padding: var(--space-2);
     background: var(--bg-inset);
     border-radius: var(--radius-sm);
+  }
+
+  .prop-row.changed {
+    animation: highlight-fade 1.5s ease-out;
+  }
+  @keyframes highlight-fade {
+    0% { background: color-mix(in srgb, var(--accent-primary) 30%, var(--bg-inset)); outline: 1px solid var(--accent-primary); }
+    100% { background: var(--bg-inset); outline: 1px solid transparent; }
   }
 
   .prop-key {
