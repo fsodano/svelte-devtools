@@ -1,0 +1,83 @@
+@import '@picocss/pico';
+
+/* ── Type pill ── */
+.type-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	padding: 0.125rem 0.625rem;
+	border-radius: 999px;
+	font-size: 0.65rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: #fff;
+	box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+/* ── Stat bar ── */
+.stat-bar {
+	position: relative;
+	height: 0.5rem;
+	border-radius: 999px;
+	background: var(--pico-contrast-fade, #333);
+	overflow: hidden;
+}
+.stat-bar-fill {
+	position: absolute;
+	inset: 0;
+	left: 0;
+	border-radius: 999px;
+	transition: width 0.5s ease-out;
+}
+
+/* ── Animations ── */
+@keyframes fade-in {
+	from { opacity: 0; transform: scale(0.95); }
+	to { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-up {
+	from { opacity: 0; transform: translateY(12px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fade-in 0.2s ease-out; }
+.animate-slide-up { animation: slide-up 0.3s ease-out; }
+
+/* ── Pokemon list ── */
+.pokemon-list {
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 0.5rem !important;
+}
+.pokemon-list > article {
+	margin: 0 !important;
+}
+
+/* ── Detail panel ── */
+.detail-panel {
+	position: sticky;
+	top: 1rem;
+}
+
+/* ── Modal backdrop ── */
+.modal-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.7);
+	backdrop-filter: blur(4px);
+	-webkit-backdrop-filter: blur(4px);
+	padding: 1rem;
+}
+
+/* ── Header search ── */
+.search-input {
+	margin-bottom: 0;
+}
+
+/* ── Filter buttons ── */
+.filter-all-btn.active { --pico-background-color: var(--pico-primary); --pico-border-color: var(--pico-primary); }
+.filter-type-btn.active { outline: 2px solid rgba(255,255,255,0.4); outline-offset: 2px; }

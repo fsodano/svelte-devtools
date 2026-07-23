@@ -76,9 +76,18 @@
             <ComponentDetail componentId={selectedComponent} />
           {:else}
             <div class="empty">
-              {components.length === 0
-                ? "No components found. Is this a Svelte page?"
-                : "Select a component"}
+              {#if components.length === 0}
+                <span>No components found. Is this a Svelte page?</span>
+                <button class="refresh-btn" onclick={() => devtoolsStore.refresh()}>
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 8a6 6 0 0 1 11.5-3.5M14 8a6 6 0 0 1-11.5 3.5"/>
+                    <path d="M14 2v3.5H10.5M2 14v-3.5h3.5"/>
+                  </svg>
+                  Refresh
+                </button>
+              {:else}
+                Select a component
+              {/if}
             </div>
           {/if}
         </div>

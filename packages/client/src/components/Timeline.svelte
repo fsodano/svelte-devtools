@@ -28,6 +28,26 @@
   let entries = $derived(devtoolsStore.timeline);
   let filter = $state<string>('all');
   let selectedEntry = $state<TimelineEntry | null>(null);
+  let detailWidth = $state(280);
+  let isResizing = $state(false);
+
+  function startResize(e: MouseEvent) {
+    e.preventDefault();
+    isResizing = true;
+    const startX = e.clientX;
+    const startW = detailWidth;
+    function onMove(ev: MouseEvent) {
+      if (!isResizing) return;
+      detailWidth = Math.max(160, startW + (ev.clientX - startX));
+    }
+    function onUp() {
+      isResizing = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
 
   // --- Snapshot / branch state ---
   let snapshots = $derived(devtoolsStore.timeTravel.snapshots as unknown as SnapshotNode[]);
@@ -65,14 +85,13 @@
   const filters = [
     { id: 'all', label: 'All' }, { id: 'component', label: 'Components' },
     { id: 'state', label: 'State' }, { id: 'effect', label: 'Effects' },
-    { id: 'trace', label: 'Traces' }, { id: 'server', label: 'Server' },
-    { id: 'api', label: 'API' }
+    { id: 'server', label: 'Server' }, { id: 'client', label: 'Client Requests' }
   ];
 
   function getFilteredEntries(): TimelineEntry[] {
     const filtered = filter === 'all' ? entries
-      : filter === 'trace' ? entries.filter(e => e.type === 'trace:trigger')
       : filter === 'server' ? entries.filter(e => e.type.startsWith('server:'))
+      : filter === 'client' ? entries.filter(e => e.type.startsWith('client:'))
       : entries.filter(e => e.type.includes(filter));
     return filtered.slice().reverse();
   }
@@ -98,12 +117,7 @@
       case 'component:mount': {
         const name = (d as { name?: string }).name || 'unknown';
         const filename = (d as { filename?: string }).filename || '';
-        const state = (d as { state?: Record<string, unknown> }).state;
-        const stateCount = state ? Object.keys(state).length : 0;
-        const preview = state && stateCount > 0
-          ? ` (${Object.entries(state).slice(0, 3).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ')}${stateCount > 3 ? '…' : ''})`
-          : '';
-        return `<span style="color: #9cdcfe">${name}</span>${filename ? ` <span style="color: #858585">${filename}</span>` : ''}${preview}`;
+        return `<span style="color: #9cdcfe">${name}</span>${filename ? ` <span style="color: #858585">${filename}</span>` : ''}`;
       }
       case 'component:unmount': {
         const name = (d as { name?: string }).name || (d.id as string) || 'unknown';
@@ -122,7 +136,7 @@
         const name = (d as { effectName?: string }).effectName || 'anonymous';
         return `<span style="color: #c586c0">${name}</span>`;
       }
-      case 'server:request': case 'server:trace': case 'server:error': {
+      case 'client:request': case 'server:request': case 'server:ssr': case 'server:trace': case 'server:error': {
         const method = (d as { method?: string }).method || 'GET';
         const url = (d as { url?: string }).url || '';
         const sc = (d as { statusCode?: number }).statusCode;
@@ -140,9 +154,8 @@
       case 'component:unmount': return '🗑️';
       case 'state:change': return '📝';
       case 'effect:run': return '⚡';
-      case 'trace:trigger': return '🔍';
-      case 'server:load': case 'server:trace': case 'server:request': return '🖥️';
-      case 'api:call': return '🌐';
+      case 'server:load': case 'server:ssr': case 'server:request': return '🖥️';
+      case 'client:request': return '🌐';
       case 'hydration': return '💧';
       default: return '•';
     }
@@ -171,27 +184,33 @@
       <button class="clear-btn" onclick={clearTimeline}>Clear events</button>
     </header>
 
-    <div class="entries-list">
-      {#if getFilteredEntries().length > 0}
-        {#each getFilteredEntries() as entry (entry.id)}
-          <button class="entry-row" class:selected={selectedEntry?.id === entry.id}
-            onclick={() => selectedEntry = entry}>
-            <span class="icon">{getEventIcon(entry.type)}</span>
-            <span class="entry-title">{entry.type}</span>
-            <span class="time">{formatTime(entry.timestamp)}</span>
-            {#if entry.duration}<span class="duration">{@html formatDuration(entry.duration)}</span>{/if}
-          </button>
-          {#if ['component:mount','component:unmount','state:change','effect:run','trace:trigger','server:trace','server:request','server:error'].includes(entry.type)}
-            <div class="entry-summary"><span class="detail-text">{@html formatEntryDetail(entry)}</span></div>
-          {/if}
-        {/each}
-      {:else}
-        <div class="empty">No events recorded</div>
-      {/if}
-    </div>
+    <div class="entries-split">
+      <div class="entries-list">
+        {#if getFilteredEntries().length > 0}
+          {#each getFilteredEntries() as entry (entry.id)}
+            <button class="entry-row" class:selected={selectedEntry?.id === entry.id}
+              onclick={() => selectedEntry = entry}>
+              <span class="icon">{getEventIcon(entry.type)}</span>
+              <span class="entry-title">{entry.type}</span>
+              <span class="time">{formatTime(entry.timestamp)}</span>
+              {#if entry.duration}<span class="duration">{@html formatDuration(entry.duration)}</span>{/if}
+            </button>
+            {#if ['component:mount','component:unmount','state:change','effect:run','server:ssr','server:request','server:error','client:request'].includes(entry.type)}
+              <div class="entry-summary"><span class="detail-text">{@html formatEntryDetail(entry)}</span></div>
+            {/if}
+          {/each}
+        {:else}
+          <div class="empty">No events recorded</div>
+        {/if}
+      </div>
 
     {#if selectedEntry}
-      <div class="detail-panel">
+      <div class="tl-divider"
+        role="separator" tabindex="0"
+        class:resizing={isResizing}
+        onmousedown={startResize}
+      ></div>
+      <div class="detail-panel" style="width: {detailWidth}px">
         <header class="detail-header">
           <span class="detail-title">{selectedEntry.type}</span>
           <button class="detail-close" onclick={() => selectedEntry = null}>✕</button>
@@ -203,6 +222,7 @@
         <div class="detail-data"><h4 class="data-heading">Data</h4><JsonTree value={selectedEntry.data} /></div>
       </div>
     {/if}
+    </div><!-- /entries-split -->
   </div>
 
   <!-- ─── Right: branch tree ─── -->
@@ -271,6 +291,13 @@
 <style>
   .timeline-layout { display: flex; height: 100%; background: var(--bg-surface); }
 
+  /* ─── Split: events list + detail panel side by side ─── */
+  .entries-split { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+  /* ─── Resize divider ─── */
+  .tl-divider { width: 4px; flex-shrink: 0; cursor: col-resize; background: transparent; transition: background 0.15s; position: relative; z-index: 1; }
+  .tl-divider:hover, .tl-divider.resizing { background: var(--accent-primary, #ff3e00); }
+
   /* ─── Left side: events ─── */
   .tl-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 
@@ -328,9 +355,9 @@
   .entry-summary { padding: 2px var(--space-2) 6px 32px; font-size: 10px; color: var(--text-secondary); border-bottom: 1px solid var(--border-default); }
 
   .detail-panel {
-    width: 280px; flex-shrink: 0; display: flex; flex-direction: column;
+    flex-shrink: 0; display: flex; flex-direction: column;
     border-left: 1px solid var(--border-default); background: var(--bg-surface);
-    overflow-y: auto; border-top: 1px solid var(--border-default);
+    overflow-y: auto;
   }
   .detail-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-default); }
   .detail-title { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--syntax-key); }

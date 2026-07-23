@@ -14,6 +14,7 @@ export const EVENT_TYPES = {
   EFFECT_RUN: 'effect:run',
   TRACE_TRIGGER: 'trace:trigger',
   RUNTIME_READY: 'runtime:ready',
+  CLIENT_REQUEST: 'client:request',
 } as const;
 
 export type EventType = typeof EVENT_TYPES[keyof typeof EVENT_TYPES];
