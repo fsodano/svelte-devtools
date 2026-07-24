@@ -2,30 +2,33 @@
   /* Svelte Brand Colors */
   --svelte-brand: #FF3E00;
   --svelte-brand-light: #FF7B29;
-  --svelte-brand-10: rgba(255, 62, 0, 0.1);
+  --svelte-brand-10: rgba(255, 62, 0, 0.08);
   --svelte-brand-15: rgba(255, 62, 0, 0.15);
+  --svelte-brand-20: rgba(255, 62, 0, 0.2);
 
-  /* Light mode (default) */
-  --bg-base: #FFF5F0;
-  --bg-surface: #FFFFFF;
-  --bg-elevated: #FFFFFF;
-  --bg-inset: #F5F0ED;
+  /* Light mode (default) — inspired by Vue DevTools warmth */
+  --bg-base: #f5f5f0;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-inset: #ebebe5;
   --bg-hover: rgba(255, 62, 0, 0.06);
+  --bg-sidebar: #2c2c2e;
 
-  --text-primary: #1C1C1E;
-  --text-secondary: #6B6B6E;
-  --text-muted: #9E9EA2;
+  --text-primary: #1c1c1e;
+  --text-secondary: #6b6b70;
+  --text-muted: #9e9ea4;
+  --text-inverse: #eaeaea;
 
   --border-subtle: rgba(255, 62, 0, 0.1);
   --border-default: rgba(28, 28, 30, 0.08);
 
-  --status-connected: #34C759;
-  --status-disconnected: #FF3A2F;
+  --status-connected: #34c759;
+  --status-disconnected: #ff3a2f;
 
   /* Accent */
-  --accent-primary: #FF3E00;
-  --accent-secondary: #FF7B29;
-  --accent-hover: #E63A00;
+  --accent-primary: #ff3e00;
+  --accent-secondary: #ff7b29;
+  --accent-hover: #e63a00;
 
   /* Spacing scale */
   --space-1: 4px;
@@ -36,8 +39,8 @@
   --space-6: 24px;
 
   /* Typography */
-  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', 'SFMono-Regular', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 
   /* Border radius */
   --radius-sm: 4px;
@@ -48,11 +51,13 @@
   /* Semantic colors */
   --warning: #ff9800;
   --error: #f44336;
-  --success: #34C759;
+  --success: #34c759;
 
   /* Syntax highlighting (light mode) */
-  --syntax-key: #0070c0;
+  --syntax-key: #0550ae;
   --syntax-string: #a31515;
+  --syntax-number: #098658;
+  --syntax-boolean: #0000ff;
 
   /* Error surfaces */
   --bg-error: rgba(255, 58, 47, 0.08);
@@ -64,89 +69,110 @@
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(28, 28, 30, 0.04);
-  --shadow-md: 0 4px 12px rgba(28, 28, 30, 0.08);
+  --shadow-md: 0 2px 8px rgba(28, 28, 30, 0.08);
+  --shadow-lg: 0 4px 16px rgba(28, 28, 30, 0.12);
 
   /* Transitions */
-  --transition-fast: 150ms ease;
+  --transition-fast: 120ms ease;
   --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg-base: #1C1C1E;
-    --bg-surface: #2D2D30;
-    --bg-elevated: #3A3A3E;
-    --bg-inset: #141415;
-    --bg-hover: rgba(255, 62, 0, 0.12);
+    --bg-base: #1a1a1e;
+    --bg-surface: #252528;
+    --bg-elevated: #2c2c30;
+    --bg-inset: #141416;
+    --bg-hover: rgba(255, 62, 0, 0.1);
+    --bg-sidebar: #1a1a1e;
 
-    --text-primary: #EAEAEA;
-    --text-secondary: #A0A0A5;
-    --text-muted: #6E6E73;
+    --text-primary: #eaeaea;
+    --text-secondary: #a0a0a6;
+    --text-muted: #6e6e74;
+    --text-inverse: #1c1c1e;
 
-    --border-subtle: rgba(255, 62, 0, 0.15);
-    --border-default: rgba(234, 234, 234, 0.08);
+    --border-subtle: rgba(255, 62, 0, 0.12);
+    --border-default: rgba(234, 234, 234, 0.06);
 
-    --status-connected: #30D158;
-    --status-disconnected: #FF453A;
+    --status-connected: #30d158;
+    --status-disconnected: #ff453a;
 
-    --syntax-key: #9cdcfe;
+    --syntax-key: #75bfff;
     --syntax-string: #ce9178;
+    --syntax-number: #b5cea8;
+    --syntax-boolean: #569cd6;
 
     --bg-error: rgba(255, 69, 58, 0.2);
-    --text-error: #FF453A;
+    --text-error: #ff453a;
 
     --bg-connected: rgba(48, 209, 88, 0.15);
     --bg-disconnected: rgba(255, 69, 58, 0.2);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
   }
 }
 
 /* Manual override */
 [data-theme="dark"] {
-  --bg-base: #1C1C1E;
-  --bg-surface: #2D2D30;
-  --bg-elevated: #3A3A3E;
-  --bg-inset: #141415;
-  --bg-hover: rgba(255, 62, 0, 0.12);
+  --bg-base: #1a1a1e;
+  --bg-surface: #252528;
+  --bg-elevated: #2c2c30;
+  --bg-inset: #141416;
+  --bg-hover: rgba(255, 62, 0, 0.1);
+  --bg-sidebar: #1a1a1e;
 
-  --text-primary: #EAEAEA;
-  --text-secondary: #A0A0A5;
-  --text-muted: #6E6E73;
+  --text-primary: #eaeaea;
+  --text-secondary: #a0a0a6;
+  --text-muted: #6e6e74;
+  --text-inverse: #1c1c1e;
 
-  --border-subtle: rgba(255, 62, 0, 0.15);
-  --border-default: rgba(234, 234, 234, 0.08);
+  --border-subtle: rgba(255, 62, 0, 0.12);
+  --border-default: rgba(234, 234, 234, 0.06);
 
-  --status-connected: #30D158;
-  --status-disconnected: #FF453A;
+  --status-connected: #30d158;
+  --status-disconnected: #ff453a;
 
-  --syntax-key: #9cdcfe;
+  --syntax-key: #75bfff;
   --syntax-string: #ce9178;
+  --syntax-number: #b5cea8;
+  --syntax-boolean: #569cd6;
 
   --bg-error: rgba(255, 69, 58, 0.2);
-  --text-error: #FF453A;
+  --text-error: #ff453a;
 
   --bg-connected: rgba(48, 209, 88, 0.15);
   --bg-disconnected: rgba(255, 69, 58, 0.2);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 [data-theme="light"] {
-  --bg-base: #FFF5F0;
-  --bg-surface: #FFFFFF;
-  --bg-elevated: #FFFFFF;
-  --bg-inset: #F5F0ED;
+  --bg-base: #f5f5f0;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-inset: #ebebe5;
   --bg-hover: rgba(255, 62, 0, 0.06);
+  --bg-sidebar: #2c2c2e;
 
-  --text-primary: #1C1C1E;
-  --text-secondary: #6B6B6E;
-  --text-muted: #9E9EA2;
+  --text-primary: #1c1c1e;
+  --text-secondary: #6b6b70;
+  --text-muted: #9e9ea4;
+  --text-inverse: #eaeaea;
 
   --border-subtle: rgba(255, 62, 0, 0.1);
   --border-default: rgba(28, 28, 30, 0.08);
 
-  --status-connected: #34C759;
-  --status-disconnected: #FF3A2F;
+  --status-connected: #34c759;
+  --status-disconnected: #ff3a2f;
 
-  --syntax-key: #0070c0;
+  --syntax-key: #0550ae;
   --syntax-string: #a31515;
+  --syntax-number: #098658;
+  --syntax-boolean: #0000ff;
 
   --bg-error: rgba(255, 58, 47, 0.08);
   --text-error: #c62828;

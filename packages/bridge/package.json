@@ -1,0 +1,30 @@
+{
+  "name": "@svelte-devtools/bridge",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "birpc": "^0.2.19"
+  },
+  "peerDependencies": {
+    "@svelte-devtools/types": "file:../types"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.2.2"
+  }
+}

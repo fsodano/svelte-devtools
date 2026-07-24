@@ -273,6 +273,30 @@ function createDevtoolsStore() {
     const value = data.value instanceof Map ? Object.fromEntries(data.value) : data.value;
     const isProp = (data as Record<string, unknown>).type === 'props';
 
+    // ── Motion gate (Spring/Tween) ──────────────────────────────
+    // Detect animation frames from the $effect watcher on class
+    // instances. Mid-animation frames are dropped entirely; settled
+    // frames proceed to the debounced batch.
+    const isMotion = value && typeof value === 'object'
+      && 'current' in (value as Record<string, unknown>)
+      && 'target' in (value as Record<string, unknown>);
+    if (isMotion) {
+      const cur = (value as Record<string, unknown>).current as number;
+      const tgt = (value as Record<string, unknown>).target as number;
+      const key = `${data.componentId}::${data.key}`;
+      const prev = _lastCur.get(key);
+      const settled = cur === tgt || Math.abs(cur - tgt) < SETTLE_TOLERANCE;
+      if (!settled) {
+        _lastCur.set(key, cur);
+        activeMotions.add(key);
+        return; // mid‑animation → drop this frame entirely
+      }
+      // Settled: one last value, safe to record
+      activeMotions.delete(key);
+      if (prev !== undefined && Math.abs(cur - prev) < SETTLE_TOLERANCE) return; // dup
+      _lastCur.set(key, cur);
+    }
+
     // Queue into debounced batch instead of immediately rebuilding the
     // entire components array on every single $inspect fire.
     pendingStateChanges.push({
@@ -296,7 +320,7 @@ function createDevtoolsStore() {
         if (isRecording) {
           scheduleStateCapture('state', 0);
         }
-      }, 50);
+      }, 0);
     }
   }
 
