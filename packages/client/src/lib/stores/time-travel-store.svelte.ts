@@ -129,11 +129,9 @@ export function createTimeTravelStore(
   }
 
   function pushStateToApp(components: ComponentNode[]): void {
-    const parentApi = typeof window !== 'undefined'
-      ? ((window.parent || window) as unknown as { __SVELTE_DEVTOOLS__?: Record<string, unknown> }).__SVELTE_DEVTOOLS__
-      : undefined;
+    const parentApi = getParentApi() as Record<string, (args?: unknown) => void> | undefined;
     if (!parentApi?.setComponentState) return;
-    if (parentApi.startInspectBatch) parentApi.startInspectBatch();
+    parentApi.startInspectBatch?.();
     const isMapOrSet = (v: unknown) => {
       const tag = Object.prototype.toString.call(v);
       return tag === '[object Map]' || tag === '[object Set]';
@@ -148,8 +146,11 @@ export function createTimeTravelStore(
         if (liveVal !== undefined && isMapOrSet(liveVal)) continue;
         (parentApi.setComponentState as (id: string, key: string, value: unknown) => void)(comp.id, key, value);
       }
+      for (const [key, value] of Object.entries(comp.props || {})) {
+        (parentApi.setComponentState as (id: string, key: string, value: unknown) => void)(comp.id, key, value);
+      }
     }
-    if (parentApi.endInspectBatch) parentApi.endInspectBatch();
+    parentApi.endInspectBatch?.();
     parentApi.flushAllEffects?.();
   }
 
@@ -197,6 +198,11 @@ export function createTimeTravelStore(
         if (!merged.find(m => m.id === sc.id)) merged.push(deepClone(sc));
       }
       setComponents(merged);
+      // Reset the last-captured-state dedup to match the restored state,
+      // so any $inspect echoes from pushStateToApp that sneak past the
+      // isTimeTravelMode gate get caught by doCapture's dedup check
+      // and don't produce phantom snapshots.
+      lastCapturedState = { components: getComponents(), timeline: null as unknown as TimelineEntry[] };
     }
     if (setTimeline) setTimeline(deepClone(snapshot.timeline));
     pushStateToApp(snapshot.components);
@@ -232,10 +238,16 @@ export function createTimeTravelStore(
 
   function setStateEdit(componentId: string, key: string, value: unknown): void {
     const comps = getComponents();
-    const updated = comps.map(c =>
-      c.id === componentId ? { ...c, state: { ...c.state, [key]: value } } : c
-    );
+    const updated = comps.map(c => {
+      if (c.id !== componentId) return c;
+      const isProp = c.props !== undefined && Object.prototype.hasOwnProperty.call(c.props, key);
+      if (isProp) {
+        return { ...c, props: { ...c.props, [key]: value } };
+      }
+      return { ...c, state: { ...c.state, [key]: value } };
+    });
     if (setComponents) setComponents(updated);
+    pushStateToApp(updated);
     capture('state-edit');
   }
 

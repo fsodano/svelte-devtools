@@ -320,7 +320,7 @@ function createDevtoolsStore() {
         if (isRecording) {
           scheduleStateCapture('state', 0);
         }
-      }, 50);
+      }, 0);
     }
   }
 
