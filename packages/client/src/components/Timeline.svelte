@@ -277,10 +277,12 @@
         <div class="empty-sm">No snapshots</div>
       {:else}
         {#each snapshots as snap, idx}
-          <div class="snap-row" class:active={currentSnapshotIndex === idx}>
+          <div class="snap-row" class:active={currentSnapshotIndex === idx}
+            onclick={() => { devtoolsStore.timeTravel.restore(idx); selectedSnapshotIdx = idx; }}
+            role="button" tabindex="0"
+            onkeydown={(e) => { if (e.key === 'Enter') { devtoolsStore.timeTravel.restore(idx); selectedSnapshotIdx = idx; } }}>
             <button class="snap-dot" class:active={currentSnapshotIndex === idx}
-              onclick={() => { devtoolsStore.timeTravel.restore(idx, true); selectedSnapshotIdx = idx; }}
-              title={new Date(snap.timestamp).toLocaleString()}>
+              aria-label="Restore snapshot {idx + 1}">
               <span class="dot-fill"></span>
             </button>
             <div class="snap-info">
