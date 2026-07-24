@@ -205,7 +205,7 @@ export function createTimeTravelStore(
       // so any $inspect echoes from pushStateToApp that sneak past the
       // isTimeTravelMode gate get caught by doCapture's dedup check
       // and don't produce phantom snapshots.
-      lastCapturedState = { components: getComponents(), timeline: [] };
+      lastCapturedState = { components: getComponents(), timeline: getTimeline() };
     }
     if (setTimeline) setTimeline(deepClone(snapshot.timeline));
     pushStateToApp(snapshot.components);
