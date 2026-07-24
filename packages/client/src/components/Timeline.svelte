@@ -31,6 +31,12 @@
   let detailWidth = $state(280);
   let isResizing = $state(false);
 
+  // --- Snapshot detail state ---
+  let selectedSnapshotIdx = $state<number | null>(null);
+  let selectedSnapshotDetail = $derived(
+    selectedSnapshotIdx !== null ? devtoolsStore.timeTravel.snapshots[selectedSnapshotIdx] : null
+  );
+
   function startResize(e: MouseEvent) {
     e.preventDefault();
     isResizing = true;
@@ -273,7 +279,7 @@
         {#each snapshots as snap, idx}
           <div class="snap-row" class:active={currentSnapshotIndex === idx}>
             <button class="snap-dot" class:active={currentSnapshotIndex === idx}
-              onclick={() => devtoolsStore.timeTravel.restore(idx, true)}
+              onclick={() => { devtoolsStore.timeTravel.restore(idx, true); selectedSnapshotIdx = idx; }}
               title={new Date(snap.timestamp).toLocaleString()}>
               <span class="dot-fill"></span>
             </button>
@@ -286,6 +292,35 @@
       {/if}
     </div>
   </div>
+
+  {#if selectedSnapshotDetail}
+    <div class="sd-panel">
+      <header class="detail-header">
+        <span class="detail-title">Snapshot #{selectedSnapshotIdx! + 1}</span>
+        <button class="detail-close" onclick={() => selectedSnapshotIdx = null}>✕</button>
+      </header>
+      <div class="detail-meta">
+        <div class="meta-row"><span class="meta-label">Label</span><span class="meta-value">{selectedSnapshotDetail.label || 'snapshot'}</span></div>
+        <div class="meta-row"><span class="meta-label">Time</span><span class="meta-value">{new Date(selectedSnapshotDetail.timestamp).toLocaleString()}</span></div>
+        <div class="meta-row"><span class="meta-label">Components</span><span class="meta-value">{selectedSnapshotDetail.components.length}</span></div>
+        <div class="meta-row"><span class="meta-label">Timeline</span><span class="meta-value">{selectedSnapshotDetail.timeline.length} entries</span></div>
+      </div>
+      <div class="sd-components">
+        <h4 class="data-heading">Component State</h4>
+        {#each selectedSnapshotDetail.components as comp}
+          <div class="sd-comp">
+            <span class="sd-comp-name">{comp.name}</span>
+            {#each Object.entries(comp.state || {}) as [k, v]}
+              <div class="sd-state-row">
+                <span class="sd-key">{k}</span>
+                <span class="sd-val">{JSON.stringify(v).substring(0, 60)}</span>
+              </div>
+            {/each}
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -435,4 +470,13 @@
   .snap-ts { font-size: 8px; color: var(--text-muted); font-family: var(--font-mono); }
 
   .empty-sm { display: flex; align-items: center; justify-content: center; padding: var(--space-4); color: var(--text-muted); font-size: 11px; }
+
+  /* ─── Snapshot detail panel (far right) ─── */
+  .sd-panel { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border-default); background: var(--bg-surface); overflow-y: auto; }
+  .sd-components { flex: 1; padding: var(--space-3); overflow-y: auto; }
+  .sd-comp { margin-bottom: var(--space-3); }
+  .sd-comp-name { font-size: 11px; font-weight: 600; color: var(--text-primary); display: block; margin-bottom: var(--space-1); }
+  .sd-state-row { display: flex; gap: var(--space-2); padding: 1px 0; font-size: 10px; font-family: var(--font-mono); }
+  .sd-key { color: var(--syntax-key); flex-shrink: 0; }
+  .sd-val { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
