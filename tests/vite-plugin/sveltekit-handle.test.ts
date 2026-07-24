@@ -8,7 +8,7 @@ function createMockEvent(url = '/test', method = 'GET', routeId: string | null =
     request: { method, url: new URL(url, 'http://localhost:5173') },
     url: new URL(url, 'http://localhost:5173'),
     route: { id: routeId },
-  };
+  } as unknown as import('@sveltejs/kit').RequestEvent;
 }
 
 function createMockResolve(html: string) {
@@ -155,8 +155,8 @@ describe('sveltekit', () => {
       await handle({ event, resolve });
 
       expect(events).toHaveLength(1);
-      const evt = events[0] as { type: string; data: { url: string; method: string; routeId: string | null } };
-      expect(evt.type).toBe('server:trace');
+      const evt = events[0] as { type: string; data: { url: string; method: string; routeId: string | null; duration: number } };
+      expect(evt.type).toBe('server:ssr');
       expect(evt.data.url).toBe('/mypath?foo=bar');
       expect(evt.data.method).toBe('POST');
       expect(evt.data.routeId).toBe('/mypath');

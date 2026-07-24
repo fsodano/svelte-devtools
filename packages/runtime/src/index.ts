@@ -1,5 +1,6 @@
 import {ComponentRegistry} from './instrumentation/registry.js';
 import type {ComponentInstance, SvelteDevToolsAPI} from '@svelte-devtools/types';
+export { getInitScript } from './init.js';
 
 type ComponentState = ComponentInstance;
 
@@ -9,8 +10,10 @@ interface DevToolsState {
     components: Map<string, ComponentState>;
 }
 
+import type { GlobalRuntime } from './init.js';
+
 interface SvelteDevToolsRuntimeWindow extends Window {
-    __SVELTE_DEVTOOLS_RUNTIME__?: typeof runtime;
+    __SVELTE_DEVTOOLS_RUNTIME__: GlobalRuntime;
     __SVELTE_DEVTOOLS_REGISTRY__?: Map<string, { id: string; name: string; filename: string }>;
     __SVELTE_DEVTOOLS__?: SvelteDevToolsAPI;
     __SVELTE_DEVTOOLS_DEBUG__?: boolean;
@@ -388,6 +391,18 @@ export const runtime = {
         }
         const comp = state.components.get(componentId);
         if (comp) comp.state.set(key, value);
+    },
+
+    startInspectBatch(): void {
+        if (isDebug) console.log('[Svelte DevTools] startInspectBatch');
+    },
+
+    endInspectBatch(): void {
+        if (isDebug) console.log('[Svelte DevTools] endInspectBatch');
+    },
+
+    flushAllEffects(): void {
+        if (isDebug) console.log('[Svelte DevTools] flushAllEffects');
     }
 };
 
