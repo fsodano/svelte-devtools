@@ -141,12 +141,15 @@ export function createTimeTravelStore(
       : [];
     for (const comp of components) {
       const liveComp = liveComps.find(c => c.id === comp.id);
+      // Push props first so derived state values that depend on props
+      // (e.g. currentGuess = $derived(data.guesses[i])) settle correctly
+      // before we write the snapshot's derived value on top.
+      for (const [key, value] of Object.entries(comp.props || {})) {
+        (parentApi.setComponentState as (id: string, key: string, value: unknown) => void)(comp.id, key, value);
+      }
       for (const [key, value] of Object.entries(comp.state || {})) {
         const liveVal = liveComp?.state?.get(key);
         if (liveVal !== undefined && isMapOrSet(liveVal)) continue;
-        (parentApi.setComponentState as (id: string, key: string, value: unknown) => void)(comp.id, key, value);
-      }
-      for (const [key, value] of Object.entries(comp.props || {})) {
         (parentApi.setComponentState as (id: string, key: string, value: unknown) => void)(comp.id, key, value);
       }
     }
