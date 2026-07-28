@@ -280,12 +280,14 @@ function createDevtoolsStore() {
     const isMotion = value && typeof value === 'object'
       && 'current' in (value as Record<string, unknown>)
       && 'target' in (value as Record<string, unknown>);
+
+    console.log('isMotion', isMotion);
     if (isMotion) {
       const cur = (value as Record<string, unknown>).current as number;
       const tgt = (value as Record<string, unknown>).target as number;
       const key = `${data.componentId}::${data.key}`;
       const prev = _lastCur.get(key);
-      const settled = cur === tgt || Math.abs(cur - tgt) < SETTLE_TOLERANCE;
+      const settled = cur === tgt;
       if (!settled) {
         _lastCur.set(key, cur);
         activeMotions.add(key);
@@ -293,12 +295,13 @@ function createDevtoolsStore() {
       }
       // Settled: one last value, safe to record
       activeMotions.delete(key);
-      if (prev !== undefined && Math.abs(cur - prev) < SETTLE_TOLERANCE) return; // dup
+      if (prev !== undefined) return; // dup
       _lastCur.set(key, cur);
     }
 
     // Queue into debounced batch instead of immediately rebuilding the
     // entire components array on every single $inspect fire.
+      
     pendingStateChanges.push({
       componentId: data.componentId,
       key: data.key,

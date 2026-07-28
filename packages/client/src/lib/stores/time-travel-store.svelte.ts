@@ -81,6 +81,12 @@ export function createTimeTravelStore(
   }
 
   function doCapture(label?: string): void {
+    // Suppress captures during restore — the $inspect echoes from
+    // pushStateToApp arrive as state:change events via the bridge
+    // after isTimeTravelMode has been cleared by its own setTimeout(0),
+    // which races past the devtools-store gate and creates phantom
+    // snapshots. This is the nuclear catch-all.
+    if (isTimeTravelMode) return;
     const comps = getComponents();
     const tl = getTimeline();
 
@@ -211,16 +217,18 @@ export function createTimeTravelStore(
     pushStateToApp(snapshot.components);
     onRestore?.();
 
-    // Unlock via macrotask — gives Svelte 5 one event-loop tick to
-    // flush all {hard: true} mutations and $inspect echoes before
-    // the DevTools starts listening again. If another restore was
-    // requested while in-flight, service it immediately after unlock.
+    // Wait for Svelte 5 to flush {hard: true} mutations and $inspect
+    // echoes through the bridge (postMessage) before the DevTools
+    // starts listening again. The bridge round-trip from pushStateToApp
+    // takes at least one macrotask — setTimeout(0) fires before the
+    // postMessage events arrive, so we use 50ms to let them settle.
+    // isTimeTravelMode is also checked inside doCapture as a backstop.
     setTimeout(() => {
       isTimeTravelMode = false;
       const next = pendingRestoreIndex;
       pendingRestoreIndex = null;
       if (next !== null) doRestore(next, false);
-    }, 0);
+    }, 50);
   }
 
   function restore(index: number, truncate = false): void {
