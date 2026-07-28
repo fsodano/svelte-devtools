@@ -1,8 +1,4 @@
 <script lang="ts">
-  interface SnapshotNode {
-    id: string; parentId: string | null; branchId: string;
-    timestamp: number; label: string;
-  }
   interface TimelineEntry {
     id: string; type: string; timestamp: number;
     duration?: number; data: unknown;
@@ -31,12 +27,6 @@
   let detailWidth = $state(280);
   let isResizing = $state(false);
 
-  // --- Snapshot detail state ---
-  let selectedSnapshotIdx = $state<number | null>(null);
-  let selectedSnapshotDetail = $derived(
-    selectedSnapshotIdx !== null ? devtoolsStore.timeTravel.snapshots[selectedSnapshotIdx] : null
-  );
-
   function startResize(e: MouseEvent) {
     e.preventDefault();
     isResizing = true;
@@ -55,38 +45,7 @@
     window.addEventListener('mouseup', onUp);
   }
 
-  // --- Snapshot / branch state ---
-  let snapshots = $derived(devtoolsStore.timeTravel.snapshots as unknown as SnapshotNode[]);
-  let currentSnapshotIndex = $derived(devtoolsStore.timeTravel.currentIndex);
-  let canUndo = $derived(devtoolsStore.timeTravel.canUndo);
-  let canRedo = $derived(devtoolsStore.timeTravel.canRedo);
-  let isPlaying = $state(false);
 
-  let snapshotCounter = $derived(
-    snapshots.length > 0
-      ? `${currentSnapshotIndex + 1} / ${snapshots.length}`
-      : ''
-  );
-
-  let isViewingHistorical = $derived(
-    snapshots.length > 0 && currentSnapshotIndex < snapshots.length - 1
-  );
-
-  // --- Auto-play ---
-  $effect(() => {
-    if (!isPlaying) return;
-    const interval = setInterval(() => {
-      if (canRedo) devtoolsStore.timeTravel.redo();
-      else isPlaying = false;
-    }, 1500);
-    return () => clearInterval(interval);
-  });
-
-  // --- Handlers ---
-  function toggleRecording(): void {
-    devtoolsStore.isRecording = !devtoolsStore.isRecording;
-    if (devtoolsStore.isRecording) devtoolsStore.timeTravel.capture();
-  }
 
   const filters = [
     { id: 'all', label: 'All' }, { id: 'component', label: 'Components' },
@@ -231,98 +190,6 @@
     </div><!-- /entries-split -->
   </div>
 
-  <!-- ─── Right: branch tree ─── -->
-  <div class="tl-branch">
-    <div class="branch-header">
-      <span class="bh-title">Snapshots</span>
-      <span class="bh-count">{snapshotCounter}</span>
-      <button class="tb-btn record-btn" class:recording={devtoolsStore.isRecording}
-        onclick={toggleRecording}
-        title={devtoolsStore.isRecording ? 'Recording on' : 'Recording off'}>
-        <svg viewBox="0 0 12 12" width="10" height="10"><circle cx="6" cy="6" r="4" fill="currentColor"/></svg>
-      </button>
-    </div>
-
-    {#if snapshots.length > 0}
-      <div class="branch-toolbar">
-        <button class="tb-btn" onclick={() => devtoolsStore.timeTravel.undo()} disabled={!canUndo} title="Undo">
-          <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7l3-3v2h5v3H8v2L5 7z"/></svg>
-        </button>
-        <button class="tb-btn" onclick={() => devtoolsStore.timeTravel.redo()} disabled={!canRedo} title="Redo">
-          <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 7L8 4v2H3v3h5v2l3-3z"/></svg>
-        </button>
-        <button class="tb-btn" onclick={() => isPlaying = !isPlaying} title={isPlaying ? 'Pause' : 'Auto-play'}>
-          {#if isPlaying}
-            <svg viewBox="0 0 16 16" width="11" height="11"><rect x="3" y="2" width="4" height="12" rx="1" fill="currentColor"/><rect x="9" y="2" width="4" height="12" rx="1" fill="currentColor"/></svg>
-          {:else}
-            <svg viewBox="0 0 16 16" width="11" height="11"><path d="M5 3l8 5-8 5V3z" fill="currentColor"/></svg>
-          {/if}
-        </button>
-        <button class="tb-btn" onclick={() => devtoolsStore.timeTravel.clear()} title="Clear all snapshots">
-          <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-        </button>
-      </div>
-
-      {#if snapshots.length > 0}
-        <div class="hist-banner" class:hist-current={!isViewingHistorical}>
-          <span class="hist-text">
-            {isViewingHistorical ? 'Viewing old state' : 'Viewing current state'}
-          </span>
-        </div>
-      {/if}
-    {/if}
-
-    <div class="snap-list">
-      {#if snapshots.length === 0}
-        <div class="empty-sm">No snapshots</div>
-      {:else}
-        {#each snapshots as snap, idx}
-          <div class="snap-row" class:active={currentSnapshotIndex === idx}
-            onclick={() => { devtoolsStore.timeTravel.restore(idx); selectedSnapshotIdx = idx; }}
-            role="button" tabindex="0"
-            onkeydown={(e) => { if (e.key === 'Enter') { devtoolsStore.timeTravel.restore(idx); selectedSnapshotIdx = idx; } }}>
-            <button class="snap-dot" class:active={currentSnapshotIndex === idx}
-              aria-label="Restore snapshot {idx + 1}">
-              <span class="dot-fill"></span>
-            </button>
-            <div class="snap-info">
-              <span class="snap-lbl"><span class="snap-num">#{idx + 1}</span> {snap.label || 'snapshot'}</span>
-              <span class="snap-ts">{new Date(snap.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-          </div>
-        {/each}
-      {/if}
-    </div>
-  </div>
-
-  {#if selectedSnapshotDetail}
-    <div class="sd-panel">
-      <header class="detail-header">
-        <span class="detail-title">Snapshot #{selectedSnapshotIdx! + 1}</span>
-        <button class="detail-close" onclick={() => selectedSnapshotIdx = null}>✕</button>
-      </header>
-      <div class="detail-meta">
-        <div class="meta-row"><span class="meta-label">Label</span><span class="meta-value">{selectedSnapshotDetail.label || 'snapshot'}</span></div>
-        <div class="meta-row"><span class="meta-label">Time</span><span class="meta-value">{new Date(selectedSnapshotDetail.timestamp).toLocaleString()}</span></div>
-        <div class="meta-row"><span class="meta-label">Components</span><span class="meta-value">{selectedSnapshotDetail.components.length}</span></div>
-        <div class="meta-row"><span class="meta-label">Timeline</span><span class="meta-value">{selectedSnapshotDetail.timeline.length} entries</span></div>
-      </div>
-      <div class="sd-components">
-        <h4 class="data-heading">Component State</h4>
-        {#each selectedSnapshotDetail.components as comp}
-          <div class="sd-comp">
-            <span class="sd-comp-name">{comp.name}</span>
-            {#each Object.entries(comp.state || {}) as [k, v]}
-              <div class="sd-state-row">
-                <span class="sd-key">{k}</span>
-                <span class="sd-val">{JSON.stringify(v).substring(0, 60)}</span>
-              </div>
-            {/each}
-          </div>
-        {/each}
-      </div>
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -409,76 +276,4 @@
   .icon { text-align: center; }
   .time { color: var(--text-secondary); font-size: 10px; white-space: nowrap; }
   .duration { font-family: var(--font-mono); font-size: 10px; }
-  .empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-secondary); font-size: 12px; }
-
-  /* ─── Right side: branch tree ─── */
-  .tl-branch {
-    width: 200px; flex-shrink: 0;
-    border-left: 1px solid var(--border-default);
-    background: var(--bg-inset); display: flex; flex-direction: column;
-  }
-
-  .branch-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 1px solid var(--border-default); flex-shrink: 0;
-  }
-  .bh-title { font-size: 11px; font-weight: 600; color: var(--text-primary); }
-  .bh-count { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); }
-
-  .branch-toolbar {
-    display: flex; align-items: center; gap: 2px;
-    padding: var(--space-1) var(--space-2);
-    border-bottom: 1px solid var(--border-default); flex-shrink: 0;
-  }
-
-  .hist-banner {
-    display: flex; align-items: center; gap: var(--space-2);
-    padding: 4px var(--space-2); background: var(--bg-error);
-    border-bottom: 1px solid var(--border-default); flex-shrink: 0;
-  }
-  .hist-text { font-size: 10px; flex: 1; color: var(--warning); }
-  .hist-current .hist-text { color: var(--success); }
-  .hist-current { background: rgba(52, 199, 89, 0.08); }
-
-  .snap-list {
-    flex: 1; overflow-y: auto; padding: var(--space-1) 0;
-    display: flex; flex-direction: column;
-  }
-
-  .snap-row {
-    display: flex; align-items: center; gap: var(--space-2);
-    padding: 4px var(--space-3); min-height: 28px;
-    transition: background 0.15s; cursor: pointer;
-  }
-  .snap-row:hover { background: var(--bg-hover); }
-  .snap-row.active { background: var(--bg-elevated); }
-
-  .snap-dot {
-    display: flex; align-items: center; justify-content: center;
-    width: 10px; height: 10px; padding: 0; flex-shrink: 0;
-    border: 2px solid var(--accent-primary, #ff3e00);
-    background: transparent; cursor: pointer; border-radius: 50%;
-    transition: border-color 0.15s, transform 0.15s;
-  }
-  .snap-dot:hover { transform: scale(1.3); }
-  .snap-dot.active { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 25%, transparent); }
-  .dot-fill { display: block; width: 4px; height: 4px; border-radius: 50%; background: var(--accent-primary, #ff3e00); }
-  .snap-dot.active .dot-fill { background: #ff3e00; }
-
-  .snap-info { display: flex; flex-direction: column; min-width: 0; }
-  .snap-lbl { font-size: 10px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .snap-num { color: var(--text-muted); font-family: var(--font-mono); margin-right: 3px; }
-  .snap-ts { font-size: 8px; color: var(--text-muted); font-family: var(--font-mono); }
-
-  .empty-sm { display: flex; align-items: center; justify-content: center; padding: var(--space-4); color: var(--text-muted); font-size: 11px; }
-
-  /* ─── Snapshot detail panel (far right) ─── */
-  .sd-panel { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border-default); background: var(--bg-surface); overflow-y: auto; }
-  .sd-components { flex: 1; padding: var(--space-3); overflow-y: auto; }
-  .sd-comp { margin-bottom: var(--space-3); }
-  .sd-comp-name { font-size: 11px; font-weight: 600; color: var(--text-primary); display: block; margin-bottom: var(--space-1); }
-  .sd-state-row { display: flex; gap: var(--space-2); padding: 1px 0; font-size: 10px; font-family: var(--font-mono); }
-  .sd-key { color: var(--syntax-key); flex-shrink: 0; }
-  .sd-val { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
