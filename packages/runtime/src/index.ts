@@ -399,6 +399,15 @@ export const runtime = {
 
     endInspectBatch(): void {
         if (isDebug) console.log('[Svelte DevTools] endInspectBatch');
+        // Signal the DevTools client once all pending reactivity microtasks
+        // ($inspect callbacks, $effect flushes) have drained. A two-deep
+        // queueMicrotask ensures this runs after every microtask queued by
+        // the setComponentState calls in the current batch.
+        queueMicrotask(() => {
+            queueMicrotask(() => {
+                window.postMessage({source: 'svelte-devtools', type: 'restore:echoes-done'}, '*');
+            });
+        });
     },
 
     flushAllEffects(): void {
@@ -547,6 +556,15 @@ if (typeof window !== 'undefined') {
         getTimeline: () => [],
         setComponentState: (id: string, key: string, value: unknown) => {
             svelteDevToolsRuntime.setComponentState(id, key, value);
+        },
+        startInspectBatch: () => {
+            svelteDevToolsRuntime.startInspectBatch();
+        },
+        endInspectBatch: () => {
+            svelteDevToolsRuntime.endInspectBatch();
+        },
+        flushAllEffects: () => {
+            svelteDevToolsRuntime.flushAllEffects();
         },
         refresh: () => {
             svelteDevToolsRuntime.refresh();

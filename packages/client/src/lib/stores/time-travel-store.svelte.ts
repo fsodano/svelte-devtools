@@ -172,6 +172,33 @@ export function createTimeTravelStore(
   let _origFetch: typeof window.fetch | null = null;
   let pendingRestoreIndex: number | null = null;
 
+  // Event-driven signal: the inspected app's runtime posts
+  // restore:echoes-done after all $inspect microtasks from
+  // pushStateToApp have drained. We use this instead of a
+  // setTimeout guess to know when it's safe to clear the gate.
+  // Listen on window.parent (inspected page) because that's where
+  // endInspectBatch's postMessage is dispatched (it runs in the
+  // inspected page's execution context via parentApi).
+  const signalTarget = typeof window !== 'undefined' && window.parent !== window ? window.parent : typeof window !== 'undefined' ? window : null;
+  if (signalTarget) {
+    signalTarget.addEventListener('message', function onRestoreEchoesDone(event: MessageEvent) {
+      if (event.data?.source !== 'svelte-devtools' || event.data?.type !== 'restore:echoes-done') return;
+      if (!isTimeTravelMode) return;
+      // Defer the clear to a macrotask so any pending flush timers
+      // (setTimeout(0) from handleStateChange for the $inspect echoes)
+      // fire while isTimeTravelMode is still true and get caught by the
+      // gate there. After they settle, we update lastCapturedState and
+      // release the gate.
+      setTimeout(() => {
+        lastCapturedState = { components: getComponents(), timeline: getTimeline() };
+        isTimeTravelMode = false;
+        const next = pendingRestoreIndex;
+        pendingRestoreIndex = null;
+        if (next !== null) doRestore(next, false);
+      }, 0);
+    });
+  }
+
   function doRestore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
     isTimeTravelMode = true;
@@ -216,19 +243,10 @@ export function createTimeTravelStore(
     if (setTimeline) setTimeline(deepClone(snapshot.timeline));
     pushStateToApp(snapshot.components);
     onRestore?.();
-
-    // Wait for Svelte 5 to flush {hard: true} mutations and $inspect
-    // echoes through the bridge (postMessage) before the DevTools
-    // starts listening again. The bridge round-trip from pushStateToApp
-    // takes at least one macrotask — setTimeout(0) fires before the
-    // postMessage events arrive, so we use 50ms to let them settle.
-    // isTimeTravelMode is also checked inside doCapture as a backstop.
-    setTimeout(() => {
-      isTimeTravelMode = false;
-      const next = pendingRestoreIndex;
-      pendingRestoreIndex = null;
-      if (next !== null) doRestore(next, false);
-    }, 50);
+    // isTimeTravelMode stays true until the inspected app's runtime
+    // sends restore:echoes-done (handled by the message listener above),
+    // which fires after all $inspect microtasks from pushStateToApp
+    // have drained. No setTimeout guess needed.
   }
 
   function restore(index: number, truncate = false): void {
