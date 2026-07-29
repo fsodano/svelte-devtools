@@ -37,7 +37,7 @@ function createDevtoolsStore() {
   // Spring easing is asymptotic, cur === tgt may never fire via $effect.
   const activeMotions = new Set<string>();
   const _lastCur = new Map<string, number>();
-  const SETTLE_TOLERANCE = 0.0001;
+  const SETTLE_TOLERANCE = 0.01;
   const bridge = createWindowBridge();
   const timeTravel = createTimeTravelStore(
     () => components,
