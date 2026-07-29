@@ -478,6 +478,20 @@ if (typeof window !== 'undefined') {
     svelteDevToolsRuntime.refresh = runtime.refresh.bind(runtime);
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_RUNTIME__ = svelteDevToolsRuntime;
 
+    // Drain the __SVELTE_DEVTOOLS_QUEUE__ used by the Vite 8 transform for
+    // _registerState calls that fired before the runtime finished loading.
+    // Each entry is a function(runtime) that calls runtime._registerState(...).
+    const win = window as unknown as Record<string, unknown>;
+    var queuedFns = win.__SVELTE_DEVTOOLS_QUEUE__ as Array<(rt: typeof svelteDevToolsRuntime) => void> | undefined;
+    if (queuedFns) {
+        for (var k = 0; k < queuedFns.length; k++) {
+            try { queuedFns[k](svelteDevToolsRuntime); } catch (e) {
+                if (isDebug) console.warn('[Svelte DevTools] Error draining __SVELTE_DEVTOOLS_QUEUE__:', e);
+            }
+        }
+        win.__SVELTE_DEVTOOLS_QUEUE__ = [];
+    }
+
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS__ = {
         version: runtime.version,
         enabled: true,
