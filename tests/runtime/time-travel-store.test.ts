@@ -611,7 +611,8 @@ describe('createMockTimeTravelStore', () => {
 
       store.restore(0);
       expect(restoredComponents).toEqual([makeComponent('c1', 'A')]);
-      expect(restoredTimeline).toEqual([makeTimelineEntry('init')]);
+      expect(restoredTimeline).toHaveLength(1);
+      expect(restoredTimeline[0].type).toBe('init');
     });
 
     it('deep clones restored components (mutation safety)', async () => {

@@ -18,6 +18,8 @@ yarn-error.log*
 
 #AI Agent Artifacts
 .sisyphus
+.omo/
+ses_*
 **/.playwright-mcp/**
 **/screenshot*
 
