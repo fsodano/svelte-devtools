@@ -169,33 +169,6 @@ export function createTimeTravelStore(
   let _origFetch: typeof window.fetch | null = null;
   let pendingRestoreIndex: number | null = null;
 
-  // Event-driven signal: the inspected app's runtime posts
-  // restore:echoes-done after all $inspect microtasks from
-  // pushStateToApp have drained. We use this instead of a
-  // setTimeout guess to know when it's safe to clear the gate.
-  // Listen on window.parent (inspected page) because that's where
-  // endInspectBatch's postMessage is dispatched (it runs in the
-  // inspected page's execution context via parentApi).
-  const signalTarget = typeof window !== 'undefined' && window.parent !== window ? window.parent : typeof window !== 'undefined' ? window : null;
-  if (signalTarget) {
-    signalTarget.addEventListener('message', function onRestoreEchoesDone(event: MessageEvent) {
-      if (event.data?.source !== 'svelte-devtools' || event.data?.type !== 'restore:echoes-done') return;
-      if (!isTimeTravelMode) return;
-      // Defer the clear to a macrotask so any pending flush timers
-      // (setTimeout(0) from handleStateChange for the $inspect echoes)
-      // fire while isTimeTravelMode is still true and get caught by the
-      // gate there. After they settle, we update lastCapturedState and
-      // release the gate.
-      setTimeout(() => {
-        lastCapturedState = { components: getComponents(), timeline: getTimeline() };
-        isTimeTravelMode = false;
-        const next = pendingRestoreIndex;
-        pendingRestoreIndex = null;
-        if (next !== null) doRestore(next, false);
-      }, 0);
-    });
-  }
-
   function doRestore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
     isTimeTravelMode = true;
@@ -216,10 +189,6 @@ export function createTimeTravelStore(
         return _origFetch!(...args);
       };
     }
-    setTimeout(() => {
-      if (parentApi) parentApi.isTimeTraveling = false;
-      if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
-    }, 2000);
 
     if (setComponents) {
       const current = getComponents();
@@ -231,26 +200,29 @@ export function createTimeTravelStore(
         if (!merged.find(m => m.id === sc.id)) merged.push(deepClone(sc));
       }
       setComponents(merged);
-      // Reset the last-captured-state dedup to match the restored state,
-      // so any $inspect echoes from pushStateToApp that sneak past the
-      // isTimeTravelMode gate get caught by doCapture's dedup check
-      // and don't produce phantom snapshots.
       lastCapturedState = { components: getComponents(), timeline: getTimeline() };
     }
     if (setTimeline) setTimeline(deepClone(snapshot.timeline));
+    if (setTimeline) setTimeline(deepClone(snapshot.timeline));
     pushStateToApp(snapshot.components);
     onRestore?.();
-    // isTimeTravelMode stays true until the inspected app's runtime
-    // sends restore:echoes-done (handled by the message listener above),
-    // which fires after all $inspect microtasks from pushStateToApp
-    // have drained. No setTimeout guess needed.
+
+    // Restore fetch and clear time-traveling flag immediately after
+    // pushStateToApp completes. The $inspect echoes from the restored
+    // state arrive later as microtasks; the lastCapturedState dedup
+    // in doCapture prevents phantom snapshots from those echoes.
+    if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
+    if (parentApi) parentApi.isTimeTraveling = false;
+    isTimeTravelMode = false;
+
+    const next = pendingRestoreIndex;
+    pendingRestoreIndex = null;
+    if (next !== null) doRestore(next, false);
   }
 
   function restore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
     if (isTimeTravelMode) {
-      // Defer — a restore is already in-flight; avoid racing its
-      // pushStateToApp + setTimeout(0) unlock cycle.
       pendingRestoreIndex = index;
       return;
     }

@@ -281,13 +281,12 @@ function createDevtoolsStore() {
       && 'current' in (value as Record<string, unknown>)
       && 'target' in (value as Record<string, unknown>);
 
-    console.log('isMotion', isMotion);
     if (isMotion) {
       const cur = (value as Record<string, unknown>).current as number;
       const tgt = (value as Record<string, unknown>).target as number;
       const key = `${data.componentId}::${data.key}`;
       const prev = _lastCur.get(key);
-      const settled = cur === tgt;
+      const settled = Math.abs(cur - tgt) < SETTLE_TOLERANCE;
       if (!settled) {
         _lastCur.set(key, cur);
         activeMotions.add(key);
