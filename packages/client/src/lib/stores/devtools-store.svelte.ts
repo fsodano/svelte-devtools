@@ -292,9 +292,12 @@ function createDevtoolsStore() {
         activeMotions.add(key);
         return; // mid‑animation → drop this frame entirely
       }
-      // Settled: one last value, safe to record
+      // Settled: one last value, safe to record.
+      // Only skip if the settled value is identical to the last processed
+      // settled value — NOT just because prev exists (prev is also set by
+      // mid-animation frames and differs from the final settled value).
       activeMotions.delete(key);
-      if (prev !== undefined) return; // dup
+      if (prev !== undefined && Math.abs(cur - prev) < SETTLE_TOLERANCE) return;
       _lastCur.set(key, cur);
     }
 
