@@ -145,26 +145,42 @@
           </button>
 
           {#if selectedSnapshot.components?.length}
-            <div class="detail-section">Component States</div>
-            {#each selectedSnapshot.components as comp}
-              <details class="comp-details">
-                <summary class="comp-summary">
-                  <span class="comp-name">{comp.name}</span>
-                  <span class="comp-id mono">{comp.id}</span>
-                </summary>
-                <div class="comp-state">
-                  {#each Object.entries(comp.state || {}) as [key, value]}
-                    <div class="state-row">
-                      <span class="state-key">{key}</span>
-                      <span class="state-value mono">{JSON.stringify(value)}</span>
+            <div class="detail-section">Changes from previous snapshot</div>
+            {@const hasChanges = selectedSnapshot.components.some((comp: any) => {
+              if (selectedSnapshotIndex === 0) return Object.keys(comp.state || {}).length > 0;
+              const prevComp = snapshots[selectedSnapshotIndex! - 1].components.find((c: any) => c.id === comp.id);
+              return prevComp && Object.entries(comp.state || {}).some(([k, v]) => JSON.stringify(v) !== JSON.stringify(prevComp.state[k]));
+            })}
+            {#if !hasChanges}
+              <div class="no-state">No state changes — initial mount snapshot</div>
+            {:else}
+              {#each selectedSnapshot.components as comp}
+                {@const prevComp = selectedSnapshotIndex! > 0 ? snapshots[selectedSnapshotIndex! - 1].components.find((c: any) => c.id === comp.id) : null}
+                {@const stateEntries = Object.entries(comp.state || {})}
+                {@const changedKeys = prevComp ? stateEntries.filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(prevComp.state[k])) : stateEntries}
+                {#if changedKeys.length > 0}
+                  <details class="comp-details" open>
+                    <summary class="comp-summary">
+                      <span class="comp-name">{comp.name}</span>
+                      <span class="changed-count">{changedKeys.length} changed</span>
+                    </summary>
+                    <div class="comp-state">
+                      {#each changedKeys as [key, value]}
+                        {@const prevVal = prevComp ? prevComp.state[key] : undefined}
+                        <div class="state-row">
+                          <span class="state-key">{key}</span>
+                          {#if prevVal !== undefined}
+                            <span class="state-diff-old">{JSON.stringify(prevVal)}</span>
+                          {/if}
+                          <span class="state-arrow">&rarr;</span>
+                          <span class="state-value mono">{JSON.stringify(value)}</span>
+                        </div>
+                      {/each}
                     </div>
-                  {/each}
-                  {#if Object.keys(comp.state || {}).length === 0}
-                    <span class="no-state">No state</span>
-                  {/if}
-                </div>
-              </details>
-            {/each}
+                  </details>
+                {/if}
+              {/each}
+            {/if}
           {/if}
         </div>
       </div>
@@ -229,9 +245,12 @@
   .comp-summary:hover { background: var(--bg-hover); }
   .comp-name { font-weight: 500; }
   .comp-id { color: var(--text-muted); font-size: 9px; }
+  .changed-count { font-size: 9px; color: var(--status-error); margin-left: auto; }
   .comp-state { padding: 4px 12px 8px 20px; }
-  .state-row { display: flex; flex-direction: column; padding: 2px 0; }
-  .state-key { font-size: 9px; color: var(--text-muted); }
+  .state-row { display: flex; flex-direction: column; padding: 3px 0; border-bottom: 1px solid var(--border-default); }
+  .state-key { font-size: 9px; color: var(--text-muted); font-weight: 500; }
   .state-value { font-size: 9px; color: var(--text-primary); word-break: break-all; }
+  .state-diff-old { font-size: 9px; color: var(--text-muted); text-decoration: line-through; word-break: break-all; }
+  .state-arrow { font-size: 9px; color: var(--text-muted); margin: 0 2px; }
   .no-state { font-size: 9px; color: var(--text-muted); font-style: italic; }
 </style>
