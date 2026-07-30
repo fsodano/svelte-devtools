@@ -45,7 +45,7 @@ function createDevtoolsStore() {
     (c) => { components = c; },
     (t) => { timeline = t; }
   );
-  let isRecording = $state(true);
+  let isRecording = $state(false);
   let ttTick = $state(0);
   let serverEvents = $state<unknown[]>([]);
   let serverEventsPollTimer: ReturnType<typeof setInterval> | null = null;
