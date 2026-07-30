@@ -17,7 +17,18 @@
 | Existing docs | `svelte-dev-extension/docs/` (architecture, API, Vite 8) |
 | Release plan | `svelte-dev-extension/.sisyphus/plans/v0.0.1.md` |
 
-## Key Architecture (5‑second summary)
+## ⚠️ Critical: DevTools Client Served from dist/
+
+The DevTools panel at `/__svelte-devtools/` is served from **`packages/client/dist/`**, NOT compiled on-the-fly by the dev server.
+
+**Any changes to `packages/client/src/` require a rebuild to take effect:**
+```bash
+cd packages/client && npm run build
+# Then restart the dev server
+kill $(lsof -ti:5174) && npx vite dev --port 5174
+```
+
+**Without rebuilding, your changes will NOT appear in the DevTools panel.** The Vite dev server for the test app does NOT compile the client source on demand — it serves the pre-built `dist/` directory.
 
 ```
 .svelte file → [Vite Plugin] → $inspect injection → Runtime → postMessage → DevTools iframe UI
@@ -362,6 +373,81 @@ See the `svelte-dev-extension/tests/e2e/` directory for end-to-end test examples
 - **Auth token expires**: The Manual Auth Token is single-use. Each browser connection generates a new one. Read it from tmux IMMEDIATELY after `page.goto()`.
 - **Runtime script may not be loaded yet** (vanilla Svelte): Component initialization can race ahead of the runtime script loading. The `__SVELTE_DEVTOOLS_QUEUE__` mechanism handles this, but first-time setup may appear broken if you check `window.__SVELTE_DEVTOOLS_RUNTIME__` too early.
 - **Iframe vs popup**: In headless browsers, `DocumentPictureInPicture` may not be available — the panel falls back to an iframe. Verify via `page.frames()` or the HTTP API instead.
+
+## Mandatory: Time Travel Verification Procedure
+
+Before declaring any time-travel fix complete, you MUST execute THIS exact test:
+
+```mjs
+// 1. Authenticate (tmux method)
+await page.goto('http://localhost:5174/');
+const token = execSync("bash -c 'sleep 0.2; tmux capture-pane -t svelte-kit -p -S -10'")
+  .toString().match(/Manual Auth Token : (\S+)/)?.[1];
+await page.evaluate(() => {
+  const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
+  dock?.querySelector('button')?.click();
+});
+await page.locator('input').first().fill(token);
+await page.evaluate(() => {
+  const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
+  Array.from(dock.querySelectorAll('button')).find(b => b.textContent?.includes('Authorize'))?.click();
+});
+await page.waitForTimeout(2000);
+
+// 2. Open Svelte DevTools
+await page.evaluate(() => {
+  document.querySelector('vite-devtools-dock-embedded')?.shadowRoot
+    ?.querySelector('button[title="Svelte"]')?.click();
+});
+await page.waitForTimeout(4000);
+
+// 3. Click counter ONCE and wait for Spring settlement
+await page.evaluate(() => {
+  Array.from(document.querySelectorAll('button'))
+    .find(b => b.getAttribute('aria-label')?.includes('Increase'))
+    ?.click();
+});
+await page.waitForTimeout(5000);
+
+// 4. Open Time Travel tab
+const iframe = page.frames().find(f => f.url().includes('svelte-devtools'));
+await iframe.locator('button', { hasText: 'Time Travel' }).click();
+await page.waitForTimeout(2000);
+
+// 5. VERIFY: 2 snapshots (mount + state)
+const snap1 = await iframe.locator('.count').textContent();
+console.assert(snap1?.trim() === '2 / 2', 'Expected 2/2 snapshots, got ' + snap1);
+
+// 6. Click UNDO — wait for Spring to settle
+await iframe.locator('.tb-btn').first().click();
+await page.waitForTimeout(4000);
+
+// 7. VERIFY: counter at 0, snap 1/2
+const snap2 = await iframe.locator('.count').textContent();
+console.assert(snap2?.trim() === '1 / 2', 'Expected 1/2 after undo, got ' + snap2);
+
+// 8. Click REDO — wait for Spring to settle  
+await iframe.locator('.tb-btn').nth(1).click();
+await page.waitForTimeout(5000);
+
+// 9. CRITICAL VERIFY: snapshots still 2/2 (NOT 3/3)
+const snap3 = await iframe.locator('.count').textContent();
+console.assert(snap3?.trim() === '2 / 2', 'Expected 2/2 after redo, got ' + snap3);
+
+// 10. Counter value correct
+const counter = await page.locator('.counter-digits strong:not(.hidden)').textContent();
+console.assert(counter?.trim() === '1', 'Expected counter 1, got ' + counter);
+```
+
+**FAILURE CONDITIONS:**
+- If step 9 shows `3/3`, the fix is **not working**. Debug the `lastRestoredSnapshotJSON` dedup in `doCapture`.
+- If the iframe locator fails, the DevTools panel may have opened as a popup instead. Fall back to `page.evaluate()` for iframe access.
+
+**CRITICAL: After any change to `packages/client/src/`, rebuild:**
+```bash
+cd packages/client && npm run build
+```
+Then restart the dev server. Without this, the changes are NOT served.
 
 ## Reading Order
 
