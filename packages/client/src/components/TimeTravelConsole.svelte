@@ -95,16 +95,15 @@
         </div>
       {:else}
         {#each snapshots as snap, idx}
-          <div class="row" class:active={currentSnapshotIndex === idx} class:selected={selectedSnapshotIndex === idx}>
-            <button class="dot" class:active={currentSnapshotIndex === idx}
-              onclick={() => selectSnapshot(idx)}>
+          <div class="row" class:active={currentSnapshotIndex === idx} class:selected={selectedSnapshotIndex === idx} onclick={() => selectSnapshot(idx)}>
+            <button class="dot" class:active={currentSnapshotIndex === idx}>
               <span class="fill"></span>
             </button>
             <div class="info">
               <span class="label"><span class="num">#{idx + 1}</span> {snap.label || 'snapshot'}</span>
               <span class="ts">{new Date(snap.timestamp).toLocaleTimeString()}</span>
             </div>
-            <button class="restore-btn" onclick={() => devtoolsStore.timeTravel.restore(idx, true)} title="Restore this snapshot">
+            <button class="restore-btn" onclick={(e) => { e.stopPropagation(); devtoolsStore.timeTravel.restore(idx, true); }} title="Restore this snapshot">
               <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8a6 6 0 0111-3.46V2h1v5H9V6h2.3A5 5 0 103 8H2z"/></svg>
             </button>
           </div>
