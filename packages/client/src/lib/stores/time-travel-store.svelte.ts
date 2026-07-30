@@ -88,6 +88,14 @@ export function createTimeTravelStore(
     const comps = getComponents();
     const tl = getTimeline();
 
+    // If the current components are byte-identical to the last snapshot
+    // that was restored, skip. This catches phantom captures from
+    // pushStateToApp echoes that arrive after isTimeTravelMode clears.
+    if (lastRestoredSnapshotJSON && JSON.stringify(comps) === lastRestoredSnapshotJSON) {
+      lastCapturedState = { components: comps, timeline: tl };
+      return;
+    }
+
     if (lastCapturedState) {
       const componentsChanged = JSON.stringify(comps) !== JSON.stringify(lastCapturedState.components);
       const timelineChanged = tl.length !== lastCapturedState.timeline.length;
@@ -124,6 +132,8 @@ export function createTimeTravelStore(
 
     currentIndex = snapshots.length - 1;
     lastCapturedState = { components: comps, timeline: tl };
+    // Restore dedup is now stale — the user made a real change.
+    lastRestoredSnapshotJSON = null;
   }
 
   // capture() is a pass-through to doCapture — the devtools-store gates
@@ -166,6 +176,9 @@ export function createTimeTravelStore(
 
   let _origFetch: typeof window.fetch | null = null;
   let pendingRestoreIndex: number | null = null;
+  // Serialized components of the last restore snapshot. Compared at the
+  // top of doCapture to catch ANY capture that happens after a restore.
+  let lastRestoredSnapshotJSON: string | null = null;
 
   function internalClearTTMode(): void {
     if (!isTimeTravelMode) return;
@@ -209,6 +222,9 @@ export function createTimeTravelStore(
       setComponents(merged);
       lastCapturedState = { components: getComponents(), timeline: getTimeline() };
     }
+    // Store the restored snapshot's components JSON for post-restore
+    // capture dedup that can happen after isTimeTravelMode is cleared.
+    lastRestoredSnapshotJSON = JSON.stringify(snapshot.components);
     if (setTimeline) setTimeline(deepClone(snapshot.timeline));
     pushStateToApp(snapshot.components);
     onRestore?.();
