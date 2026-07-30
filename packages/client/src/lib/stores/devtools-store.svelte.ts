@@ -319,7 +319,9 @@ function createDevtoolsStore() {
         // Clear the gate here too — for non-motion echoes this is the only
         // codepath that can release it (motion echoes release via settled).
         if (timeTravel.isTimeTravelMode) {
-          if (activeMotions.size === 0) timeTravel.clearTimeTravelMode();
+          if (activeMotions.size === 0) {
+            timeTravel.clearTimeTravelMode();
+          }
           return;
         }
         if (activeMotions.size > 0) return;

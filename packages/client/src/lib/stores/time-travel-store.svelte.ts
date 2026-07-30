@@ -167,6 +167,15 @@ export function createTimeTravelStore(
   let _origFetch: typeof window.fetch | null = null;
   let pendingRestoreIndex: number | null = null;
 
+  function internalClearTTMode(): void {
+    if (!isTimeTravelMode) return;
+    lastCapturedState = { components: getComponents(), timeline: getTimeline() };
+    isTimeTravelMode = false;
+    const next = pendingRestoreIndex;
+    pendingRestoreIndex = null;
+    if (next !== null) doRestore(next, false);
+  }
+
   function doRestore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
     isTimeTravelMode = true;
@@ -204,12 +213,14 @@ export function createTimeTravelStore(
     pushStateToApp(snapshot.components);
     onRestore?.();
 
-    // isTimeTravelMode stays true. The motion gate in the devtools
-    // store's handleStateChange will call clearTimeTravelMode() when
-    // the restored Spring/Tween animation settles and all active motions
-    // are done. Until then, isTimeTravelMode blocks phantom captures.
-    // Restore fetch and clear time-traveling flag immediately (these don't
-    // affect the capture gate, they're only for fetch blocking).
+    // isTimeTravelMode stays true to block phantom captures from pushStateToApp
+    // echoes. It will be cleared by the flushStateChanges gate in the devtools
+    // store when the echo's timer fires and the capture is blocked.
+    // Fallback: if clearTimeTravelMode is never called (e.g. no echo arrives),
+    // queueMicrotask to ensure the gate doesn't lock permanently.
+    queueMicrotask(() => {
+      internalClearTTMode();
+    });
     if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
     if (parentApi) parentApi.isTimeTraveling = false;
   }
@@ -279,12 +290,7 @@ export function createTimeTravelStore(
     get currentIndex() { return currentIndex; },
     get isTimeTravelMode() { return isTimeTravelMode; },
     clearTimeTravelMode: () => {
-      if (!isTimeTravelMode) return;
-      lastCapturedState = { components: getComponents(), timeline: getTimeline() };
-      isTimeTravelMode = false;
-      const next = pendingRestoreIndex;
-      pendingRestoreIndex = null;
-      if (next !== null) doRestore(next, false);
+      internalClearTTMode();
     },
     get maxSnapshots() { return maxSnapshots; },
     capture,
