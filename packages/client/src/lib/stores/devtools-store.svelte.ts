@@ -37,7 +37,7 @@ function createDevtoolsStore() {
   // Spring easing is asymptotic, cur === tgt may never fire via $effect.
   const activeMotions = new Set<string>();
   const _lastCur = new Map<string, number>();
-  const SETTLE_TOLERANCE = 0.01;
+  const SETTLE_TOLERANCE = 0.0015;
   const bridge = createWindowBridge();
   const timeTravel = createTimeTravelStore(
     () => components,
@@ -288,14 +288,11 @@ function createDevtoolsStore() {
       const prev = _lastCur.get(key);
       const settled = Math.abs(cur - tgt) < SETTLE_TOLERANCE;
       if (!settled) {
-        _lastCur.set(key, cur);
         activeMotions.add(key);
         return; // mid‑animation → drop this frame entirely
       }
       // Settled: one last value, safe to record.
-      // Only skip if the settled value is identical to the last processed
-      // settled value — NOT just because prev exists (prev is also set by
-      // mid-animation frames and differs from the final settled value).
+      // Skip duplicate settled values (same cur as last processed).
       activeMotions.delete(key);
       if (prev !== undefined && Math.abs(cur - prev) < SETTLE_TOLERANCE) return;
       _lastCur.set(key, cur);
@@ -318,8 +315,13 @@ function createDevtoolsStore() {
       stateFlushTimer = setTimeout(() => {
         flushStateChanges();
 
-        // Time-travel and motion gates apply at flush time
-        if (timeTravel.isTimeTravelMode) return;
+        // Time-travel and motion gates apply at flush time.
+        // Clear the gate here too — for non-motion echoes this is the only
+        // codepath that can release it (motion echoes release via settled).
+        if (timeTravel.isTimeTravelMode) {
+          if (activeMotions.size === 0) timeTravel.clearTimeTravelMode();
+          return;
+        }
         if (activeMotions.size > 0) return;
 
         if (isRecording) {

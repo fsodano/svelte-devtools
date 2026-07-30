@@ -32,6 +32,9 @@ export interface TimeTravelStore {
   branches: BranchInfo[];
   currentIndex: number;
   isTimeTravelMode: boolean;
+  /** Clear isTimeTravelMode and process any deferred restore. Called by the
+   *  devtools-store motion gate after restore animations drain. */
+  clearTimeTravelMode: () => void;
   maxSnapshots: number;
   capture: (label?: string) => void;
   /** Direct capture call — no debounce, no timers. Gate via isTimeTravelMode
@@ -203,21 +206,17 @@ export function createTimeTravelStore(
       lastCapturedState = { components: getComponents(), timeline: getTimeline() };
     }
     if (setTimeline) setTimeline(deepClone(snapshot.timeline));
-    if (setTimeline) setTimeline(deepClone(snapshot.timeline));
     pushStateToApp(snapshot.components);
     onRestore?.();
 
-    // Restore fetch and clear time-traveling flag immediately after
-    // pushStateToApp completes. The $inspect echoes from the restored
-    // state arrive later as microtasks; the lastCapturedState dedup
-    // in doCapture prevents phantom snapshots from those echoes.
+    // isTimeTravelMode stays true. The motion gate in the devtools
+    // store's handleStateChange will call clearTimeTravelMode() when
+    // the restored Spring/Tween animation settles and all active motions
+    // are done. Until then, isTimeTravelMode blocks phantom captures.
+    // Restore fetch and clear time-traveling flag immediately (these don't
+    // affect the capture gate, they're only for fetch blocking).
     if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
     if (parentApi) parentApi.isTimeTraveling = false;
-    isTimeTravelMode = false;
-
-    const next = pendingRestoreIndex;
-    pendingRestoreIndex = null;
-    if (next !== null) doRestore(next, false);
   }
 
   function restore(index: number, truncate = false): void {
@@ -284,6 +283,14 @@ export function createTimeTravelStore(
     },
     get currentIndex() { return currentIndex; },
     get isTimeTravelMode() { return isTimeTravelMode; },
+    clearTimeTravelMode: () => {
+      if (!isTimeTravelMode) return;
+      lastCapturedState = { components: getComponents(), timeline: getTimeline() };
+      isTimeTravelMode = false;
+      const next = pendingRestoreIndex;
+      pendingRestoreIndex = null;
+      if (next !== null) doRestore(next, false);
+    },
     get maxSnapshots() { return maxSnapshots; },
     capture,
     doCapture,
