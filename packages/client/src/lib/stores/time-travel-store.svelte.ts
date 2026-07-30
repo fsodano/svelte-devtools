@@ -84,11 +84,6 @@ export function createTimeTravelStore(
   }
 
   function doCapture(label?: string): void {
-    // Suppress captures during restore — the $inspect echoes from
-    // pushStateToApp arrive as state:change events via the bridge
-    // after isTimeTravelMode has been cleared by its own setTimeout(0),
-    // which races past the devtools-store gate and creates phantom
-    // snapshots. This is the nuclear catch-all.
     if (isTimeTravelMode) return;
     const comps = getComponents();
     const tl = getTimeline();
