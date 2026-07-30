@@ -214,13 +214,10 @@ export function createTimeTravelStore(
     onRestore?.();
 
     // isTimeTravelMode stays true to block phantom captures from pushStateToApp
-    // echoes. It will be cleared by the flushStateChanges gate in the devtools
-    // store when the echo's timer fires and the capture is blocked.
-    // Fallback: if clearTimeTravelMode is never called (e.g. no echo arrives),
-    // queueMicrotask to ensure the gate doesn't lock permanently.
-    queueMicrotask(() => {
-      internalClearTTMode();
-    });
+    // echoes. The flushStateChanges gate in the devtools store (line 321) will
+    // call clearTimeTravelMode when the echo's timer fires and the capture is
+    // blocked. No microtask fallback here — microtasks run before the flush
+    // timer's macrotask, so clearing early would defeat the gate.
     if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
     if (parentApi) parentApi.isTimeTraveling = false;
   }
