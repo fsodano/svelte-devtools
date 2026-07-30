@@ -244,6 +244,9 @@ export interface SvelteDevToolsAPI {
   trace(name: string, dependencies: string[]): void;
   setComponentState?(componentId: string, key: string, value: unknown): void;
   refresh?(): void;
+  startInspectBatch?(): void;
+  endInspectBatch?(): void;
+  flushAllEffects?(): void;
 }
 
 /**

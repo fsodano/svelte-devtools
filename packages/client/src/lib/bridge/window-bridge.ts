@@ -5,6 +5,7 @@ const isDebug = typeof window !== 'undefined' && !!(window as unknown as Record<
 
 export function createWindowBridge() {
     const listeners = new Map<string, Set<BridgeHandler>>();
+    const mountedComponents = new Set<string>();
 
     if (typeof window !== 'undefined') {
         const targetWindow = window.parent !== window ? window.parent : window;
@@ -35,7 +36,6 @@ export function createWindowBridge() {
 
         if (window.parent && window.parent !== window) {
             const parentWindow = window.parent as unknown as { __SVELTE_DEVTOOLS__?: SvelteDevToolsAPI };
-            const mountedComponents = new Set<string>();
 
             const syncComponents = () => {
                 const parentApi = parentWindow.__SVELTE_DEVTOOLS__;

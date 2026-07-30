@@ -32,6 +32,9 @@ export interface TimeTravelStore {
   branches: BranchInfo[];
   currentIndex: number;
   isTimeTravelMode: boolean;
+  /** Clear isTimeTravelMode and process any deferred restore. Called by the
+   *  devtools-store motion gate after restore animations drain. */
+  clearTimeTravelMode: () => void;
   maxSnapshots: number;
   capture: (label?: string) => void;
   /** Direct capture call — no debounce, no timers. Gate via isTimeTravelMode
@@ -81,8 +84,17 @@ export function createTimeTravelStore(
   }
 
   function doCapture(label?: string): void {
+    if (isTimeTravelMode) return;
     const comps = getComponents();
     const tl = getTimeline();
+
+    // If the current components are byte-identical to the last snapshot
+    // that was restored, skip. This catches phantom captures from
+    // pushStateToApp echoes that arrive after isTimeTravelMode clears.
+    if (lastRestoredSnapshotJSON && JSON.stringify(comps) === lastRestoredSnapshotJSON) {
+      lastCapturedState = { components: comps, timeline: tl };
+      return;
+    }
 
     if (lastCapturedState) {
       const componentsChanged = JSON.stringify(comps) !== JSON.stringify(lastCapturedState.components);
@@ -120,6 +132,8 @@ export function createTimeTravelStore(
 
     currentIndex = snapshots.length - 1;
     lastCapturedState = { components: comps, timeline: tl };
+    // Restore dedup is now stale — the user made a real change.
+    lastRestoredSnapshotJSON = null;
   }
 
   // capture() is a pass-through to doCapture — the devtools-store gates
@@ -129,11 +143,9 @@ export function createTimeTravelStore(
   }
 
   function pushStateToApp(components: ComponentNode[]): void {
-    const parentApi = typeof window !== 'undefined'
-      ? ((window.parent || window) as unknown as { __SVELTE_DEVTOOLS__?: Record<string, unknown> }).__SVELTE_DEVTOOLS__
-      : undefined;
+    const parentApi = getParentApi() as Record<string, (args?: unknown) => void> | undefined;
     if (!parentApi?.setComponentState) return;
-    if (parentApi.startInspectBatch) parentApi.startInspectBatch();
+    parentApi.startInspectBatch?.();
     const isMapOrSet = (v: unknown) => {
       const tag = Object.prototype.toString.call(v);
       return tag === '[object Map]' || tag === '[object Set]';
@@ -143,13 +155,16 @@ export function createTimeTravelStore(
       : [];
     for (const comp of components) {
       const liveComp = liveComps.find(c => c.id === comp.id);
+      for (const [key, value] of Object.entries(comp.props || {})) {
+        (parentApi.setComponentState as (id: string, key: string, value: unknown) => void)(comp.id, key, value);
+      }
       for (const [key, value] of Object.entries(comp.state || {})) {
         const liveVal = liveComp?.state?.get(key);
         if (liveVal !== undefined && isMapOrSet(liveVal)) continue;
         (parentApi.setComponentState as (id: string, key: string, value: unknown) => void)(comp.id, key, value);
       }
     }
-    if (parentApi.endInspectBatch) parentApi.endInspectBatch();
+    parentApi.endInspectBatch?.();
     parentApi.flushAllEffects?.();
   }
 
@@ -161,6 +176,18 @@ export function createTimeTravelStore(
 
   let _origFetch: typeof window.fetch | null = null;
   let pendingRestoreIndex: number | null = null;
+  // Serialized components of the last restore snapshot. Compared at the
+  // top of doCapture to catch ANY capture that happens after a restore.
+  let lastRestoredSnapshotJSON: string | null = null;
+
+  function internalClearTTMode(): void {
+    if (!isTimeTravelMode) return;
+    lastCapturedState = { components: getComponents(), timeline: getTimeline() };
+    isTimeTravelMode = false;
+    const next = pendingRestoreIndex;
+    pendingRestoreIndex = null;
+    if (next !== null) doRestore(next, false);
+  }
 
   function doRestore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
@@ -182,10 +209,6 @@ export function createTimeTravelStore(
         return _origFetch!(...args);
       };
     }
-    setTimeout(() => {
-      if (parentApi) parentApi.isTimeTraveling = false;
-      if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
-    }, 2000);
 
     if (setComponents) {
       const current = getComponents();
@@ -197,28 +220,27 @@ export function createTimeTravelStore(
         if (!merged.find(m => m.id === sc.id)) merged.push(deepClone(sc));
       }
       setComponents(merged);
+      lastCapturedState = { components: getComponents(), timeline: getTimeline() };
     }
+    // Store the restored snapshot's components JSON for post-restore
+    // capture dedup that can happen after isTimeTravelMode is cleared.
+    lastRestoredSnapshotJSON = JSON.stringify(snapshot.components);
     if (setTimeline) setTimeline(deepClone(snapshot.timeline));
     pushStateToApp(snapshot.components);
     onRestore?.();
 
-    // Unlock via macrotask — gives Svelte 5 one event-loop tick to
-    // flush all {hard: true} mutations and $inspect echoes before
-    // the DevTools starts listening again. If another restore was
-    // requested while in-flight, service it immediately after unlock.
-    setTimeout(() => {
-      isTimeTravelMode = false;
-      const next = pendingRestoreIndex;
-      pendingRestoreIndex = null;
-      if (next !== null) doRestore(next, false);
-    }, 0);
+    // isTimeTravelMode stays true to block phantom captures from pushStateToApp
+    // echoes. The flushStateChanges gate in the devtools store (line 321) will
+    // call clearTimeTravelMode when the echo's timer fires and the capture is
+    // blocked. No microtask fallback here — microtasks run before the flush
+    // timer's macrotask, so clearing early would defeat the gate.
+    if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
+    if (parentApi) parentApi.isTimeTraveling = false;
   }
 
   function restore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
     if (isTimeTravelMode) {
-      // Defer — a restore is already in-flight; avoid racing its
-      // pushStateToApp + setTimeout(0) unlock cycle.
       pendingRestoreIndex = index;
       return;
     }
@@ -232,10 +254,16 @@ export function createTimeTravelStore(
 
   function setStateEdit(componentId: string, key: string, value: unknown): void {
     const comps = getComponents();
-    const updated = comps.map(c =>
-      c.id === componentId ? { ...c, state: { ...c.state, [key]: value } } : c
-    );
+    const updated = comps.map(c => {
+      if (c.id !== componentId) return c;
+      const isProp = c.props !== undefined && Object.prototype.hasOwnProperty.call(c.props, key);
+      if (isProp) {
+        return { ...c, props: { ...c.props, [key]: value } };
+      }
+      return { ...c, state: { ...c.state, [key]: value } };
+    });
     if (setComponents) setComponents(updated);
+    pushStateToApp(updated);
     capture('state-edit');
   }
 
@@ -274,6 +302,9 @@ export function createTimeTravelStore(
     },
     get currentIndex() { return currentIndex; },
     get isTimeTravelMode() { return isTimeTravelMode; },
+    clearTimeTravelMode: () => {
+      internalClearTTMode();
+    },
     get maxSnapshots() { return maxSnapshots; },
     capture,
     doCapture,

@@ -12,7 +12,7 @@ import launchEditor from 'launch-editor';
 import {parse} from 'svelte/compiler';
 import type {ComponentMeta, StateDeclaration, SvelteDevToolsPluginOptions} from '@svelte-devtools/types';
 import {DOCK_CONFIG, RPC_METHODS, RPC_TYPES} from '@svelte-devtools/types';
-import type {DevToolsNodeContext} from '@vitejs/devtools-kit';
+import type {ViteDevToolsNodeContext} from '@vitejs/devtools-kit';
 import {analyzeMigration} from './migration-analyzer.js';
 
 const require = createRequire(import.meta.url);
@@ -46,7 +46,7 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
     // Vite 8: use createFilter for include/exclude matching
     const filter = createFilter(include, exclude);
 
-    const plugin: Plugin & { devtools: { setup: (ctx: DevToolsNodeContext) => void } } = {
+    const plugin: Plugin & { devtools: { setup: (ctx: ViteDevToolsNodeContext) => void } } = {
         name: 'svelte-devtools',
         // apply: 'serve' is the default for devtools plugins — no need to set explicitly
         apply: 'serve',
@@ -343,7 +343,7 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
 
 
         devtools: {
-            setup(ctx: DevToolsNodeContext) {
+            setup(ctx: ViteDevToolsNodeContext) {
                 // Register the dock entry
                 ctx.docks.register({
                     id: DOCK_CONFIG.ID,

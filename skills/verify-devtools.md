@@ -172,7 +172,21 @@ curl "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
 
 Returns the source code of the specified file.
 
-## Full Playwright Verification Script
+## Playwright: Interacting with the DevTools Panel
+
+The Svelte DevTools panel loads as an **iframe** inside the `vite-devtools-dock-embedded` web component's shadow DOM (not DocumentPictureInPicture). The dock type is configured as `'iframe'` in `DOCK_CONFIG`.
+
+### Accessing the DevTools iframe
+
+```javascript
+const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
+const iframe = dock?.querySelector('iframe');
+const doc = iframe.contentDocument || iframe.contentWindow?.document;
+```
+
+Since the iframe is same-origin (served from the same dev server), `contentDocument` is accessible directly — no cross-origin issues.
+
+### Full Playwright Verification Script
 
 ```typescript
 import { chromium } from 'playwright';
@@ -185,39 +199,108 @@ async function verifyDevTools() {
   // Wait for Vite DevTools dock
   await page.waitForSelector('vite-devtools-dock-embedded', { state: 'attached', timeout: 10000 });
 
-  // Authorize (only needed once per browser)
-  await page.evaluate(() => {
-    const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-    dock?.querySelector('button')?.click();
-  });
-  await page.waitForTimeout(1000);
-
-  // The auth token must be obtained from the terminal output.
-  // See Step 3 above. Navigate to the auth URL:
-  await page.goto('http://localhost:5173/.devtools/auth?id=<TOKEN>');
-
-  // Return to the app
-  await page.goto('http://localhost:5173/');
-  await page.waitForTimeout(2000);
-
-  // Open Svelte panel
+  // Authorize if needed (token from terminal output, see Step 3)
+  // Then open Svelte panel by clicking the dock button
   await page.evaluate(() => {
     const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
     dock?.querySelector('button[title="Svelte"]')?.click();
   });
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(3000);
 
-  // Verify via HTTP API
+  // Helper: evaluate JS inside the DevTools iframe
+  async function devtoolsEval<T>(fn: (doc: Document) => T): Promise<T | null> {
+    return page.evaluate((fnStr) => {
+      const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
+      const iframe = dock?.querySelector('iframe');
+      if (!iframe) return null;
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) return null;
+      return (new Function('doc', fnStr))(doc);
+    }, fn.toString());
+  }
+
+  // Navigate to a tab in the sidebar
+  async function clickTab(tabName: string) {
+    await devtoolsEval((doc: Document) => {
+      const buttons = doc.querySelectorAll('button');
+      for (const btn of buttons) {
+        if (btn.textContent?.trim() === tabName) { btn.click(); break; }
+      }
+    });
+    await page.waitForTimeout(1000);
+  }
+
+  // Click a button on the main page
+  async function clickMainButton(text: string) {
+    await page.evaluate((btnText) => {
+      const buttons = document.querySelectorAll('button');
+      for (const btn of buttons) {
+        if (btn.textContent?.trim() === btnText) { btn.click(); return; }
+      }
+    }, text);
+    await page.waitForTimeout(1000);
+  }
+
+  // Verify via HTTP API (works even without panel open)
   const res = await page.request.get('http://localhost:5173/__svelte-devtools/api/components');
   const data = await res.json();
   console.log(`Components: ${data.count}`);
-  console.log('Names:', data.components.map((c: any) => c.name));
 
   await browser.close();
 }
 ```
 
-**Note:** `DocumentPictureInPicture` popups cannot be opened in headless Playwright. For CI, verify via the HTTP API alone.
+### Testing Time Travel Snapshots
+
+The Time Travel tab (`TimeTravelConsole.svelte`) shows snapshots with undo/redo controls. Use the iframe access pattern to interact with them:
+
+```typescript
+// Read snapshot counter (e.g. "3 / 3")
+const snapInfo = await devtoolsEval((doc: Document) => {
+  const text = doc.body?.textContent || '';
+  const match = text.match(/(\d+)\s*\/\s*(\d+)/);
+  return match ? { current: +match[1], total: +match[2] } : null;
+});
+
+// Click Undo (first .tb-btn in TimeTravelConsole)
+await devtoolsEval((doc: Document) => {
+  const tbs = doc.querySelectorAll('.tb-btn');
+  if (tbs.length > 0 && !(tbs[0] as HTMLButtonElement).disabled) tbs[0].click();
+});
+
+// Click Redo (second .tb-btn)
+await devtoolsEval((doc: Document) => {
+  const tbs = doc.querySelectorAll('.tb-btn');
+  if (tbs.length > 1 && !(tbs[1] as HTMLButtonElement).disabled) tbs[1].click();
+});
+
+// Click a specific snapshot row (uses restore(idx, true) — truncates future)
+await devtoolsEval((doc: Document) => {
+  const rows = doc.querySelectorAll('[class*="row"]');
+  if (rows.length > index) rows[index].querySelector('button')?.click();
+});
+```
+
+**Verify no phantom snapshots:** After undo/redo operations, `snapInfo.total` must remain constant.
+
+### Using `browser_run_code_unsafe` (Playwright MCP)
+
+When using the Playwright MCP server, `browser_run_code_unsafe` gives you direct access to the `page` object for complex multi-step scripts:
+
+```javascript
+await browser_run_code_unsafe({
+  code: `async (page) => {
+    await page.goto('http://localhost:5173/');
+    await page.waitForTimeout(2000);
+    // ...full script with iframe access, button clicks, etc.
+    return result;
+  }`
+});
+```
+
+### CI / headless mode
+
+The DevTools iframe is accessible in headless mode since it's same-origin. All verification (components, timeline, snapshots) works without a visible browser window. The HTTP API is the CI-safe alternative.
 
 ## Common Issues
 

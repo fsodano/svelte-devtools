@@ -1,5 +1,6 @@
 import {ComponentRegistry} from './instrumentation/registry.js';
 import type {ComponentInstance, SvelteDevToolsAPI} from '@svelte-devtools/types';
+export { getInitScript } from './init.js';
 
 type ComponentState = ComponentInstance;
 
@@ -9,8 +10,10 @@ interface DevToolsState {
     components: Map<string, ComponentState>;
 }
 
+import type { GlobalRuntime } from './init.js';
+
 interface SvelteDevToolsRuntimeWindow extends Window {
-    __SVELTE_DEVTOOLS_RUNTIME__?: typeof runtime;
+    __SVELTE_DEVTOOLS_RUNTIME__: GlobalRuntime;
     __SVELTE_DEVTOOLS_REGISTRY__?: Map<string, { id: string; name: string; filename: string }>;
     __SVELTE_DEVTOOLS__?: SvelteDevToolsAPI;
     __SVELTE_DEVTOOLS_DEBUG__?: boolean;
@@ -388,6 +391,27 @@ export const runtime = {
         }
         const comp = state.components.get(componentId);
         if (comp) comp.state.set(key, value);
+    },
+
+    startInspectBatch(): void {
+        if (isDebug) console.log('[Svelte DevTools] startInspectBatch');
+    },
+
+    endInspectBatch(): void {
+        if (isDebug) console.log('[Svelte DevTools] endInspectBatch');
+        // Signal the DevTools client once all pending reactivity microtasks
+        // ($inspect callbacks, $effect flushes) have drained. A two-deep
+        // queueMicrotask ensures this runs after every microtask queued by
+        // the setComponentState calls in the current batch.
+        queueMicrotask(() => {
+            queueMicrotask(() => {
+                window.postMessage({source: 'svelte-devtools', type: 'restore:echoes-done'}, '*');
+            });
+        });
+    },
+
+    flushAllEffects(): void {
+        if (isDebug) console.log('[Svelte DevTools] flushAllEffects');
     }
 };
 
@@ -453,6 +477,20 @@ if (typeof window !== 'undefined') {
     svelteDevToolsRuntime.setComponentState = runtime.setComponentState.bind(runtime);
     svelteDevToolsRuntime.refresh = runtime.refresh.bind(runtime);
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_RUNTIME__ = svelteDevToolsRuntime;
+
+    // Drain the __SVELTE_DEVTOOLS_QUEUE__ used by the Vite 8 transform for
+    // _registerState calls that fired before the runtime finished loading.
+    // Each entry is a function(runtime) that calls runtime._registerState(...).
+    const win = window as unknown as Record<string, unknown>;
+    var queuedFns = win.__SVELTE_DEVTOOLS_QUEUE__ as Array<(rt: typeof svelteDevToolsRuntime) => void> | undefined;
+    if (queuedFns) {
+        for (var k = 0; k < queuedFns.length; k++) {
+            try { queuedFns[k](svelteDevToolsRuntime); } catch (e) {
+                if (isDebug) console.warn('[Svelte DevTools] Error draining __SVELTE_DEVTOOLS_QUEUE__:', e);
+            }
+        }
+        win.__SVELTE_DEVTOOLS_QUEUE__ = [];
+    }
 
     (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS__ = {
         version: runtime.version,
@@ -532,6 +570,15 @@ if (typeof window !== 'undefined') {
         getTimeline: () => [],
         setComponentState: (id: string, key: string, value: unknown) => {
             svelteDevToolsRuntime.setComponentState(id, key, value);
+        },
+        startInspectBatch: () => {
+            svelteDevToolsRuntime.startInspectBatch();
+        },
+        endInspectBatch: () => {
+            svelteDevToolsRuntime.endInspectBatch();
+        },
+        flushAllEffects: () => {
+            svelteDevToolsRuntime.flushAllEffects();
         },
         refresh: () => {
             svelteDevToolsRuntime.refresh();

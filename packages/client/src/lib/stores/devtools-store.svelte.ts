@@ -37,7 +37,7 @@ function createDevtoolsStore() {
   // Spring easing is asymptotic, cur === tgt may never fire via $effect.
   const activeMotions = new Set<string>();
   const _lastCur = new Map<string, number>();
-  const SETTLE_TOLERANCE = 0.0001;
+  const SETTLE_TOLERANCE = 0.0015;
   const bridge = createWindowBridge();
   const timeTravel = createTimeTravelStore(
     () => components,
@@ -273,8 +273,34 @@ function createDevtoolsStore() {
     const value = data.value instanceof Map ? Object.fromEntries(data.value) : data.value;
     const isProp = (data as Record<string, unknown>).type === 'props';
 
+    // ── Motion gate (Spring/Tween) ──────────────────────────────
+    // Detect animation frames from the $effect watcher on class
+    // instances. Mid-animation frames are dropped entirely; settled
+    // frames proceed to the debounced batch.
+    const isMotion = value && typeof value === 'object'
+      && 'current' in (value as Record<string, unknown>)
+      && 'target' in (value as Record<string, unknown>);
+
+    if (isMotion) {
+      const cur = (value as Record<string, unknown>).current as number;
+      const tgt = (value as Record<string, unknown>).target as number;
+      const key = `${data.componentId}::${data.key}`;
+      const prev = _lastCur.get(key);
+      const settled = Math.abs(cur - tgt) < SETTLE_TOLERANCE;
+      if (!settled) {
+        activeMotions.add(key);
+        return; // mid‑animation → drop this frame entirely
+      }
+      // Settled: one last value, safe to record.
+      // Skip duplicate settled values (same cur as last processed).
+      activeMotions.delete(key);
+      if (prev !== undefined && Math.abs(cur - prev) < SETTLE_TOLERANCE) return;
+      _lastCur.set(key, cur);
+    }
+
     // Queue into debounced batch instead of immediately rebuilding the
     // entire components array on every single $inspect fire.
+      
     pendingStateChanges.push({
       componentId: data.componentId,
       key: data.key,
@@ -289,14 +315,21 @@ function createDevtoolsStore() {
       stateFlushTimer = setTimeout(() => {
         flushStateChanges();
 
-        // Time-travel and motion gates apply at flush time
-        if (timeTravel.isTimeTravelMode) return;
+        // Time-travel and motion gates apply at flush time.
+        // Clear the gate here too — for non-motion echoes this is the only
+        // codepath that can release it (motion echoes release via settled).
+        if (timeTravel.isTimeTravelMode) {
+          if (activeMotions.size === 0) {
+            timeTravel.clearTimeTravelMode();
+          }
+          return;
+        }
         if (activeMotions.size > 0) return;
 
         if (isRecording) {
           scheduleStateCapture('state', 0);
         }
-      }, 50);
+      }, 0);
     }
   }
 

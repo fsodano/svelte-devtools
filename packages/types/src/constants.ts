@@ -54,6 +54,9 @@ export const RPC_METHODS = {
   BUILD_STATUS: 'svelte-devtools:build-status',
   COMPONENT_STATE: 'svelte-devtools:component-state',
   RESCAN: 'svelte-devtools:rescan',
+  UPDATE_COMPONENT_STATE: 'svelte-devtools:update-component-state',
+  SET_NETWORK_RULE: 'svelte-devtools:set-network-rule',
+  GET_ROUTES: 'svelte-devtools:get-routes',
 } as const;
 
 export type RpcMethod = typeof RPC_METHODS[keyof typeof RPC_METHODS];

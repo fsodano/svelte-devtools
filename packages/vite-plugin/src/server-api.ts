@@ -96,6 +96,7 @@ export async function handleApiRequest(
                         '/__svelte-devtools/api/set-state',
                         '/__svelte-devtools/api/remote',
                         '/__svelte-devtools/api/sync',
+                        '/__svelte-devtools/api/routes',
                     ],
                     legacyEndpoints: '/__svelte-devtools/server-events, /__svelte-devtools/migration-score',
                 });
@@ -250,6 +251,58 @@ export async function handleApiRequest(
                 if (data.branches) cachedState.branches = data.branches;
                 cachedState.updatedAt = Date.now();
                 json(res, { ok: true, cachedAt: cachedState.updatedAt });
+                return;
+            }
+
+            // ── SvelteKit routes from filesystem ──
+            case '/routes': {
+                const { readdirSync, statSync, existsSync } = await import('node:fs');
+                const { join, relative, resolve } = await import('node:path');
+                const root = process.cwd();
+                const routesDir = join(root, 'src', 'routes');
+                const svelteKitRoutes: Array<{
+                    id: string; cleanedUrl: string; files: Record<string, boolean>;
+                    routeGroup?: string; paramNames?: string[];
+                }> = [];
+                if (existsSync(routesDir)) {
+                    function scanDir(dir: string, prefix: string): void {
+                        let entries: string[];
+                        try { entries = readdirSync(dir); } catch { return; }
+                        for (const entry of entries.sort()) {
+                            const fullPath = join(dir, entry);
+                            const stat = statSync(fullPath);
+                            if (stat.isDirectory()) {
+                                if (entry.startsWith('(') && entry.endsWith(')')) {
+                                    // Route group — transparent to URL
+                                    scanDir(fullPath, prefix);
+                                } else {
+                                    scanDir(fullPath, prefix + '/' + entry.replace(/\[\.\.\./g, '*').replace(/\[/g, ':').replace(/\]/g, ''));
+                                }
+                            } else if (entry.endsWith('.svelte') || entry.endsWith('.ts') || entry.endsWith('.js')) {
+                                const base = entry.replace(/\.(svelte|ts|js)$/, '');
+                                if (base.startsWith('+')) {
+                                    const relPath = relative(routesDir, fullPath);
+                                    const urlPath = prefix || '/' || '';
+                                    let routeId = svelteKitRoutes.find(r => r.cleanedUrl === urlPath);
+                                    if (!routeId) {
+                                        routeId = {
+                                            id: urlPath || '/',
+                                            cleanedUrl: urlPath || '/',
+                                            files: {},
+                                            routeGroup: prefix.includes('(') ? prefix.match(/\((\w+)\)/)?.[1] : undefined,
+                                            paramNames: urlPath.match(/:(\w+)/g)?.map(p => p.slice(1)) || [],
+                                        };
+                                        svelteKitRoutes.push(routeId);
+                                    }
+                                    const fileKey = base.slice(1); // +page → page, +layout → layout, etc.
+                                    routeId.files[fileKey] = true;
+                                }
+                            }
+                        }
+                    }
+                    scanDir(routesDir, '');
+                }
+                json(res, { ok: true, routes: svelteKitRoutes });
                 return;
             }
 
