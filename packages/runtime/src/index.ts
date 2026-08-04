@@ -17,6 +17,8 @@ interface SvelteDevToolsRuntimeWindow extends Window {
     __SVELTE_DEVTOOLS_REGISTRY__?: Map<string, { id: string; name: string; filename: string }>;
     __SVELTE_DEVTOOLS__?: SvelteDevToolsAPI;
     __SVELTE_DEVTOOLS_DEBUG__?: boolean;
+    __SVELTE_DEVTOOLS_TICK__?: () => Promise<void>;
+    __SVELTE_DEVTOOLS_REAL_GOTO__?: (path: string, opts?: Record<string, unknown>) => Promise<void>;
 }
 
 const isDebug = typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>)?.__SVELTE_DEVTOOLS_DEBUG__;
@@ -464,6 +466,127 @@ function sanitizeForPostMessage(value: unknown): unknown {
     return Object.keys(obj).length > 0 ? obj : String(value);
 }
 
+// ============================================================================
+// Element Inspector
+// ============================================================================
+
+let inspectorEnabled = false;
+let inspectorOverlay: HTMLElement | null = null;
+let inspectorTooltip: HTMLElement | null = null;
+
+function inspectorFindComponentId(target: Element): string | null {
+    let current: Element | null = target;
+    while (current) {
+        const id = current.getAttribute('data-svelte-devtools-id');
+        if (id) return id;
+        current = current.parentElement;
+    }
+    return null;
+}
+
+function inspectorClearOverlay(): void {
+    if (inspectorOverlay) {
+        inspectorOverlay.remove();
+        inspectorOverlay = null;
+    }
+    if (inspectorTooltip) {
+        inspectorTooltip.remove();
+        inspectorTooltip = null;
+    }
+}
+
+function inspectorShowOverlay(id: string, name: string): void {
+    const target = document.querySelector(`[data-svelte-devtools-id="${id}"]`);
+    if (!(target instanceof HTMLElement)) {
+        inspectorClearOverlay();
+        return;
+    }
+    const rect = target.getBoundingClientRect();
+
+    if (!inspectorOverlay) {
+        inspectorOverlay = document.createElement('div');
+        inspectorOverlay.style.cssText =
+            'position:fixed;top:0;left:0;box-sizing:border-box;pointer-events:none;' +
+            'outline:2px solid #FF3E00;outline-offset:-2px;background:rgba(255,62,0,0.06);' +
+            'z-index:2147483646;';
+        document.body.appendChild(inspectorOverlay);
+    }
+    inspectorOverlay.style.top = `${rect.top}px`;
+    inspectorOverlay.style.left = `${rect.left}px`;
+    inspectorOverlay.style.width = `${rect.width}px`;
+    inspectorOverlay.style.height = `${rect.height}px`;
+
+    if (!inspectorTooltip) {
+        inspectorTooltip = document.createElement('div');
+        inspectorTooltip.style.cssText =
+            'position:fixed;padding:2px 8px;font-size:11px;font-family:system-ui,sans-serif;' +
+            'color:#fff;background:#FF3E00;border-radius:3px;pointer-events:none;' +
+            'white-space:nowrap;z-index:2147483647;';
+        document.body.appendChild(inspectorTooltip);
+    }
+    inspectorTooltip.textContent = name;
+    const tooltipTop = rect.top >= 24 ? rect.top - 24 : rect.bottom + 4;
+    inspectorTooltip.style.top = `${tooltipTop}px`;
+    inspectorTooltip.style.left = `${rect.left}px`;
+}
+
+function onInspectorPointerOver(event: PointerEvent): void {
+    if (!inspectorEnabled) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const id = inspectorFindComponentId(target);
+    if (!id) {
+        inspectorClearOverlay();
+        return;
+    }
+    const component = state.components.get(id);
+    inspectorShowOverlay(id, component?.name ?? 'Unknown');
+}
+
+function onInspectorClick(event: MouseEvent): void {
+    if (!inspectorEnabled) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const id = inspectorFindComponentId(target);
+    if (!id) return;
+    event.preventDefault();
+    event.stopPropagation();
+    window.postMessage({
+        source: 'svelte-devtools',
+        type: 'inspect:select',
+        payload: { componentId: id }
+    }, '*');
+    inspectorDisable();
+}
+
+function onInspectorKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+        inspectorDisable();
+    }
+}
+
+function inspectorEnable(): void {
+    if (inspectorEnabled) return;
+    inspectorEnabled = true;
+    if (typeof document !== 'undefined') {
+        document.addEventListener('pointerover', onInspectorPointerOver, true);
+        document.addEventListener('click', onInspectorClick, true);
+        document.addEventListener('keydown', onInspectorKeyDown, true);
+    }
+    window.postMessage({source: 'svelte-devtools', type: 'inspect:toggle', payload: {enabled: true}}, '*');
+}
+
+function inspectorDisable(): void {
+    inspectorEnabled = false;
+    if (typeof document !== 'undefined') {
+        document.removeEventListener('pointerover', onInspectorPointerOver, true);
+        document.removeEventListener('click', onInspectorClick, true);
+        document.removeEventListener('keydown', onInspectorKeyDown, true);
+    }
+    inspectorClearOverlay();
+    window.postMessage({source: 'svelte-devtools', type: 'inspect:toggle', payload: {enabled: false}}, '*');
+}
+
 if (typeof window !== 'undefined') {
     const svelteDevToolsRuntime = (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_RUNTIME__ || runtime;
     svelteDevToolsRuntime.version = runtime.version;
@@ -582,6 +705,12 @@ if (typeof window !== 'undefined') {
         },
         refresh: () => {
             svelteDevToolsRuntime.refresh();
+        },
+        enableInspector: () => {
+            inspectorEnable();
+        },
+        disableInspector: () => {
+            inspectorDisable();
         },
         subscribe: () => () => {
         },

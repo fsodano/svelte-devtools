@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
   import { Network } from 'vis-network';
   import type { DataSet } from 'vis-data';
@@ -91,7 +90,16 @@
     };
 
     isStabilizing = true;
-    network = new Network(container, { nodes, edges }, options);
+    try {
+      network = new Network(container, { nodes, edges }, options);
+    } catch (err) {
+      // e.g. zero-size container at the moment of construction.
+      // Don't latch isStabilizing — allow future rebuilds.
+      console.error('[svelte-devtools] Failed to create component graph:', err);
+      network = null;
+      isStabilizing = false;
+      return;
+    }
 
     network.once('stabilizationIterationsDone', () => {
       network?.setOptions({ physics: false });
@@ -123,12 +131,9 @@
     buildGraph();
   }
 
-  onMount(() => {
-    // Container is guaranteed to be available here
-    initOrRebuild();
-  });
-
-  // Reactively rebuild when component structure changes
+  // Reactively rebuild when component structure changes.
+  // This $effect also handles the initial mount: it runs after the DOM
+  // (including `bind:this={container}`) is available, so no onMount is needed.
   let prevKey = '';
   $effect(() => {
     const key = graphKey;

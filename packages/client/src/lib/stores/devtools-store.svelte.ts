@@ -46,6 +46,9 @@ function createDevtoolsStore() {
     (t) => { timeline = t; }
   );
   let isRecording = $state(false);
+  let isInspecting = $state(false);
+  let inspectSelectedId = $state<string | null>(null);
+  let onInspectSelect: ((componentId: string) => void) | null = null;
   let ttTick = $state(0);
   let serverEvents = $state<unknown[]>([]);
   let serverEventsPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -202,6 +205,16 @@ function createDevtoolsStore() {
     bridge.on('trace:trigger', handleTraceTrigger as BridgeHandler);
     bridge.on('effect:run', handleEffectRun as BridgeHandler);
     bridge.on('client:request', handleClientRequest as BridgeHandler);
+    bridge.on('inspect:toggle', (payload) => {
+      const data = payload as { enabled: boolean };
+      isInspecting = data.enabled;
+    });
+    bridge.on('inspect:select', (payload) => {
+      const data = payload as { componentId: string };
+      inspectSelectedId = data.componentId;
+      selectedComponentId = data.componentId;
+      onInspectSelect?.(data.componentId);
+    });
 
     isConnected = true;
     startServerEventsPoll();
@@ -400,6 +413,21 @@ function createDevtoolsStore() {
     selectedComponentId = id;
   }
 
+  function toggleInspector(): void {
+    try {
+      const parentApi = (window.parent as unknown as { __SVELTE_DEVTOOLS__?: { enableInspector?: () => void; disableInspector?: () => void } }).__SVELTE_DEVTOOLS__;
+      if (!isInspecting) {
+        parentApi?.enableInspector?.();
+        isInspecting = true;
+      } else {
+        parentApi?.disableInspector?.();
+        isInspecting = false;
+      }
+    } catch {
+      // Inspector API unavailable on the parent window
+    }
+  }
+
   function setSearchQuery(query: string, allComponents: ComponentNode[]): void {
     searchQuery = query;
     if (!query.trim()) {
@@ -434,9 +462,13 @@ function createDevtoolsStore() {
     get serverEvents() { return serverEvents as ServerEvent[]; },
     get isRecording() { return isRecording; },
     set isRecording(v: boolean) { isRecording = v; },
+    get isInspecting() { return isInspecting; },
+    get inspectSelectedId() { return inspectSelectedId; },
+    setOnInspectSelect(fn: (componentId: string) => void) { onInspectSelect = fn; },
     refresh() { bridge.refresh(); },
     init,
     selectComponent,
+    toggleInspector,
     setSearchQuery,
     getFilteredComponents,
     stopServerEventsPoll,
