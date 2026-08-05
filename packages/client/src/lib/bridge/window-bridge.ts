@@ -52,7 +52,7 @@ const payload: ComponentMountPayload = {
     name: comp.name,
     props: comp.props || {},
     state: Object.fromEntries(comp.state || []),
-    children: comp.children || [],
+    children: (comp.children || []) as string[],
     parentId: comp.parentId,
     filename: comp.filename
 };
@@ -112,7 +112,7 @@ const payload: ComponentMountPayload = {
                             name: comp.name,
                             props: comp.props || {},
                             state: Object.fromEntries(comp.state || []),
-                            children: comp.children || [],
+                            children: (comp.children || []) as string[],
                             parentId: comp.parentId,
                             filename: comp.filename
                         };
