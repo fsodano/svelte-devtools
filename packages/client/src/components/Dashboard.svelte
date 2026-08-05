@@ -88,7 +88,7 @@
       </div>
     </button>
 
-    <button class="dash-card" onclick={() => go('time-travel')}>
+    <button class="dash-card" onclick={() => go('timetravel')}>
       <div class="card-header">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span class="card-title">Time Travel</span>

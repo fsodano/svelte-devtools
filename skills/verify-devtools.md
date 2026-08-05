@@ -252,9 +252,19 @@ async function verifyDevTools() {
 
 ### Testing Time Travel Snapshots
 
-The Time Travel tab (`TimeTravelConsole.svelte`) shows snapshots with undo/redo controls. Use the iframe access pattern to interact with them:
+The Time Travel tab (`TimeTravelConsole.svelte`) shows snapshots with undo/redo controls. Use the iframe access pattern to interact with them.
+
+**Prerequisite — enable recording first:** The panel starts in "Paused" state. No snapshots are captured until you click the Record button (`.record-btn`). Without this, the panel shows "No snapshots — Click Record and interact with your app".
 
 ```typescript
+// MUST DO FIRST: Click Record to enable snapshot capture
+// Toggles the panel from "Paused" → "Recording"
+await devtoolsEval((doc: Document) => {
+  const btn = doc.querySelector('.record-btn');
+  if (btn && !btn.classList.contains('recording')) btn.click();
+});
+await page.waitForTimeout(500);
+
 // Read snapshot counter (e.g. "3 / 3")
 const snapInfo = await devtoolsEval((doc: Document) => {
   const text = doc.body?.textContent || '';
@@ -314,6 +324,7 @@ The DevTools iframe is accessible in headless mode since it's same-origin. All v
 | Dock shows "Unauthorized" after auth | Auth token expired or wrong | Re-authorize with fresh token from terminal |
 | `isRecording is not defined` in console | Missing store prefix in Timeline.svelte | Check `devtoolsStore.isRecording` is used everywhere (not bare `isRecording`) |
 | Server filter tab shows no entries | Event type mismatch between plugin and Timeline filter | The plugin emits `server:trace`/`server:error`, Timeline filter should use `e.type.startsWith('server:')` |
+| Time Travel shows "No snapshots — Click Record and interact with your app" | Panel starts in "Paused" state; snapshot capture is not automatic | Click the Record button (`.record-btn` inside the DevTools iframe) to toggle "Paused" → "Recording" before interacting with the app |
 
 ## Verification Checklist
 

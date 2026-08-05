@@ -40,7 +40,7 @@ export interface TimeTravelStore {
   /** Direct capture call — no debounce, no timers. Gate via isTimeTravelMode
    *  and activeMotions in the DevTools store before calling this. */
   doCapture: (label?: string) => void;
-  restore: (index: number, truncate?: boolean) => void;
+  restore: (index: number, truncate?: boolean) => Promise<void>;
   goToSnapshot: (id: string) => void;
   setStateEdit: (componentId: string, key: string, value: unknown) => void;
   clear: () => void;
@@ -75,11 +75,26 @@ export function createTimeTravelStore(
 ): TimeTravelStore {
   function getKitStateFromParent(): KitState | null {
     try {
-      const parentApi = (typeof window !== 'undefined'
-        ? ((window.parent || window) as unknown as { __SVELTE_DEVTOOLS__?: Record<string, unknown> }).__SVELTE_DEVTOOLS__
-        : undefined) as Record<string, unknown> | undefined;
-      if (!parentApi || !parentApi._readKitState) return null;
-      return (parentApi._readKitState as () => KitState | null)();
+      const parentWin = getParentWindow();
+      if (!parentWin) return null;
+      const parentApi = (parentWin as unknown as { __SVELTE_DEVTOOLS__?: Record<string, unknown> }).__SVELTE_DEVTOOLS__;
+
+      // Prefer the runtime-provided kit state reader when it exists.
+      if (parentApi && typeof parentApi._readKitState === 'function') {
+        return (parentApi._readKitState as () => KitState | null)();
+      }
+
+      // Fallback: _readKitState is never defined at runtime — read the URL
+      // directly from the parent window so snapshots capture the route.
+      return {
+        url: {
+          href: parentWin.location.href,
+          origin: parentWin.location.origin,
+          pathname: parentWin.location.pathname,
+          search: parentWin.location.search,
+          hash: parentWin.location.hash,
+        },
+      };
     } catch { return null; }
   }
 
@@ -179,6 +194,11 @@ export function createTimeTravelStore(
   // Serialized components of the last restore snapshot. Compared at the
   // top of doCapture to catch ANY capture that happens after a restore.
   let lastRestoredSnapshotJSON: string | null = null;
+  let _isJumpingRoute = false;
+
+  function getParentWindow(): Window | null {
+    return typeof window !== 'undefined' ? ((window.parent || window) as Window) : null;
+  }
 
   function internalClearTTMode(): void {
     if (!isTimeTravelMode) return;
@@ -238,12 +258,70 @@ export function createTimeTravelStore(
     if (parentApi) parentApi.isTimeTraveling = false;
   }
 
-  function restore(index: number, truncate = false): void {
-    if (index < 0 || index >= snapshots.length) return;
+  // __SVELTE_DEVTOOLS_TICK__ is never defined at runtime, so after a
+  // cross-route goto we poll parentApi.getAllComponents() until the
+  // snapshot's component ids mount (50ms interval, 2000ms budget).
+  async function waitForRouteMount(snapshotComponents: ComponentNode[]): Promise<void> {
+    const snapshotIds = new Set(snapshotComponents.map(c => c.id));
+    const parentApi = getParentApi() as {
+      getAllComponents?: () => Array<{ id: string }>;
+    } | undefined;
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline) {
+      const mounted = parentApi?.getAllComponents?.() ?? [];
+      if (mounted.some(c => snapshotIds.has(c.id))) return;
+      await new Promise<void>(resolve => setTimeout(resolve, 50));
+    }
+  }
+
+  async function restore(index: number, truncate = false): Promise<void> {
+    if (index < 0 || index >= snapshots.length || _isJumpingRoute) return;
     if (isTimeTravelMode) {
       pendingRestoreIndex = index;
       return;
     }
+
+    // Cross-route detection: check if restoring a snapshot from a different URL
+    const snapshot = snapshots[index];
+    const parentWin = getParentWindow();
+
+    if (
+      parentWin &&
+      snapshot.kitState?.url
+    ) {
+      const targetPath = snapshot.kitState.url.pathname + snapshot.kitState.url.search + snapshot.kitState.url.hash;
+      const currentPath = parentWin.location.pathname + parentWin.location.search + parentWin.location.hash;
+
+      if (currentPath !== targetPath) {
+        _isJumpingRoute = true;
+        isTimeTravelMode = false;
+        const savedCurrentIndex = currentIndex;
+
+        try {
+          const realGoto = (parentWin as unknown as { __SVELTE_DEVTOOLS_REAL_GOTO__?: (path: string, opts: Record<string, unknown>) => Promise<void> }).__SVELTE_DEVTOOLS_REAL_GOTO__;
+          if (typeof realGoto === 'function') {
+            await realGoto(targetPath, { replaceState: true, keepFocus: true, noScroll: true });
+          } else {
+            const a = parentWin.document.createElement('a');
+            a.href = targetPath;
+            a.style.display = 'none';
+            parentWin.document.body.appendChild(a);
+            a.click();
+            a.remove();
+          }
+
+          await waitForRouteMount(snapshot.components);
+        } finally {
+          _isJumpingRoute = false;
+        }
+
+        // Race condition guard: user may have clicked a different snapshot
+        // while the navigation was in flight. Compare against the saved
+        // currentIndex, NOT the target index (which is always different).
+        if (currentIndex !== savedCurrentIndex && currentIndex !== -1) return;
+      }
+    }
+
     doRestore(index, truncate);
   }
 

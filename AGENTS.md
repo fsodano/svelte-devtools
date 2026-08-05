@@ -328,7 +328,13 @@ await page.waitForTimeout(200);
 
 ### Verifying Time Travel
 
+**Prerequisite:** The Time Travel panel starts in "Paused" state. You MUST click the Record button (`.record-btn`) before interacting with the app, otherwise no snapshots are captured and the panel shows "No snapshots — Click Record and interact with your app".
+
 ```mjs
+// Enable snapshot capture first — toggle "Paused" → "Recording"
+await iframe.locator('.record-btn').click();
+await page.waitForTimeout(500);
+
 // Read DOM state
 let dom = await page.locator('p:has-text("count:")').first().textContent();
 console.log('Before:', dom);
@@ -401,18 +407,23 @@ await page.evaluate(() => {
 });
 await page.waitForTimeout(4000);
 
-// 3. Click counter ONCE and wait for Spring settlement
+// 3. Open Time Travel tab AND click Record to enable snapshot capture
+//    The panel starts in "Paused" state — NO snapshots are captured until
+//    the Record button (.record-btn) is clicked. Without this, the panel
+//    shows "No snapshots — Click Record and interact with your app".
+const iframe = page.frames().find(f => f.url().includes('svelte-devtools'));
+await iframe.locator('button', { hasText: 'Time Travel' }).click();
+await page.waitForTimeout(1000);
+await iframe.locator('.record-btn').click(); // Toggles "Paused" → "Recording"
+await page.waitForTimeout(500);
+
+// 4. Now interact: click counter ONCE and wait for Spring settlement
 await page.evaluate(() => {
   Array.from(document.querySelectorAll('button'))
     .find(b => b.getAttribute('aria-label')?.includes('Increase'))
     ?.click();
 });
 await page.waitForTimeout(5000);
-
-// 4. Open Time Travel tab
-const iframe = page.frames().find(f => f.url().includes('svelte-devtools'));
-await iframe.locator('button', { hasText: 'Time Travel' }).click();
-await page.waitForTimeout(2000);
 
 // 5. VERIFY: 2 snapshots (mount + state)
 const snap1 = await iframe.locator('.count').textContent();

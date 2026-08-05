@@ -247,6 +247,10 @@ export interface SvelteDevToolsAPI {
   startInspectBatch?(): void;
   endInspectBatch?(): void;
   flushAllEffects?(): void;
+  /** Enter inspect mode: hover elements to highlight Svelte components. */
+  enableInspector?(): void;
+  /** Exit inspect mode and clear any highlight/tooltip. */
+  disableInspector?(): void;
 }
 
 /**

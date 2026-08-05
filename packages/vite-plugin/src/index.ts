@@ -52,6 +52,34 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
         apply: 'serve',
         enforce: 'pre',
 
+        resolveId(id: string) {
+            // Intercept $app/navigation to inject goto interceptor
+            if (id === '\$app/navigation' || id === '\0$app/navigation') {
+                return '\0virtual:svelte-devtools-navigation';
+            }
+            return null;
+        },
+
+        load(id: string) {
+            if (id === '\0virtual:svelte-devtools-navigation') {
+                return `
+import { goto as svelteKitGoto } from '\0$app/navigation';
+
+// Expose the real unblocked goto to the DevTools iframe for cross-route time travel
+if (typeof window !== 'undefined') {
+    window.__SVELTE_DEVTOOLS_REAL_GOTO__ = svelteKitGoto;
+}
+
+export const goto = svelteKitGoto;
+export const invalidate = () => {};
+export const invalidateAll = () => {};
+export const beforeNavigate = () => {};
+export const afterNavigate = () => {};
+`;
+            }
+            return null;
+        },
+
         configResolved(resolvedConfig: ResolvedConfig) {
             config = resolvedConfig;
             root = config.root;

@@ -20,6 +20,11 @@
   const isConnected = $derived(devtoolsStore.isConnected);
 
   const isDebug = typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>).__SVELTE_DEVTOOLS_DEBUG__;
+
+  devtoolsStore.setOnInspectSelect((id: string) => {
+    activeTab = 'components';
+    selectedComponent = id;
+  });
 </script>
 
 <div class="panel">
@@ -34,6 +39,18 @@
       </span>
     </div>
     <div class="status-right">
+      <button
+        class="inspect-btn"
+        class:active={devtoolsStore.isInspecting}
+        onclick={() => devtoolsStore.toggleInspector()}
+        title="Inspect components"
+        aria-label="Inspect components"
+        aria-pressed={devtoolsStore.isInspecting}
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+        </svg>
+      </button>
       <span class="status-pill" class:connected={isConnected} class:disconnected={!isConnected}>
         <span class="status-dot"></span>
         {isConnected ? "Connected" : "Disconnected"}
@@ -95,7 +112,10 @@
   .status-left { display: flex; align-items: center; gap: var(--space-2); }
   .brand { display: inline-flex; align-items: center; gap: var(--space-1); font-weight: 600; font-size: 12px; color: var(--text-inverse); }
   .brand-icon { flex-shrink: 0; }
-  .status-right { margin-left: auto; display: flex; align-items: center; }
+  .status-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .inspect-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: rgba(255,255,255,0.5); cursor: pointer; }
+  .inspect-btn:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); }
+  .inspect-btn.active { background: rgba(255,62,0,0.18); border-color: rgba(255,62,0,0.45); color: #FF3E00; }
   .status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 500; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.5); }
   .status-pill.connected { background: rgba(48,209,88,0.15); color: #30d158; }
   .status-pill.disconnected { background: rgba(255,69,58,0.15); color: #ff453a; }
