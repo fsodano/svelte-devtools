@@ -1,34 +1,40 @@
 # Client UI
 
-The client is the DevTools UI that runs in an iframe, displaying the component tree, state, and timeline.
+The client (`packages/client`) is the DevTools panel UI — a Svelte 5 app built with Vite and served from `dist/` at `/__svelte-devtools/` inside an iframe dock of the Vite DevTools panel.
+
+> **Serving**: the panel is **pre-built** (`vite build` → `client/dist/`) and served statically by the Vite plugin. Changes to `packages/client/src/` require `npm run build:client` (or `npm run build`) plus a dev-server restart to take effect. The dock entry is configured with `type: 'iframe'` and `url: '/__svelte-devtools/'` (`DOCK_CONFIG` in `@svelte-devtools/types`). Whether the Vite DevTools Kit renders that iframe in a popup window is the Kit's own behavior.
 
 ## Architecture
 
 ```mermaid
 flowchart TB
-    subgraph Iframe["DevTools Iframe"]
+    subgraph Panel["DevTools Panel (iframe)"]
         WB["WindowBridge"]
-        Store["DevToolsStore"]
+        Store["devtoolsStore (runes)"]
+        TT["timeTravelStore (runes)"]
         CT["ComponentTree"]
         CD["ComponentDetail"]
         TL["Timeline"]
+        TTC["TimeTravelConsole"]
     end
 
-    Parent["Parent Window API"]
+    Parent["Parent Window (__SVELTE_DEVTOOLS__ API)"]
 
-    Parent -->|"Poll 100ms"| WB
-    WB -->|"Emit events"| Store
+    Parent -->|"postMessage events + 500ms getAllComponents() poll"| WB
+    WB --> Store
     Store --> CT
     Store --> CD
     Store --> TL
+    Store --> TT
+    TT -->|"setComponentState / batch markers"| Parent
 
     classDef store fill:#e3f2fd
     classDef bridge fill:#fff3e0
     classDef component fill:#e8f5e9
 
-    class Store store
+    class Store,TT store
     class WB bridge
-    class CT,CD,TL component
+    class CT,CD,TL,TTC component
 ```
 
 ## Entry Point
@@ -43,7 +49,6 @@ import { devtoolsStore } from './lib/stores/devtools-store.svelte.ts';
 function init() {
   const target = document.getElementById('app');
   if (!target) return;
-
   devtoolsStore.init();
   mount(App, { target });
 }
@@ -55,94 +60,39 @@ if (document.readyState === 'loading') {
 }
 ```
 
+> `src/panel.ts` is a legacy orphaned entry (mounts App without store init) — not wired into the build.
+
+## Tabs
+
+The sidebar (`Sidebar.svelte`) and shell (`App.svelte`) define **10 tabs**:
+
+| Tab | Component | Purpose |
+|-----|-----------|---------|
+| Info | `Dashboard.svelte` | Connection status, versions, stat cards that navigate to tabs |
+| Components | `ComponentTree.svelte` + `ComponentDetail.svelte` | Virtualized tree (searchable) + per-component Props/State/DOM/Source |
+| Events | `Timeline.svelte` | Filtered event stream (All/Components/State/Effects/Server/Client Requests) with a JSON detail panel |
+| Time Travel | `TimeTravelConsole.svelte` | Snapshot record/undo/redo/clear, snapshot list, diff detail panel |
+| Graph | `ComponentGraph.svelte` | vis-network force-directed component graph |
+| Network | `NetworkDesk.svelte` | SSR/error/client request list + Mock Rules editor |
+| Router | `RouterHub.svelte` | SvelteKit route map from `/api/routes` with click-to-navigate |
+| Assets | `Assets.svelte` | PerformanceResourceTiming resource list |
+| Migrate | `MigrationScore.svelte` | Per-file Svelte 4→5 migration scores from `/api/migration` |
+| Settings | `Settings.svelte` | Font scale, reduce motion, theme (localStorage) |
+
+> `ServerView.svelte` exists in `src/components/` but is **dead code** — not imported by `App.svelte`.
+
 ## Window Bridge
 
-The bridge handles communication with the parent window (main app) via postMessage and polling.
+The bridge (`src/lib/bridge/window-bridge.ts`) handles communication with the parent window (main app) via `postMessage` plus a reconciliation poll.
 
-### Implementation
-
-```typescript
-export function createWindowBridge() {
-  const listeners = new Map<string, Set<BridgeHandler>>();
-
-  if (typeof window !== 'undefined') {
-    const targetWindow = window.parent !== window ? window.parent : window;
-
-    targetWindow.addEventListener('message', (event) => {
-      const data = event.data;
-      if (!data || data.source !== 'svelte-devtools') return;
-
-      const callbacks = listeners.get(data.type);
-      if (callbacks) {
-        const mappedPayload = mapPostMessagePayload(data.payload, data.type);
-        callbacks.forEach(fn => {
-          try { fn(mappedPayload); }
-          catch (e) { console.error('[Bridge] postMessage listener error:', e); }
-        });
-      }
-    });
-
-    if (window.parent && window.parent !== window) {
-      const parentWindow = window.parent as WindowWithDevTools;
-      const mountedComponents = new Set<string>();
-
-      const syncComponents = () => {
-        const parentApi = parentWindow.__SVELTE_DEVTOOLS__;
-        if (!parentApi) return;
-
-        const components = parentApi.getAllComponents?.() || [];
-
-        components.forEach((comp) => {
-          if (!mountedComponents.has(comp.id)) {
-            mountedComponents.add(comp.id);
-            const callbacks = listeners.get('component:mount');
-            callbacks?.forEach(fn => fn({
-              id: comp.id,
-              name: comp.name,
-              state: Object.fromEntries(comp.state || []),
-              children: comp.children || [],
-              parentId: comp.parentId,
-              filename: comp.filename
-            }));
-          }
-        });
-      };
-
-      let connected = false;
-      const connectInterval = setInterval(() => {
-        if (parentWindow.__SVELTE_DEVTOOLS__) {
-          connected = true;
-          clearInterval(connectInterval);
-          syncComponents();
-        }
-      }, 100);
-
-      setTimeout(() => clearInterval(connectInterval), 5000);
-      if (connected) syncComponents();
-
-      setInterval(syncComponents, 100);
-    }
-  }
-
-  return {
-    on(type: string, fn: BridgeHandler) {
-      if (!listeners.has(type)) listeners.set(type, new Set());
-      listeners.get(type)!.add(fn);
-      return () => listeners.get(type)!.delete(fn);
-    }
-  };
-}
-```
-
-### Why postMessage + Polling?
-
-1. **Event-based**: State changes arrive via postMessage immediately when they occur
-2. **Polling fallback**: Used for initial component discovery (polling registry)
-3. **Cross-iframe**: postMessage works reliably across iframe boundaries
+- Listens for `message` events filtered by `data.source === 'svelte-devtools'`
+- Maps runtime event types to bridge types via `mapRuntimeEventTypeToBridge` (from `@svelte-devtools/types`)
+- Remaps payloads per type (`mapPostMessagePayload`)
+- Polls `window.parent.__SVELTE_DEVTOOLS__.getAllComponents()` every 500ms (100ms connect interval, 5s timeout) to synthesize `component:mount` events for components missed by event push
 
 ## DevTools Store
 
-A Svelte 5 runes-based store:
+A Svelte 5 runes store (`devtools-store.svelte.ts`) — module-level `$state` and exported singleton `devtoolsStore`:
 
 ```typescript
 function createDevtoolsStore() {
@@ -150,245 +100,105 @@ function createDevtoolsStore() {
   let selectedComponentId = $state<string | null>(null);
   let timeline = $state<TimelineEntry[]>([]);
   let isConnected = $state(false);
-  const bridge = createWindowBridge();
-
-  function init(): void {
-    bridge.on('component:mount', handleComponentMount);
-    bridge.on('component:unmount', handleComponentUnmount);
-    bridge.on('state:change', handleStateChange);
-    bridge.on('effect:run', handleEffectRun);
-    isConnected = true;
-  }
-
-  function handleComponentMount(payload: ComponentMountPayload): void {
-    const node = ensureComponentNode(payload);
-    const index = components.findIndex(c => c.id === node.id);
-
-    if (index !== -1) {
-      components[index] = node;
-    } else {
-      components = [...components, node];
-    }
-
-    addToTimeline({
-      id: generateId(),
-      type: 'component:mount',
-      timestamp: performance.now(),
-      data: node
-    });
-  }
-
-  function handleStateChange(data: StateChangePayload): void {
-    const existing = components.find(c => c.id === data.componentId);
-    if (!existing) return;  // Don't create on state change
-
-    components = components.map(c => {
-      if (c.id === data.componentId) {
-        return { ...c, state: { ...c.state, [data.key]: data.value } };
-      }
-      return c;
-    });
-
-    addToTimeline({
-      id: generateId(),
-      type: 'state:change',
-      timestamp: performance.now(),
-      data
-    });
-  }
-
-  return {
-    get components() { return components; },
-    get selectedComponentId() { return selectedComponentId; },
-    get timeline() { return timeline; },
-    get isConnected() { return isConnected; },
-    init,
-    selectComponent
-  };
+  let isRecording = $state(false);      // gates snapshot capture
+  let isInspecting = $state(false);     // element inspector mode
+  let serverEvents = $state<ServerEvent[]>([]);
+  // ...
 }
-
-export const devtoolsStore = createDevtoolsStore();
 ```
 
-## UI Components
+Key behaviors:
+- **Debounced batching** — `pendingStateChanges` queue flushed on a timer; collapses to latest value per `(componentId, key)` and applies in one immutable pass (`flushStateChanges`)
+- **Motion gate** — Spring/Tween frames dropped until `|current − target| < 0.0015` (SETTLE_TOLERANCE); duplicate settled frames skipped
+- **Timeline cap** — max 1000 entries
+- **Server events polling** — `/__svelte-devtools/server-events` every 1s
+- **Server sync** — `navigator.sendBeacon('/__svelte-devtools/api/sync', ...)` every 2s mirrors components/timeline/snapshots so the HTTP API can serve them
+- **Bridge wiring** — `init()` registers handlers for `component:mount`, `component:unmount`, `state:change`, `trace:trigger`, `effect:run`, `client:request`, `inspect:toggle`, `inspect:select`
+
+## Time Travel Store
+
+A second runes store (`time-travel-store.svelte.ts`) holding snapshots:
+
+```typescript
+let snapshots = $state<StateSnapshot[]>([]);
+let currentIndex = $state(-1);
+let isTimeTravelMode = $state(false);
+let maxSnapshots = $state(LIMITS.MAX_STATE_SNAPSHOTS); // 50
+```
+
+- **`capture(label?)`** — deep-clones components + timeline + `kitState` (URL); dedups against `lastRestoredSnapshotJSON` and the last capture; truncates future snapshots when capturing from the past; capped at 50
+- **`restore(index, truncate?)`** — sets time-travel mode, stashes route state, temporarily hangs `window.fetch`, applies snapshot state via `parentApi.setComponentState` per key, restores timeline, and (cross-route) navigates via `window.__SVELTE_DEVTOOLS_REAL_GOTO__` or a synthetic `<a>` click, then polls for the route to mount
+- **`undo()` / `redo()`** — restore `currentIndex ± 1`
+- **`setStateEdit(componentId, key, value)`** — live-edit state and capture a `'state-edit'` snapshot
+- **`branches`** — computed getter grouping snapshots by `branchId` (currently all `'main'`; the UI renders a flat list, not a branch grid)
+
+Recording must be enabled for captures: the panel starts "Paused" and only records after the Record button is clicked.
+
+## Key UI Components
 
 ### App.svelte
 
-Root layout with sidebar navigation:
+Shell with a status bar (brand, **inspect button**, Connected/Disconnected pill) and the sidebar. In inspect mode, the inspect button toggles `devtoolsStore.toggleInspector()`; the `inspect:select` bridge event switches to the Components tab and selects the component.
 
-```svelte
-<script lang="ts">
-  import Sidebar from "./components/Sidebar.svelte";
-  import ComponentTree from "./components/ComponentTree.svelte";
-  import ComponentDetail from "./components/ComponentDetail.svelte";
-  import Timeline from "./components/Timeline.svelte";
-  import ServerView from "./components/ServerView.svelte";
-  import { devtoolsStore } from "./lib/stores/devtools-store.svelte";
+### ComponentTree / ComponentDetail
 
-  let activeTab = $state("components");
-  let selectedComponent = $state<string | null>(null);
-
-  const components = $derived(devtoolsStore.components);
-  const isConnected = $derived(devtoolsStore.isConnected);
-</script>
-
-<div class="panel">
-  <div class="status-bar">
-    <span class={isConnected ? "connected" : "disconnected"}>
-      {isConnected ? "● Connected" : "● Disconnected"}
-    </span>
-    <span>{components.length} components</span>
-  </div>
-
-  <div class="main">
-    <Sidebar bind:activeTab />
-    <div class="content">
-      {#if activeTab === "components"}
-        <div class="split-view">
-          <ComponentTree
-            {components}
-            onSelect={(id) => (selectedComponent = id)}
-            selectedId={selectedComponent}
-          />
-          {#if selectedComponent}
-            <ComponentDetail componentId={selectedComponent} />
-          {:else}
-            <div class="empty">
-              {components.length === 0
-                ? "No components found. Is this a Svelte page?"
-                : "Select a component"}
-            </div>
-          {/if}
-        </div>
-      {:else if activeTab === "timeline"}
-        <Timeline />
-      {:else if activeTab === "server"}
-        <ServerView />
-      {/if}
-    </div>
-  </div>
-</div>
-```
-
-### ComponentTree
-
-Displays hierarchical component structure:
-
-```svelte
-<script lang="ts">
-  let { components, selectedId, onSelect } = $props();
-
-  function getRootComponents(): ComponentNode[] {
-    return components.filter(c => !c.parentId);
-  }
-
-  function getChildren(parentId: string): ComponentNode[] {
-    return components.filter(c => c.parentId === parentId);
-  }
-</script>
-
-<div class="tree">
-  {#each getRootComponents() as component}
-    <TreeNode
-      {component}
-      {selectedId}
-      {onSelect}
-      {getChildren}
-    />
-  {/each}
-</div>
-```
-
-### ComponentDetail
-
-Shows props, state, and source info for selected component:
-
-```svelte
-<script lang="ts">
-  let { componentId } = $props();
-
-  const component = $derived(
-    devtoolsStore.components.find(c => c.id === componentId)
-  );
-</script>
-
-<div class="detail">
-  {#if component}
-    <h3>{component.name}</h3>
-
-    <section>
-      <h4>State</h4>
-      <pre>{JSON.stringify(component.state, null, 2)}</pre>
-    </section>
-
-    {#if component.filename}
-      <section>
-        <h4>Source</h4>
-        <code>{component.filename}</code>
-      </section>
-    {/if}
-  {/if}
-</div>
-```
+- Tree rows show name, filename, and render duration; search filters by name/filename/state keys/values
+- Detail panel has Props / State / DOM / Source sub-tabs; State values render via `JsonTree`
+- **Go to source**: clicking the `source-link` badge calls `openInEditor(filename, line)` (see below)
 
 ### Timeline
 
-Event history with filtering:
+Filter chips (All / Components / State / Effects / Server / Client Requests), Clear button, and a resizable detail panel rendering the selected event payload with `JsonTree`.
 
-```svelte
-<script lang="ts">
-  const timeline = $derived(devtoolsStore.timeline);
-  let filter = $state('');
+### TimeTravelConsole
 
-  const filteredEvents = $derived(
-    timeline.filter(e =>
-      filter === '' || e.type.includes(filter)
-    )
-  );
-</script>
+- **Record button** (`.record-btn`) toggles "Paused" ↔ "Recording" — snapshots are only captured while recording
+- **Toolbar** (`.tb-btn`) — undo, redo, play, clear; snapshot counter `.count` shows `current / total`
+- **Snapshot list** — rows with `.dot`/`.fill` indicators; clicking a row opens the 280px detail panel
+- **Detail panel** — metadata + "Changes from previous snapshot" diff view (struck-through old value → arrow → new value), plus a "Restore this snapshot" button
 
-<div class="timeline">
-  <div class="filters">
-    <button onclick={() => filter = ''}>All</button>
-    <button onclick={() => filter = 'mount'}>Mounts</button>
-    <button onclick={() => filter = 'state'}>State</button>
-  </div>
+### NetworkDesk
 
-  <div class="events">
-    {#each filteredEvents as event}
-      <div class="event {event.type}">
-        <span class="timestamp">
-          {new Date(event.timestamp).toLocaleTimeString()}
-        </span>
-        <span class="type">{event.type}</span>
-        <span class="data">{JSON.stringify(event.data)}</span>
-      </div>
-    {/each}
-  </div>
-</div>
+Request list (SSR traces, errors, client requests) + a Mock Rules editor that posts `{type: 'svelte-devtools-set-mock-rules', rules}` to the parent window.
+
+### RouterHub
+
+Fetches `/__svelte-devtools/api/routes` (filesystem scan of `src/routes`), renders route groups/params with badges, and navigates by posting `{type: 'svelte-devtools-navigate', url}` to the parent.
+
+## Go to Source (Open in Editor)
+
+`src/lib/open-in-editor.ts`:
+
+```typescript
+async function openInEditor(filename: string, line?: number, column?: number) {
+  await fetch('/__svelte-devtools/open-in-editor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file: filename, line, column })
+  });
+}
 ```
+
+The Vite plugin's `/__svelte-devtools/open-in-editor` middleware resolves the path against the project root and calls `launchEditor` (which opens VS Code or your configured editor).
 
 ## Styling
 
-VS Code Dark theme-inspired:
+VS Code Dark theme-inspired CSS custom properties (`theme.css`):
 
 ```css
 :root {
-  --bg-primary: #1e1e1e;
-  --bg-secondary: #252526;
-  --bg-tertiary: #2d2d2d;
+  --bg-base: #1e1e1e;
+  --bg-sidebar: #252526;
+  --bg-surface: #2d2d2d;
   --text-primary: #d4d4d4;
-  --text-secondary: #858585;
-  --accent: #0e639c;
-  --success: #4ec9b0;
-  --error: #f48771;
-  --border: #3c3c3c;
+  --text-muted: #858585;
+  --svelte-brand: #ff3e00;
+  --border-default: #3c3c3c;
+  /* ... */
 }
 ```
 
 ## Build Configuration
-
-Vite config with correct base path for iframe:
 
 ```typescript
 // vite.config.ts
@@ -407,29 +217,30 @@ export default defineConfig({
 
 The `base` path ensures assets load correctly within the iframe.
 
-## Performance Considerations
+## Communication Summary
 
-1. **Memoization**: Derivations are cached where possible
-2. **Event-driven updates**: State changes arrive via postMessage, not polling
-3. **State Updates**: Only diff state for changed components
-4. **Timeline Cap**: Maximum 1000 events stored
-5. **Polling**: Used for initial component discovery (100ms interval)
+| Direction | Mechanism |
+|---|---|
+| Runtime → Panel | `postMessage` (`{source: 'svelte-devtools', type, payload}`) |
+| Panel → Runtime | Direct calls on `window.parent.__SVELTE_DEVTOOLS__` |
+| Panel → Server | HTTP polling (server-events 1s) + `sendBeacon` sync (2s) |
+| Panel → Parent (app) | `postMessage` (navigate, mock rules) |
+| Agent → Plugin | RPC (`ctx.rpc`) / HTTP API (`/__svelte-devtools/api/*`) |
 
-## Event Types
-
-The UI handles these event types:
+## Event Types Handled
 
 | Event | Payload | Description |
 |-------|---------|-------------|
 | `component:mount` | `ComponentNode` | Component mounted |
-| `component:unmount` | `{ id: string }` | Component unmounted |
+| `component:unmount` | `{ id, name? }` | Component unmounted |
 | `state:change` | `{ componentId, key, value }` | State updated |
-| `effect:run` | `{ duration?, dependencies? }` | Effect executed |
-| `trace:trigger` | `{ componentId, stateKey, trigger }` | Dependency traced |
+| `effect:run` | `{ runeName, filename, runCount, observedState }` | Effect executed |
+| `trace:trigger` | `{ componentId, stateKey, trigger }` | Dependency traced / error |
+| `client:request` | `{ url, method, statusCode, ... }` | Browser fetch traced |
 
 ## Debugging
 
-From the DevTools iframe console:
+From the DevTools panel iframe console:
 
 ```javascript
 // Access the store

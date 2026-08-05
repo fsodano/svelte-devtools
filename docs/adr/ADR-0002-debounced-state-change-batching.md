@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+> **Implementation note (2026-08-04):** Implemented in the **client** store (`packages/client/src/lib/stores/devtools-store.svelte.ts`) — the runtime does not batch. The flush is a `setTimeout`-based pending buffer that collapses to the latest value per `(componentId, key)` and applies all values in a single immutable pass (plus a Spring/Tween motion gate with `SETTLE_TOLERANCE = 0.0015`). The original 50ms window evolved into a microtask/timer flush — the *concept* (batch N changes → 1 rebuild) is what shipped.
+
 ## Context
 The `$inspect` rune fires synchronously for every `$state()` assignment in every Svelte 5 component. The Vite plugin injects an `$inspect` hook for each `$state()` declaration during compilation. When a component's state changes, the hook calls `runtime.handleState()`, which sends a `postMessage` to the DevTools iframe, which calls `handleStateChange()` in the devtools store.
 

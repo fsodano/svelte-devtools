@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+> **Implementation note (2026-08-04):** Time-travel restore is implemented in the **client** (`packages/client/src/lib/stores/time-travel-store.svelte.ts`): `restore()` applies snapshot state per-key through `parentApi.setComponentState(id, key, value)` (which invokes the build-time-registered `_registerState` setters), preserving Svelte 5 proxy identity — no top-level reassignment. Restore is deduplicated against `lastRestoredSnapshotJSON` to avoid phantom captures, and the UI shows a per-key **diff view** ("Changes from previous snapshot"). Cross-route restores navigate via `__SVELTE_DEVTOOLS_REAL_GOTO__` and hang `window.fetch` while time-traveling.
+
 ## Context
 Time-travel debugging captures snapshots of the entire component state tree at each meaningful state change. When the user restores a snapshot, the DevTools sends the full captured state object back to the runtime, which assigns it back to the component's `$state` variable.
 

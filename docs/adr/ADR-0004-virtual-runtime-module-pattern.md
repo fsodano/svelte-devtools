@@ -1,7 +1,9 @@
 # ADR-0004: Virtual Runtime Module Pattern
 
 ## Status
-Accepted
+Accepted — **superseded in practice** (2026-08-04)
+
+> The live plugin (`packages/vite-plugin/src/index.ts`) injects the runtime via `transformIndexHtml` as a plain URL script tag (`<script type="module" src="/__svelte-devtools/svelte-runtime.js">`), served by middleware from `runtime/dist/`. The virtual-module variant exists only in the unwired `src/plugins/virtual-runtime.ts` (dead code). What *did* ship from this ADR's motivation is the **two-phase passive buffer** (`packages/runtime/src/init.ts`): a tiny inline bootstrap script creates a buffering `window.__SVELTE_DEVTOOLS_RUNTIME__` placeholder, and the full runtime drains the buffer on activation — so the `__SVELTE_DEVTOOLS_QUEUE__`/placeholder mechanism survives even though the virtual-module loading path was not adopted.
 
 ## Context
 The runtime script was injected via `transformIndexHtml` as `<script src="/__svelte-devtools/svelte-runtime.js"></script>`. This approach works for plain Vite apps where `transformIndexHtml` fires on every HTML request, but it breaks under SvelteKit SSR. SvelteKit handles HTML generation through its own pipeline, and `transformIndexHtml` is not invoked during SSR. A workaround using `transformPageChunk` inside `svelteDevToolsHandle()` was required, duplicating the injection logic across two separate code paths.

@@ -104,14 +104,15 @@ When the plugin detects SvelteKit, it logs this exact snippet to stdout as a rem
 
 ```typescript
 interface SvelteDevToolsPluginOptions {
-  /** Enable state inspection via $inspect injection. Default: true */
-  enableStateInspection?: boolean;
-
   /** File patterns to include. Default: [/\.svelte$/] */
   include?: RegExp[];
 
   /** File patterns to exclude. Default: [/node_modules/] */
   exclude?: RegExp[];
+
+  /** Reserved: enable state inspection via $inspect injection. Default: true.
+   *  Accepted for API compatibility — injection currently always runs. */
+  enableStateInspection?: boolean;
 }
 ```
 
@@ -130,10 +131,10 @@ svelteDevTools({
 })
 ```
 
-**Disable state inspection (only use component tree):**
+**Only use the component tree (no state injection):**
 ```typescript
 svelteDevTools({
-  enableStateInspection: false
+  enableStateInspection: false   // reserved — currently a no-op
 })
 ```
 
@@ -151,16 +152,17 @@ After starting the dev server:
 
 1. Open the browser to your app (typically `http://localhost:5173`)
 2. Look for the Vite DevTools overlay at the bottom-right corner of the page
-3. Click the Vite DevTools icon to open the dock
+3. Click the Vite DevTools icon to open the dock (authorize with the Manual Auth Token printed in the server terminal on first use)
 4. Select the **Svelte** tab
 5. You should see the component tree populated with your Svelte components
 
 If everything is working:
 
 - Components appear in the tree with their names
-- Selecting a component shows its current state values
+- Selecting a component shows its current state values (Props/State/DOM/Source sub-tabs)
 - Changing state in the app updates the DevTools view in real time
 - The status indicator shows "Connected" with component count
+- The Events tab shows mount/state/effect entries as you interact
 
 ## Troubleshooting
 

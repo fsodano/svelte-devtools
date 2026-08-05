@@ -6,31 +6,46 @@ Public APIs and type definitions for Svelte DevTools.
 
 ### `window.__SVELTE_DEVTOOLS_RUNTIME__`
 
-The main API exposed by the runtime package:
+The main API exposed by the runtime package (`packages/runtime/src/index.ts`):
 
 ```typescript
 interface SvelteDevToolsRuntime {
   version: string;
 
-  /** Initialize the runtime (called automatically on DOMContentLoaded) */
+  /** Initialize the runtime (called automatically once the module loads) */
   init(): void;
 
   /**
-   * Handle state change from $inspect (called by injected code)
+   * Handle a state change from $inspect (called by injected code)
    * @param componentId Component ID
    * @param key State variable name
-   * @param type Change type ('init' | 'update')
+   * @param type Change type ('init' | 'update' | 'derived' | 'props')
    * @param value New value
    */
   handleState(componentId: string, key: string, type: string, value: unknown): void;
 
-  /**
-   * Register a component (called by injected code)
-   * @param id Component ID
-   * @param name Component name
-   * @param filename Source filename
-   */
-  registerComponent(id: string, name: string, filename: string): void;
+  /** Track an effect run (called by injected code) */
+  handleEffect(componentId: string, key: string, runeName: string, filename: string): void;
+
+  /** Report an error (emits a trace:trigger event) */
+  reportError(componentId: string, error: unknown): void;
+
+  /** Register a component (called by injected code) */
+  registerComponent(id: string, name: string, filename: string, sourceLocation?: string): void;
+
+  /** Register a per-key setter for time-travel restore */
+  _registerState(componentId: string, key: string, setter: (v: unknown) => void): void;
+
+  /** Apply a state value to a live rune + tracked state */
+  setComponentState(componentId: string, key: string, value: unknown): void;
+
+  /** Force a DOM re-scan for missed components */
+  refresh(): void;
+
+  /** Batch markers around snapshot restore; endInspectBatch posts 'restore:echoes-done' */
+  startInspectBatch(): void;
+  endInspectBatch(): void;
+  flushAllEffects(): void;
 
   /** Emit a devtools event via postMessage */
   emit(event: RuntimeEvent): void;
@@ -47,47 +62,73 @@ interface SvelteDevToolsRuntime {
 // window.addEventListener('message', (e) => { if (e.data.source === 'svelte-devtools') ... })
 ```
 
+### `window.__SVELTE_DEVTOOLS__`
+
+Public API surface for the panel iframe (see `SvelteDevToolsAPI` in `@svelte-devtools/types`):
+
+```typescript
+interface SvelteDevToolsAPI {
+  version: string;
+  enabled: boolean;
+  getComponentTree(): ComponentInstance[];            // nested by parentId
+  getAllComponents(): ComponentInstance[];            // flat
+  getComponentById(id: string): ComponentInstance | undefined;
+  getTimeline(): TimelineEntry[];                     // ⚠️ stub — returns []
+  subscribe(callback): () => void;                    // no-op
+  trace(name, dependencies): void;                    // no-op
+  setComponentState?(componentId, key, value): void;
+  refresh?(): void;
+  startInspectBatch?(): void;
+  endInspectBatch?(): void;
+  flushAllEffects?(): void;
+  enableInspector?(): void;                           // hover-highlight mode
+  disableInspector?(): void;
+}
+```
+
 ### `window.__SVELTE_DEVTOOLS_REGISTRY__`
 
-Build-time registry of component metadata (fallback for runtime):
+Build-time registry of component metadata (injected by the plugin transform):
 
 ```typescript
 const registry: Map<string, ComponentMeta> = window.__SVELTE_DEVTOOLS_REGISTRY__;
 
 // Example usage
 const meta = registry.get('svt-abc123');
-// { id: 'svt-abc123', name: 'Counter', filename: '/src/lib/Counter.svelte' }
+// { id: 'svt-abc123', name: 'Counter', filename: '/src/lib/Counter.svelte', propKeys: ["name"] }
 ```
 
-## Type Definitions
+## Type Definitions (from `@svelte-devtools/types`)
 
 ### Component Types
 
 ```typescript
-/**
- * Metadata about a component stored in the build-time registry.
- * Injected into each .svelte file by the Vite plugin.
- */
+/** Metadata about a component stored in the build-time registry. */
 interface ComponentMeta {
   id: string;
   name: string;
   filename: string;
+  runeCounts?: Record<string, number>;      // e.g. { $state: 1, $derived: 2, $effect: 1 }
+  propKeys?: string[];                       // $props() destructured keys
+  migrationResult?: MigrationResult;         // Svelte 4→5 score
 }
 
-/**
- * Component state tracked at runtime.
- */
-interface ComponentState {
+/** Complete component instance tracked at runtime. */
+interface ComponentInstance {
   id: string;
   name: string;
   filename?: string;
+  el: Element | null;
+  parentId?: string;
+  children: string[] | ComponentInstance[];  // flat vs tree mode
   state: Map<string, unknown>;
+  props: Record<string, unknown>;
+  effects: string[];
+  mountTime: number;
+  isPlaceholder?: boolean;
 }
 
-/**
- * Component data sent to the UI client.
- * Serializable version for iframe communication.
- */
+/** Component data sent to the UI client (serializable). */
 interface ComponentNode {
   id: string;
   name: string;
@@ -100,9 +141,7 @@ interface ComponentNode {
   sourceLocation?: SourceLocation;
 }
 
-/**
- * Source code location for "open in editor" functionality.
- */
+/** Source code location for "open in editor". */
 interface SourceLocation {
   filename: string;
   line: number;
@@ -113,82 +152,119 @@ interface SourceLocation {
 ### Event Types
 
 ```typescript
-/**
- * Runtime event emitted via postMessage.
- */
-interface RuntimeEvent {
-  type: 'runtime-ready' | 'component-register' | 'state';
-  componentId: string;
-  componentName?: string;
-  filename?: string;
-  key?: string;
-  value?: unknown;
-  timestamp: number;
-}
+type EventType =
+  | 'component:mount'
+  | 'component:unmount'
+  | 'state:change'
+  | 'effect:run'
+  | 'trace:trigger';
 
-/**
- * Timeline entry in the UI.
- */
+/** Timeline entry in the UI. */
 interface TimelineEntry {
   id: string;
-  type: string;
+  type: EventType;
   timestamp: number;
   data: unknown;
   duration?: number;
 }
 ```
 
+### Runtime Event Payloads (postMessage)
+
+```typescript
+interface RuntimeEvent {
+  type: string;            // 'runtime-ready' | 'component-register' | 'state' | 'effect'
+                           // | 'component:unmount' | 'trace:trigger' | 'client:request'
+                           // | 'restore:echoes-done' | 'inspect:select' | 'inspect:toggle'
+  componentId: string;
+  componentName?: string;
+  filename?: string;
+  key?: string;
+  value?: unknown;
+  inspectType?: string;    // 'state' | 'derived' | 'props' (from $inspect)
+  timestamp: number;
+}
+```
+
 ### Bridge Types
 
 ```typescript
-/**
- * Bridge event handler function.
- */
+/** Message sent via postMessage between main window and iframe. */
+interface BridgeMessage<T = unknown> {
+  source: 'svelte-devtools';
+  type: EventType | string;
+  payload: T;
+  timestamp: number;
+}
+
 type BridgeHandler<T = unknown> = (payload: T) => void;
 ```
 
 ### Plugin Options
 
 ```typescript
-/**
- * Options for the Vite plugin.
- */
 interface SvelteDevToolsPluginOptions {
-  /** Enable state inspection via $inspect injection (default: true) */
-  enableStateInspection?: boolean;
-
   /** File patterns to include (default: [/\.svelte$/]) */
   include?: RegExp[];
 
   /** File patterns to exclude (default: [/node_modules/]) */
   exclude?: RegExp[];
+
+  /** Reserved: enable state inspection via $inspect injection (default: true).
+   *  Currently a no-op — injection always runs. */
+  enableStateInspection?: boolean;
 }
 ```
 
 ### Server Types
 
 ```typescript
-/**
- * Server event captured by the Vite plugin middleware.
- */
 interface ServerEvent {
   id: string;
-  type: 'server:trace' | 'server:error';
+  type: 'server:request' | 'server:ssr' | 'server:error' | 'server:trace';
   timestamp: number;
   duration?: number;
   data: {
     url: string;
     method: string;
-    statusCode: number;
+    statusCode?: number;
+    routeId?: string;
+    requestBody?: string;
+    responseSize?: number;
+    responsePreview?: string;
+    reqHeaders?: Record<string, unknown>;
+    resHeaders?: Record<string, unknown>;
+    _handler?: string;
   };
 }
 ```
+
+### Agent Response
+
+```typescript
+interface AgentResponse<T = unknown> {
+  ok: boolean;
+  data?: T;
+  error?: { code: string; message: string };
+  timestamp: number;
+}
+```
+
+### Constants (`@svelte-devtools/types/constants`)
+
+- `EVENT_TYPES`, `RUNE_TYPES` — event/rune name constants
+- `RPC_METHODS`, `RPC_TYPES` — RPC method names and 'query' | 'mutation'
+- `DATA_ATTRIBUTES` — `data-svelte-devtools-id`, `data-svelte-component`
+- `DOCK_CONFIG` — `{ id: 'svelte-devtools', title: 'Svelte', icon: 'simple-icons:svelte', type: 'iframe', url: '/__svelte-devtools/' }`
+- `COMPONENT_ID_PREFIX` — `'svt-'`
+- `LIMITS` — `MAX_TIMELINE_EVENTS: 1000`, `MAX_STATE_SNAPSHOTS: 50`, `VIRTUAL_SCROLL_THRESHOLD: 100`
+- `mapRuntimeEventTypeToBridge(type)` — maps rune types to bridge event types
 
 ## Vite Plugin API
 
 ### `svelteDevTools()`
 
-Creates the Vite plugin.
+Creates the Vite plugin (single plugin object, `apply: 'serve'`, `enforce: 'pre'`).
 
 ```typescript
 import { svelteDevTools } from '@svelte-devtools/vite-plugin';
@@ -196,149 +272,94 @@ import { svelteDevTools } from '@svelte-devtools/vite-plugin';
 const plugin = svelteDevTools(options?: SvelteDevToolsPluginOptions);
 ```
 
+### `@svelte-devtools/vite-plugin/sveltekit`
+
+```typescript
+import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+
+export const handle = dev ? svelteDevToolsHandle() : noopHandle();
+```
+
+- `svelteDevToolsHandle()` — SvelteKit `Handle` that injects the DevTools scripts via `transformPageChunk` and traces SSR requests
+- `noopHandle()` — zero-overhead pass-through for production
+
 ### Plugin Hooks
 
-The plugin implements these Vite hooks:
+The plugin implements: `resolveId`/`load` (SvelteKit `$app/navigation` virtual module), `configResolved` (rolldown detection, tsconfig path aliases), `configureServer` (middleware: tracing, server-events, open-in-editor, migration-score, API, static assets), `transformIndexHtml` (runtime script — plain Vite), `transform` (`$inspect` injection + metadata + effect tracking + migration analysis), and `devtools.setup` (dock registration + RPC).
 
-#### `configResolved`
+## RPC Methods (live)
 
-Captures the resolved Vite config and root directory.
+Registered in `devtools.setup` via `ctx.rpc.register`:
 
-#### `configureServer`
+| Method | Type | Description |
+|---|---|---|
+| `svelte-devtools:get-components` | query | All registered components with metadata |
+| `svelte-devtools:open-in-editor` | mutation | Open a file at a line in the editor |
+| `svelte-devtools:migration-score` | query | `{overall, totalFiles, perFile}` |
+| `svelte-devtools:build-status` | query | `{connected, totalComponents, trackedRunes, errors, warnings}` |
+| `svelte-devtools:component-state` | query | Metadata for one `svt-*` id |
+| `svelte-devtools:rescan` | mutation | Trigger full-reload re-analysis |
 
-Sets up middleware to serve DevTools assets and the runtime script:
+> `RPC_METHODS` in `@svelte-devtools/types` also lists `get-timeline`, `get-state`, `update-component-state`, `set-network-rule`, `get-routes` — **not yet registered** by the live plugin.
 
-```typescript
-configureServer(server) {
-  // Serve /__svelte-devtools/* requests
-  // - Runtime script from runtime/dist/
-  // - Client UI from client/dist/ (SPA fallback)
-}
+## HTTP API (CI-safe)
+
+All endpoints at `/__svelte-devtools/api/` return JSON with CORS headers (`Access-Control-Allow-Origin: *`):
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/` or `/api/status` | Plugin status, version, endpoint list |
+| `GET` | `/api/components` | Components + state, `{count, components, cachedAt}` |
+| `GET` | `/api/timeline` | Timeline entries, `{count, entries, cachedAt}` |
+| `GET` | `/api/remote` | Remote-debugging payload |
+| `GET` | `/api/server-events` | Server traces (`?last=N`, `?sinceId=X`) |
+| `DELETE` | `/api/server-events` | Clear server event buffer |
+| `GET` | `/api/migration` | Migration scores, `{overall, totalFiles, perFile}` |
+| `GET` | `/api/snapshots` | `{snapshots, branches, count, cachedAt}` |
+| `POST` | `/api/set-state` | Edit state, body `{componentId, key, value}` |
+| `GET` | `/api/source?file=<path>` | Source code with line numbers (403 outside project) |
+| `POST` | `/api/sync` | (internal) Panel syncs components/timeline/snapshots here every 2s |
+| `GET` | `/api/routes` | SvelteKit route map scanned from `src/routes` |
+
+Also available (legacy paths): `/__svelte-devtools/server-events` (GET/DELETE), `/__svelte-devtools/open-in-editor` (POST), `/__svelte-devtools/migration-score` (GET).
+
+### Example: set component state
+
+```bash
+curl -X POST http://localhost:5173/__svelte-devtools/api/set-state \
+  -H 'Content-Type: application/json' \
+  -d '{"componentId": "svt-xxx", "key": "count", "value": 42}'
 ```
 
-#### `transformIndexHtml`
-
-Injects the runtime script:
-
-```typescript
-transformIndexHtml(html) {
-  return html.replace('</head>',
-    `<script type="module" src="/__svelte-devtools/svelte-runtime.js"></script></head>`
-  );
-}
-```
-
-#### `transform`
-
-Transforms `.svelte` files to inject:
-1. Component registration calls
-2. `$inspect` hooks for state tracking
-3. `data-svelte-devtools-id` attributes
-
-#### `devtools.setup`
-
-Registers the DevTools dock with `@vitejs/devtools-kit`:
-
-```typescript
-devtools: {
-  setup(ctx) {
-    ctx.docks.register({
-      id: 'svelte-devtools',
-      title: 'Svelte',
-      icon: 'simple-icons:svelte',
-      type: 'iframe',
-      url: '/__svelte-devtools/'
-    });
-  }
-}
-```
+> Component/timeline/snapshot data is cached via periodic sync from the panel. If the panel has not been opened, the cache may be empty (`cachedAt: 0`). Server events and migration scores are computed server-side and always available.
 
 ## Store API
 
-The DevTools store provides reactive state for the UI.
+The DevTools store provides reactive state for the panel (internal, in `packages/client`):
 
 ```typescript
 interface DevToolsStore {
-  /** Array of all components */
   readonly components: ComponentNode[];
-
-  /** ID of currently selected component */
   readonly selectedComponentId: string | null;
-
-  /** Event timeline */
   readonly timeline: TimelineEntry[];
-
-  /** Whether connected to runtime */
   readonly isConnected: boolean;
-
-  /** Initialize the store and bridge */
+  readonly isRecording: boolean;
+  readonly isInspecting: boolean;
   init(): void;
-
-  /** Select a component by ID */
   selectComponent(id: string): void;
+  toggleInspector(): void;
+  refresh(): void;
 }
-```
-
-Usage:
-
-```typescript
-import { devtoolsStore } from '@svelte-devtools/client';
-
-// Access reactive state
-const components = $derived(devtoolsStore.components);
-
-// Select a component
-devtoolsStore.selectComponent('svt-abc123');
 ```
 
 ## Event Flow
 
-Events flow through the system in this order:
-
 1. **User code** modifies `$state`
 2. **$inspect callback** fires and calls `handleState()`
 3. **Runtime** emits `postMessage` event
-4. **WindowBridge** receives and forwards to store
-5. **Store** updates reactive state
+4. **WindowBridge** receives and maps it (`state` → `state:change`)
+5. **Store** debounce-batches the update
 6. **UI** re-renders with new data
-
-Example event:
-
-```typescript
-// $inspect callback calls
-window.__SVELTE_DEVTOOLS_RUNTIME__.handleState('svt-abc123', 'count', 'update', 42);
-
-// Runtime emits postMessage
-window.postMessage({
-  source: 'svelte-devtools',
-  type: 'state',
-  payload: {
-    componentId: 'svt-abc123',
-    key: 'count',
-    value: 42,
-    timestamp: 1234567890
-  }
-}, '*');
-
-// Bridge receives
-window.addEventListener('message', (event) => {
-  if (event.data.source !== 'svelte-devtools') return;
-  // event.data.type and event.data.payload
-});
-
-// Store updates
-function handleStateChange(data: StateChangePayload) {
-  components = components.map(c => {
-    if (c.id === data.componentId) {
-      return { ...c, state: { ...c.state, [data.key]: data.value } };
-    }
-    return c;
-  });
-}
-
-// UI re-renders
-<span>{component.state.count}</span>  // Now shows "42"
-```
 
 ## Type Exports
 
@@ -347,12 +368,16 @@ All types are exported from `@svelte-devtools/types`:
 ```typescript
 import type {
   ComponentMeta,
-  ComponentState,
+  ComponentInstance,
   ComponentNode,
   TimelineEntry,
   RuntimeEvent,
+  BridgeMessage,
   BridgeHandler,
+  SvelteDevToolsAPI,
   SvelteDevToolsPluginOptions,
+  AgentResponse,
+  ServerEvent,
   // ... and more
 } from '@svelte-devtools/types';
 ```

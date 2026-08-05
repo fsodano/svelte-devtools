@@ -46,34 +46,51 @@ npx vite dev --port 5174
 
 The Vite DevTools requires authorization on first use. This is a one-time setup per browser session.
 
-### Authorize from a browser:
+> **⚠️ Token caveat**: The Manual Auth Token printed in the terminal is **single-use** and is invalidated whenever a new WebSocket connection is established from the same origin. The HTTP `auth-verify` endpoint returns `403` with plain text `"Invalid or expired auth token"` on failure (not JSON). **Use the manual dialog method below — it is the only reliably working approach.**
 
-1. Open `http://localhost:5173/` in the browser
-2. Click the **"Unauthorized"** button at the bottom of the page (inside the `vite-devtools-dock-embedded` web component shadow DOM)
-3. An authorization dialog appears with a message: *"Check your terminal for the authorization prompt and come back."*
-4. The terminal running the Vite dev server shows a prompt with a **Manual Auth Token** (e.g., `clean-lands-mate`)
-5. Navigate to `http://localhost:5173/.devtools/auth?id=<TOKEN>` using the auth token from the terminal
-6. The page shows "✅ Authorized! You can close this window now."
-
-### Authorize programmatically with Playwright:
+### Authorize with Playwright (manual dialog — reliable):
 
 ```typescript
 // 1. Click the "Unauthorized" button inside the web component shadow DOM
 await page.evaluate(() => {
   const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-  dock?.querySelector('button')?.click();
+  const btn = Array.from(dock?.querySelectorAll('button') || [])
+    .find(b => b.textContent?.includes('Unauthorized'));
+  btn?.click();
 });
+await page.waitForTimeout(300);
 
-// 2. Get the auth token from the terminal output (requires tmux or log parsing)
-// 3. Navigate to the auth URL
-await page.goto('http://localhost:5173/.devtools/auth?id=<TOKEN>');
+// 2. Read the Manual Auth Token from the server terminal (requires tmux)
+const token = execSync('tmux capture-pane -t SESSION_NAME -p -S -10')
+  .toString().match(/Manual Auth Token : (\S+)/)?.[1];
+
+// 3. Type the token into the auth dialog input and click Authorize
+await page.locator('vite-devtools-dock-embedded').first()
+  .locator('input').first().fill(token);
+await page.waitForTimeout(200);
+await page.evaluate(() => {
+  const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
+  const btn = Array.from(dock?.querySelectorAll('button') || [])
+    .find(b => b.textContent?.includes('Authorize'));
+  btn?.click();
+});
+await page.waitForTimeout(2000);
+
+// 4. Verify — dock buttons should NOT include "Unauthorized"
+const dockState = await page.evaluate(() => {
+  const d = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
+  if (!d) return [];
+  return Array.from(d.querySelectorAll('button')).map(b => b.textContent?.trim());
+});
+console.log('Dock buttons:', dockState);
+// Expect: ["Rolldown", "Svelte", "Settings", ...] (no "Unauthorized")
 ```
 
 After authorization, the dock shows buttons for available DevTools plugins (e.g., "Rolldown", "Svelte", "Settings", notification badge).
 
 ## Step 4: Open the Svelte DevTools Panel
 
-The Svelte DevTools opens as a **DocumentPictureInPicture popup window** (not an iframe).
+The plugin registers its dock entry as `type: 'iframe'` with `url: '/__svelte-devtools/'` (`DOCK_CONFIG` in `@svelte-devtools/types`). How Vite DevTools Kit renders that iframe — embedded in the dock or in a **DocumentPictureInPicture popup window** — depends on the Kit version and browser. In Chromium with popup support it typically opens as a popup; in headless mode it falls back to an embedded iframe.
 
 ### Click the Svelte dock button:
 
@@ -154,6 +171,14 @@ curl http://localhost:5173/__svelte-devtools/api/migration
 
 Svelte 4→5 migration progress per file (percentage and pattern breakdown).
 
+### Routes (SvelteKit)
+
+```bash
+curl http://localhost:5173/__svelte-devtools/api/routes
+```
+
+SvelteKit route map scanned from `src/routes` (route groups, params, page/layout/api files).
+
 ### State Editing (set-state)
 
 ```bash
@@ -174,7 +199,7 @@ Returns the source code of the specified file.
 
 ## Playwright: Interacting with the DevTools Panel
 
-The Svelte DevTools panel loads as an **iframe** inside the `vite-devtools-dock-embedded` web component's shadow DOM (not DocumentPictureInPicture). The dock type is configured as `'iframe'` in `DOCK_CONFIG`.
+The DevTools panel loads as an **iframe** at `/__svelte-devtools/` (dock type `'iframe'`). In supported Chromium versions the Vite DevTools Kit may render it inside a `DocumentPictureInPicture` popup instead; when that happens, access the panel via `page.frames().find(f => f.url().includes('svelte-devtools'))`. The same-origin iframe (served from the same dev server) is accessible directly via `contentDocument` — no cross-origin issues.
 
 ### Accessing the DevTools iframe
 
@@ -184,7 +209,12 @@ const iframe = dock?.querySelector('iframe');
 const doc = iframe.contentDocument || iframe.contentWindow?.document;
 ```
 
-Since the iframe is same-origin (served from the same dev server), `contentDocument` is accessible directly — no cross-origin issues.
+If the panel opened as a popup instead, use Playwright's frame locator:
+
+```javascript
+const popupFrame = page.frames().find(f => f.url().includes('svelte-devtools'));
+await popupFrame.locator('button', { hasText: 'Time Travel' }).click();
+```
 
 ### Full Playwright Verification Script
 
@@ -333,7 +363,7 @@ After any change to the devtools codebase, verify everything still works:
 - [ ] Build passes (no TypeScript errors)
 - [ ] Dev server starts without errors
 - [ ] Vite DevTools dock appears and can be authorized
-- [ ] Svelte panel opens (DocumentPictureInPicture popup)
+- [ ] Svelte panel opens (iframe dock; popup in supported Chromium)
 - [ ] Components appear in tree with state
 - [ ] Timeline populates with events
 - [ ] HTTP API returns data for all endpoints

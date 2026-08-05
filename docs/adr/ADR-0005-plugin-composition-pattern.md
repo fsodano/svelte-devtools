@@ -1,7 +1,9 @@
 # ADR-0005: Plugin Composition Pattern
 
 ## Status
-Accepted
+Accepted — **superseded in practice** (2026-08-04)
+
+> `svelteDevTools()` currently returns a **single** Vite plugin object (all logic in `packages/vite-plugin/src/index.ts`). The six sub-plugins described here live in `src/plugins/*.ts` but are **never imported — dead code** (added in a single commit, 2026-07-24, and never wired into the entry point). If the split is ever completed, the design in this ADR remains the blueprint.
 
 ## Context
 The original `index.ts` in the Vite plugin package grew to 832 lines with everything in one closure: config resolution, source transformation, middleware registration, RPC handling, and static file serving. Module-level globals like `COMPONENT_REGISTRY`, `viteServer`, and `logsApi` were shared across concerns via closure capture. There was no clear boundary between build-time and serve-time logic.
