@@ -14,7 +14,7 @@
   "devDependencies": {
     "@fontsource/fira-mono": "^5.2.7",
     "@neoconfetti/svelte": "^2.2.2",
-    "@svelte-devtools/vite-plugin": "file:../../packages/vite-plugin",
+    "@fsodano/vite-plugin-svelte-devtools": "file:../../packages/vite-plugin",
     "@sveltejs/adapter-auto": "^7.0.0",
     "@sveltejs/kit": "^2.55.0",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",

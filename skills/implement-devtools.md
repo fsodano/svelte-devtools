@@ -1,6 +1,6 @@
 ---
 name: implement-svelte-devtools
-description: Use when installing or configuring @svelte-devtools/vite-plugin in a Vite or SvelteKit project. Covers npm install, vite.config.ts setup, SvelteKit hooks, plugin options, and verification.
+description: Use when installing or configuring @fsodano/vite-plugin-svelte-devtools in a Vite or SvelteKit project. Covers npm install, vite.config.ts setup, SvelteKit hooks, plugin options, and verification.
 ---
 
 # Implementing Svelte DevTools
@@ -22,7 +22,7 @@ The project must use Svelte 5 with runes mode enabled (`compilerOptions: { runes
 
 ```bash
 # Install the devtools plugin and its peer dependency
-npm install --save-dev @svelte-devtools/vite-plugin @vitejs/devtools
+npm install --save-dev @fsodano/vite-plugin-svelte-devtools @vitejs/devtools
 ```
 
 If you are working from the monorepo and the package is unpublished, link it instead:
@@ -47,7 +47,7 @@ Add the `DevTools()` and `svelteDevTools()` plugins to your `vite.config.ts`:
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { DevTools } from '@vitejs/devtools';
-import { svelteDevTools } from '@svelte-devtools/vite-plugin';
+import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools';
 
 export default defineConfig({
   plugins: [
@@ -70,7 +70,7 @@ export default defineConfig({
 import { defineConfig } from 'vite';
 import { DevTools } from '@vitejs/devtools';
 import { sveltekit } from '@sveltejs/kit/vite';
-import { svelteDevTools } from '@svelte-devtools/vite-plugin';
+import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools';
 
 export default defineConfig({
   plugins: [
@@ -91,7 +91,7 @@ SvelteKit bypasses Vite's `transformIndexHtml` during SSR, so you need a hooks f
 // src/hooks.server.ts
 import type { Handle } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+import { svelteDevToolsHandle, noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
 
 export const handle: Handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```

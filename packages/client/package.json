@@ -8,6 +8,9 @@
     "build": "vite build",
     "dev": "vite build --watch"
   },
+  "dependencies": {
+    "vis-network": "^9.1.9"
+  },
   "devDependencies": {
     "@phosphor-icons/core": "^2.1.1",
     "@svelte-devtools/types": "file:../types",

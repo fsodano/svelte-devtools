@@ -23,7 +23,7 @@ Add the SvelteKit handle helper to `src/hooks.server.ts`:
 // src/hooks.server.ts
 import type { Handle } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+import { svelteDevToolsHandle, noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
 
 export const handle: Handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```

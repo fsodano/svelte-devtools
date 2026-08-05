@@ -10,11 +10,11 @@
 -->
 <img src="./docs/assets/hero.gif" alt="Svelte DevTools panel inspecting a Svelte component" width="720" />
 
-[![npm version](https://img.shields.io/npm/v/@svelte-devtools/vite-plugin)](https://www.npmjs.com/package/@svelte-devtools/vite-plugin)
+[![npm version](https://img.shields.io/npm/v/@fsodano/vite-plugin-svelte-devtools)](https://www.npmjs.com/package/@fsodano/vite-plugin-svelte-devtools)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00)](https://svelte.dev)
 [![Vite](https://img.shields.io/badge/Vite-8-646CFF)](https://vite.dev)
-[![Downloads](https://img.shields.io/npm/dm/@svelte-devtools/vite-plugin)](https://www.npmjs.com/package/@svelte-devtools/vite-plugin)
+[![Downloads](https://img.shields.io/npm/dm/@fsodano/vite-plugin-svelte-devtools)](https://www.npmjs.com/package/@fsodano/vite-plugin-svelte-devtools)
 
 **Svelte DevTools** is a Vite plugin that brings a standalone Svelte 5 DevTools panel directly into your browser during development. It hooks into the Vite dev server, injects `$inspect` calls at build time, and renders a live, interactive debugging panel — no browser extension required.
 
@@ -62,13 +62,13 @@ Add the plugin and the Vite DevTools Kit peer dependency to your dev dependencie
 
 ```bash
 # npm
-npm install -D @svelte-devtools/vite-plugin @vitejs/devtools
+npm install -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools
 
 # pnpm
-pnpm add -D @svelte-devtools/vite-plugin @vitejs/devtools
+pnpm add -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools
 
 # yarn
-yarn add -D @svelte-devtools/vite-plugin @vitejs/devtools
+yarn add -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools
 ```
 
 > `@vitejs/devtools` provides the dock/host panel that Svelte DevTools registers into. If your package manager does not auto-install peer dependencies, install it manually — the plugin will not show up without it.
@@ -86,7 +86,7 @@ yarn add -D @svelte-devtools/vite-plugin @vitejs/devtools
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { DevTools } from '@vitejs/devtools';
-import { svelteDevTools } from '@svelte-devtools/vite-plugin';
+import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools';
 
 export default defineConfig({
   plugins: [
@@ -104,7 +104,7 @@ export default defineConfig({
 import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { DevTools } from '@vitejs/devtools';
-import { svelteDevTools } from '@svelte-devtools/vite-plugin';
+import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools';
 
 export default defineConfig({
   plugins: [
@@ -121,7 +121,7 @@ SvelteKit bypasses Vite's `transformIndexHtml` during SSR, so the DevTools scrip
 // src/hooks.server.ts
 import { dev } from '$app/environment';
 import type { Handle } from '@sveltejs/kit';
-import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+import { svelteDevToolsHandle, noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
 
 export const handle: Handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```
@@ -291,7 +291,7 @@ Individual package builds:
 ```bash
 npm run build:types        # @svelte-devtools/types
 npm run build:runtime      # @svelte-devtools/runtime
-npm run build:vite-plugin  # @svelte-devtools/vite-plugin
+npm run build:vite-plugin  # @fsodano/vite-plugin-svelte-devtools
 npm run build:client       # @svelte-devtools/client
 ```
 

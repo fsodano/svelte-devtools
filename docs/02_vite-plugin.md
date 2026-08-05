@@ -18,13 +18,13 @@ npm install
 cd packages/vite-plugin
 npm link
 # Then in your project:
-npm link @svelte-devtools/vite-plugin
+npm link @fsodano/vite-plugin-svelte-devtools
 ```
 
 ### Production (Published)
 
 ```bash
-npm install -D @svelte-devtools/vite-plugin @vitejs/devtools
+npm install -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools
 ```
 
 ## Usage
@@ -36,7 +36,7 @@ npm install -D @svelte-devtools/vite-plugin @vitejs/devtools
 import { defineConfig } from 'vite';
 import { DevTools } from '@vitejs/devtools';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
-import { svelteDevTools } from '@svelte-devtools/vite-plugin';
+import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools';
 
 export default defineConfig({
   plugins: [
@@ -54,7 +54,7 @@ export default defineConfig({
 import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { DevTools } from '@vitejs/devtools';
-import { svelteDevTools } from '@svelte-devtools/vite-plugin';
+import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools';
 
 export default defineConfig({
   plugins: [DevTools(), sveltekit(), svelteDevTools()]
@@ -63,7 +63,7 @@ export default defineConfig({
 // src/hooks.server.ts
 import { dev } from '$app/environment';
 import type { Handle } from '@sveltejs/kit';
-import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+import { svelteDevToolsHandle, noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
 
 export const handle: Handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```
@@ -319,7 +319,7 @@ All endpoints under `/__svelte-devtools/api/` return JSON with CORS headers (see
 
 ## SvelteKit Integration
 
-SvelteKit bypasses Vite's `transformIndexHtml` during SSR. The `svelteDevToolsHandle()` helper (in `@svelte-devtools/vite-plugin/sveltekit`, see sveltekit.ts) solves this by injecting both the Vite DevTools client script and the Svelte runtime script via `transformPageChunk` on every server-rendered response. It also:
+SvelteKit bypasses Vite's `transformIndexHtml` during SSR. The `svelteDevToolsHandle()` helper (in `@fsodano/vite-plugin-svelte-devtools/sveltekit`, see sveltekit.ts) solves this by injecting both the Vite DevTools client script and the Svelte runtime script via `transformPageChunk` on every server-rendered response. It also:
 
 - Installs a `globalThis.fetch` interceptor at module load (so SvelteKit load functions are traced as `server:request` events)
 - Traces SSR responses as `server:ssr` / `server:error` with `event.route.id`, status, headers, and JSON response previews

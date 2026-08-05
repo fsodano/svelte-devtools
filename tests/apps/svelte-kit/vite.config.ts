@@ -1,6 +1,6 @@
 import {defineConfig} from 'vite';
 import {DevTools} from '@vitejs/devtools';
-import {svelteDevTools} from '@svelte-devtools/vite-plugin';
+import {svelteDevTools} from '@fsodano/vite-plugin-svelte-devtools';
 import {sveltekit} from "@sveltejs/kit/vite";
 
 export default defineConfig({

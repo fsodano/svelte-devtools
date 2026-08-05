@@ -83,7 +83,7 @@ export async function handleApiRequest(
             case '': {
                 json(res, {
                     ok: true,
-                    name: '@svelte-devtools/vite-plugin',
+                    name: '@fsodano/vite-plugin-svelte-devtools',
                     version: '0.0.1',
                     endpoints: [
                         '/__svelte-devtools/api/',
