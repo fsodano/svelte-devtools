@@ -72,7 +72,7 @@ See [Svelte AI Docs](https://svelte.dev/docs/ai/overview) for detailed setup per
 | **Write a unit test** | Add to `svelte-dev-extension/tests/<package>/` — vitest + happy-dom |
 | **Write an e2e test** | Add to `svelte-dev-extension/tests/e2e/` — Playwright |
 | **Debug via RPC** | Use `svelte-devtools:*` RPC methods (see debug-with-devtools.md skill) |
-| **Run the test app(s)** | See [docs/03_development_workflow.md](docs/03_development_workflow.md) |
+| **Run the test app(s)** | See [docs/INDEX.md](docs/INDEX.md) (build/test) and `tests/apps/svelte-kit/README.md` |
 | **Verify via HTTP API** | `curl localhost:5173/__svelte-devtools/api/` — all REST endpoints |
 
 ## Verifying Work via HTTP API
@@ -89,6 +89,8 @@ The DevTools exposes a REST API at `/__svelte-devtools/api/` that agents can use
 | `GET` | `/api/server-events` | Server request traces with response bodies |
 | `GET` | `/api/migration` | Svelte 4→5 migration scores |
 | `GET` | `/api/snapshots` | Snapshot branch tree (parentId, branchId, timestamps) |
+| `GET` | `/api/routes` | SvelteKit route map scanned from `src/routes` |
+| `GET` | `/api/remote` | Remote-debugging payload synced from the panel |
 | `POST` | `/api/set-state` | Edit component state (`{componentId, key, value}`) |
 | `GET` | `/api/source?file=<path>` | Source code file lookup |
 | `POST` | `/api/sync` | (internal) Client syncs runtime state here |
@@ -118,7 +120,7 @@ curl http://localhost:5173/__svelte-devtools/api/migration
 2. **API Check** → `curl localhost:5173/__svelte-devtools/api/<endpoint>` to verify JSON data
 3. **UI Check** → Refresh browser at `localhost:5173` to verify visual result
 
-The DevTools panel opens as a **popup window** (via `DocumentPictureInPicture`), not an iframe. The Vite DevTools icon at the bottom-right opens a command palette — the panel opens when a dock entry is triggered.
+The plugin registers its dock entry as `type: 'iframe'` (`DOCK_CONFIG` in `packages/types/src/constants.ts`); the Vite DevTools Kit then renders it — in supported Chromium browsers as a **DocumentPictureInPicture popup window**, in headless mode as an **embedded iframe**. The Vite DevTools icon at the bottom-right opens a command palette — the panel opens when a dock entry is triggered.
 
 ### Authorization (Vite DevTools)
 
@@ -183,7 +185,7 @@ console.log('Dock buttons:', dockState);
 
 ### Notes on DevTools UI Testing
 
-- The DevTools panel opens as a **popup window** (via `DocumentPictureInPicture`), not an iframe.
+- The DevTools dock entry is `type: 'iframe'`; the Vite DevTools Kit renders it as a **DocumentPictureInPicture popup window** in supported Chromium, or as an **embedded iframe** in headless mode. Access via `page.frames()` in either case.
 - The Vite DevTools icon at the bottom-right opens a command palette — the panel opens when a dock entry is triggered.
 - **Authorization** is required per browser session. The `Manual Auth Token` changes on each server restart.
 - In headless browsers, `DocumentPictureInPicture` may not be available. For automated CI, verify via the HTTP API instead.
@@ -463,12 +465,15 @@ Then restart the dev server. Without this, the changes are NOT served.
 ## Reading Order
 
 1. **This file** (AGENTS.md) — get oriented
-2. [Project Overview](docs/00_project_overview.md) — what this is and why
-3. [Directory Structure](docs/01_directory_structure.md) — where everything lives
-4. [Package Architecture](docs/02_package_architecture.md) — how the packages fit together
-5. [Development Workflow](docs/03_development_workflow.md) — build, test, run
-6. [Test Projects](docs/04_test_projects.md) — test apps and how to use them
-7. [Coding Conventions](docs/05_coding_conventions.md) — patterns to follow
+2. [Developer Docs Index](docs/INDEX.md) — build order, tests, package architecture
+3. [Overview & Quick Start](docs/00_index.md) — what this is and why
+4. [Architecture](docs/01_architecture.md) — system design and data flow
+5. [Vite Plugin](docs/02_vite-plugin.md) — transforms, middleware, HTTP API
+6. [Runtime](docs/03_runtime.md) — state handling and `postMessage` protocol
+7. [Client UI](docs/04_client.md) — DevTools panel implementation
+8. [Server Integration](docs/05_server.md) — SvelteKit request tracing
+9. [API Reference](docs/06_api.md) — public APIs and type definitions
+10. [Vite 8 Guide](docs/VITE.md) — Vite 8 / Rolldown internals and compatibility audit
 
 ## Existing Extension Docs
 

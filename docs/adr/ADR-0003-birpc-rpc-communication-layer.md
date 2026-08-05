@@ -1,7 +1,9 @@
 # ADR-0003: Birpc-Based RPC Communication Layer
 
 ## Status
-Accepted
+Accepted — **partially implemented / not yet wired in** (2026-08-04)
+
+> The `packages/bridge` package exists (`buildRpcRouter`, `createBridge`, `PostMessageAdapter`, `WebSocketAdapter`, shared `rpc-procedures.ts`) and builds, but **nothing imports it**. The client still communicates via the postMessage window bridge and direct `window.parent.__SVELTE_DEVTOOLS__` calls; the plugin exposes RPC through `@vitejs/devtools-kit`'s `ctx.rpc`. Wiring the bridge in is future work.
 
 ## Context
 The runtime communicates with the DevTools client exclusively through raw `postMessage` events. This works for client-facing features (component tree display, state inspection, timeline events) but breaks down when the DevTools needs to perform server-side actions.

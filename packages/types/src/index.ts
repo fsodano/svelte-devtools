@@ -161,10 +161,13 @@ export interface TraceTriggerEvent extends BaseEvent {
 
 /**
  * Timeline entry in the UI.
+ * `type` is a superset of EventType: timeline entries also carry
+ * client-side fetch traces ('client:request') and server event types
+ * ('server:request', 'server:ssr', 'server:error', 'server:trace').
  */
 export interface TimelineEntry {
   id: string;
-  type: EventType;
+  type: EventType | string;
   timestamp: number;
   data: unknown;
   duration?: number;
@@ -198,6 +201,8 @@ export interface StateChangePayload {
   key: string;
   value: unknown;
   prevValue?: unknown;
+  /** The $inspect type forwarded by the bridge: 'state' | 'derived' | 'props' */
+  type?: string;
 }
 
 /** Payload for effect:run event */

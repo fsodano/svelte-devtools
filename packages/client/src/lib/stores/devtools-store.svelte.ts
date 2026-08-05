@@ -140,7 +140,7 @@ function createDevtoolsStore() {
       if (newEvents.length > 0) {
         serverEvents = [...serverEvents, ...newEvents].slice(-1000);
         for (const evt of newEvents) {
-          const typedEvt = evt as ServerEvent;
+          const typedEvt = evt as unknown as ServerEvent;
           addToTimeline({
             id: generateId(),
             type: typedEvt.type,
@@ -284,7 +284,7 @@ function createDevtoolsStore() {
     if (!existingComponent) return;
 
     const value = data.value instanceof Map ? Object.fromEntries(data.value) : data.value;
-    const isProp = (data as Record<string, unknown>).type === 'props';
+    const isProp = data.type === 'props';
 
     // ── Motion gate (Spring/Tween) ──────────────────────────────
     // Detect animation frames from the $effect watcher on class
@@ -320,7 +320,7 @@ function createDevtoolsStore() {
       value,
       isProp,
       prevValue: existingComponent.state?.[data.key],
-      type: (data as Record<string, unknown>).type as string,
+      type: data.type ?? 'state',
       componentName: existingComponent.name,
     });
 

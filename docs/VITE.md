@@ -472,22 +472,26 @@ ctx.rpc.register({
 
 The client UI calls these via the RPC bridge provided by `@vitejs/devtools`.
 
-### Messages API
+### Messages API (`ctx.logs`)
 
-The DevTools kit also provides a messages system for showing notifications:
+The DevTools kit provides a notifications system for showing messages. **Note**: in `@vitejs/devtools-kit` for Vite 8 the property is `ctx.logs` (type `DevToolsLogsHost`), not `ctx.messages` — the plugin's `devtools.setup` uses `ctx.logs.add(...)`:
 
 ```typescript
-if (ctx.messages) {
-  ctx.messages.add({
-    message: 'Svelte DevTools initialized',
-    description: 'Component tree and state inspection active',
-    level: 'info',
-    category: 'svelte-devtools'
-  });
+devtools: {
+  setup(ctx: DevToolsNodeContext) {
+    if (ctx.logs) {
+      ctx.logs.add({
+        message: 'Svelte DevTools initialized',
+        description: 'Component tree and state inspection active',
+        level: 'info',
+        category: 'svelte-devtools',
+      });
+    }
+  }
 }
 ```
 
-Messages support `info`, `warn`, and `error` levels. They appear in the DevTools panel's message area.
+Messages support `info`, `warn`, and `error` levels. They appear in the DevTools panel's message area. The `autoDelete` field (ms) auto-dismisses a message.
 
 ### WebSocket Communication
 
@@ -710,6 +714,13 @@ The plugin's dependency on Vite is declared as `"vite": "^8.0.3"` in `package.js
 **Date:** 2026-07-19
 **Scope:** `@svelte-devtools/vite-plugin` (packages/vite-plugin)
 **Verdict:** Largely compatible — 4 issues found (2 high, 1 medium, 1 low), 3 optimization opportunities.
+
+> **Update (2026-08-04):** The 🔴 Must Fix items from this audit have been **resolved**:
+> - ✅ `DevToolsNodeContext` from `@vitejs/devtools-kit` is now imported and used (`index.ts:15`)
+> - ✅ `ctx.messages` access replaced with `ctx.logs` (`index.ts:467-478`)
+> - ✅ `@vitejs/devtools-kit: ^0.4.0` added to dependencies (was `^0.1.11` proposed)
+> - ✅ `sirv` upgraded to `^3.0.2`
+> - 🟡 Still open: `transform` hook-level `filter: { id: /\.svelte$/ }` optimization — the hook still uses `shouldProcess()`-style checks inside the handler (`createFilter` + `.svelte-kit/generated` guard)
 
 ### 1. @babel/parser
 

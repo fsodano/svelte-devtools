@@ -13,13 +13,16 @@ The devtools registers RPC methods on the Vite DevTools context that any agent c
 
 ### RPC Methods
 
+Only these methods are registered by the plugin (`svelteDevTools()` → `devtools.setup`). Methods listed in `RPC_METHODS` constants but missing here (`get-timeline`, `get-state`, `update-component-state`, `set-network-rule`, `get-routes`) are **not implemented** and will not respond.
+
 | Method Name | Type | Description |
 |---|---|---|
 | `svelte-devtools:build-status` | query | Check if the build is healthy |
 | `svelte-devtools:get-components` | query | List all registered components |
-| `svelte-devtools:component-state` | query | Get state snapshot of a component by ID |
+| `svelte-devtools:component-state` | query | Get metadata of a component by ID |
 | `svelte-devtools:migration-score` | query | Svelte 4 to 5 migration percentage per file |
-| `svelte-devtools:rescan` | mutation | Force re-analyze all components |
+| `svelte-devtools:open-in-editor` | mutation | Open a file at a line in the editor |
+| `svelte-devtools:rescan` | mutation | Force re-analyze all components (full-reload) |
 
 ### Response Schema
 
@@ -380,7 +383,7 @@ Component IDs are derived from file paths. If components share a filename (e.g.,
 If a `.svelte` file has a syntax error, the plugin logs the error and skips transforms for that file. Check the devtools notifications panel or the browser console for transform error messages:
 
 ```javascript
-// The plugin emits messages via ctx.messages.add
+// The plugin emits messages via ctx.logs.add (DevToolsLogsHost)
 // Look for: "Transform error in <ComponentName>"
 // Followed by the specific babel or svelte parse error
 ```
@@ -401,8 +404,10 @@ All endpoints return JSON with `Content-Type: application/json` and CORS headers
 | `GET` | `/__svelte-devtools/api/server-events` | Server request traces with bodies |
 | `GET` | `/__svelte-devtools/api/migration` | Svelte 4→5 migration scores |
 | `GET` | `/__svelte-devtools/api/snapshots` | Snapshot branch tree (parentId, branchId, timestamps) |
-| `POST` | `/__svelte-devtools/api/set-state` | Edit component state (`{componentId, key, value}`) |
+| `GET` | `/__svelte-devtools/api/routes` | SvelteKit route map scanned from `src/routes` |
+| `GET` | `/__svelte-devtools/api/remote` | Remote-debugging payload synced from the panel |
 | `GET` | `/__svelte-devtools/api/source?file=<path>` | Source code file lookup |
+| `POST` | `/__svelte-devtools/api/set-state` | Edit component state (`{componentId, key, value}`) |
 | `POST` | `/__svelte-devtools/api/sync` | (internal) Client syncs runtime state here |
 
 ### Example Usage

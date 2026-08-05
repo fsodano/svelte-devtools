@@ -14,7 +14,7 @@ This directory holds skill files for AI agents working with the Svelte DevTools 
 Step-by-step guide to add Svelte DevTools to any project. Covers:
 
 - Installing `@svelte-devtools/vite-plugin` and `@vitejs/devtools`
-- Configuring Vite for plain Svelte and SvelteKit projects
+- Configuring Vite for plain Svelte and SvelteKit projects (plugin ordering)
 - Setting up SvelteKit hooks for SSR support
 - Plugin options (include, exclude, enableStateInspection)
 - Verification and troubleshooting
@@ -25,7 +25,8 @@ Use this skill when the task involves installing or configuring the devtools plu
 
 Guide for AI agents to debug Svelte 5 apps using the devtools agent API. Covers:
 
-- RPC methods (`build-status`, `get-components`, `component-state`, `migration-score`, `rescan`)
+- RPC methods (6 live: `build-status`, `get-components`, `component-state`, `migration-score`, `open-in-editor`, `rescan`)
+- HTTP REST API at `/__svelte-devtools/api/*` (components, timeline, server-events, snapshots, migration, routes, set-state, source)
 - Agent response schema (`AgentResponse<T>`)
 - Debugging flow from health check to component inspection
 - Browser console globals (`__SVELTE_DEVTOOLS_RUNTIME__`, `__SVELTE_DEVTOOLS_REGISTRY__`, `__SVELTE_DEVTOOLS__`)
@@ -38,10 +39,11 @@ Use this skill when the task involves inspecting component state, debugging rune
 End-to-end verification workflow for the Svelte DevTools plugin. Covers:
 
 - Building and starting a test app
-- Vite DevTools authorization flow (terminal token, manual auth URL)
-- Opening the DevTools panel via DocumentPictureInPicture
+- Vite DevTools authorization flow (terminal token)
+- Opening the DevTools panel (iframe dock entry; Vite DevTools Kit decides popup vs embedded)
 - Full Playwright automation script
-- HTTP API verification for all endpoints (components, timeline, server-events, snapshots, migration, set-state, source)
+- HTTP API verification for all endpoints (components, timeline, server-events, snapshots, migration, set-state, source, routes)
+- Time-travel verification (Record button, undo/redo, snapshot counting)
 - Common issues and troubleshooting checklist
 
 Use this skill when verifying the devtools work after changes, debugging auth flow problems, or running automated verification in CI.

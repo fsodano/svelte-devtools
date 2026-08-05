@@ -2,6 +2,7 @@
 
 > Analysis date: 2026-07-23
 > Source: https://github.com/vuejs/devtools
+> Status update: 2026-08-04 — adaptation status refreshed against the current `packages/client` source.
 
 ## 1. Architecture Overview
 
@@ -28,7 +29,7 @@ Vue DevTools is structured across these packages:
 - Uses RPC: `rpc.value.getRouterInfo()`, `rpc.value.getInspectorTree()`
 - Event-driven updates via `ROUTER_INFO_UPDATED`, `INSPECTOR_TREE_UPDATED`
 
-**Svelte adaptation**: Already done in `Dashboard.svelte`. Needs route count integration.
+**Svelte adaptation**: ✅ `Dashboard.svelte` (Info tab) — connection status, versions, stat cards. Route count integration not yet done.
 
 ### 2b. Components Inspector (`pages/components.vue`)
 - Sidebar with component tree (searchable, expandable)
@@ -39,7 +40,7 @@ Vue DevTools is structured across these packages:
 - **Source link**: Click to open in editor (via `openInEditor` composable)
 - **Custom inspector tabs**: Plugins can register custom tabs
 
-**Svelte adaptation**: ComponentTree.svelte now has hover highlighting and state editing. Needs slot detection and more tag types.
+**Svelte adaptation**: ✅ `ComponentTree.svelte` (search, render-duration badges, go-to-source) + `ComponentDetail.svelte` (Props/State/DOM/Source sub-tabs). ✅ Element highlighting via the runtime's inspect overlay (`enableInspector`/`disableInspector`, hover overlay + click-to-select). ⚠️ State editing exists via the time-travel store's `setStateEdit` and the `/api/set-state` endpoint, but there is no inline value editor in the detail panel yet. Slot detection and more tag types not implemented.
 
 ### 2c. Router Inspector (`pages/router.vue`)
 - `Router` panel component from `@vue/devtools-applet`
@@ -48,7 +49,7 @@ Vue DevTools is structured across these packages:
 - Shows current active route highlighted
 - Route metadata (name, path, component, props, etc.)
 
-**Svelte adaptation**: RouterHub.svelte exists with route listing. Needs click-to-navigate functionality.
+**Svelte adaptation**: ✅ `RouterHub.svelte` — route listing from `/api/routes` (filesystem scan of `src/routes`), badges for page/layout/api/error, **click-to-navigate** via `svelte-devtools-navigate` postMessage to the parent. Active-route highlighting not implemented.
 
 ### 2d. Timeline (`pages/timeline.vue`)
 - Category filters: Mouse, Keyboard, Component events, Performance
@@ -57,7 +58,7 @@ Vue DevTools is structured across these packages:
 - Splitpanes for responsive layout
 - `SelectiveList` + `Timeline` components from `@vue/devtools-applet`
 
-**Svelte adaptation**: Timeline.svelte exists (renamed to Events). Needs category filters.
+**Svelte adaptation**: ✅ `Timeline.svelte` (Events tab) — **filter chips** (All/Components/State/Effects/Server/Client Requests), resizable detail panel with `JsonTree`. Layer-based visualization and multi-app switching not implemented.
 
 ### 2e. Component Graph (`pages/graph.vue`)
 - Uses **vis-network** library (D3-based force-directed graph)
@@ -67,7 +68,7 @@ Vue DevTools is structured across these packages:
 - **Stabilizing animation** with modal
 - Watch for `graphModuleUpdated` event via RPC
 
-**Svelte adaptation**: ComponentGraph.svelte rewritten with custom canvas. Should consider using vis-network for better interactivity.
+**Svelte adaptation**: ✅ `ComponentGraph.svelte` (Graph tab) — now uses **vis-network** force-directed graph of parent→child relationships. Node selection/detail drawer not implemented.
 
 ### 2f. Assets (`pages/assets.vue`)
 - File explorer with grid/list view toggle
@@ -77,7 +78,7 @@ Vue DevTools is structured across these packages:
 - Shows relative paths, file sizes
 - Serves from Vite plugin via RPC
 
-**Svelte adaptation**: Not implemented yet. Could show project files.
+**Svelte adaptation**: ⚠️ `Assets.svelte` (Assets tab) — shows a `PerformanceResourceTiming` resource list instead of a file explorer. File-system explorer not implemented.
 
 ### 2g. Settings (`pages/settings.vue`)
 - **DarkToggle** — theme toggle (light/dark/system)
@@ -88,7 +89,7 @@ Vue DevTools is structured across these packages:
 - **Close on outside click**
 - **Reset settings** — clear all preferences
 
-**Svelte adaptation**: Theme toggle done. Settings page not implemented.
+**Svelte adaptation**: ✅ `Settings.svelte` (Settings tab) — font scale, reduce motion, theme (localStorage-backed). Tab customization and minimize-panel not implemented.
 
 ### 2h. Pinia (State Management) (`pages/pinia.vue`)
 - Dedicated state management inspector
@@ -96,7 +97,7 @@ Vue DevTools is structured across these packages:
 - Time-travel debugging per store
 - Integrated with Vue DevTools' custom inspector API
 
-**Svelte adaptation**: Time Travel tab exists. Could integrate with Svelte stores.
+**Svelte adaptation**: ✅ Time Travel tab exists (`TimeTravelConsole.svelte`) with snapshot capture/restore, undo/redo, and a diff view. Dedicated store inspector not implemented (Svelte stores are tracked as component state).
 
 ## 3. UI Component Library (`packages/ui/src/components/`)
 
@@ -173,14 +174,13 @@ Vue DevTools has an `openInEditor` composable that:
 
 ## 7. Priority Implementation Queue
 
-Based on this analysis, here's what we should implement next in order:
+> **Update (2026-08-04):** The P0/P1 items below are now **implemented** (Router click-to-navigate ✅, component detail panel redesign ✅, Settings page ✅, Timeline category filters ✅). Remaining backlog:
 
 | Priority | Feature | Effort | Impact |
 |----------|---------|--------|--------|
-| **P0** | Router click-to-navigate | Small | High |
-| **P0** | Component detail panel redesign | Medium | High |
-| **P1** | Settings page (scale, tab prefs) | Medium | Medium |
-| **P1** | Timeline category filters | Small | Medium |
-| **P2** | Assets file explorer | Large | Medium |
-| **P2** | Switch to vis-network for graph | Medium | Medium |
-| **P3** | Custom tab API | Large | Low |
+| **P1** | Inline state editing in the component detail panel | Medium | High |
+| **P2** | Assets file explorer (filesystem via plugin) | Large | Medium |
+| **P2** | Graph node selection + detail drawer | Medium | Medium |
+| **P2** | Active-route highlighting in RouterHub | Small | Medium |
+| **P3** | Custom inspector/tab API | Large | Low |
+| **P3** | Layer-based timeline visualization | Medium | Medium |

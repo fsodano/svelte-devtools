@@ -1,18 +1,17 @@
 # Server Integration
 
-**Status**: Experimental – basic request tracing only.
-
 SvelteKit server-side integration for tracing HTTP requests during SSR.
+
+**Status**: implemented — basic request tracing. There is **no standalone `packages/server`**; all server-side logic lives inside `packages/vite-plugin` (`server-events.ts`, `server-api.ts`, `sveltekit.ts`, and the middleware in `index.ts`).
 
 ## Overview
 
-The Vite plugin provides lightweight server-side request tracing out of the box. No separate server package is required.
+The Vite plugin provides server-side request tracing out of the box:
 
-Traced data includes:
-- Request URL and HTTP method
-- Response status code
-- Request duration
-- Server errors (status >= 400)
+- **SvelteKit SSR traces** — the `svelteDevToolsHandle()` hook traces every SSR response with `event.route.id`, method, status, duration, headers, and JSON response previews (`server:ssr` / `server:error` event types)
+- **SvelteKit fetch traces** — a `globalThis.fetch` interceptor installed at module load captures load-function fetches as `server:request` events (it must be installed before SvelteKit caches fetch for load functions)
+- **Generic HTTP traces** — a Vite middleware records every non-asset, non-devtools request (URL, method, status, duration, response preview, request/response headers)
+- **Client fetch traces** — the browser runtime also intercepts `window.fetch`, emitting `client:request` events shown in the Network tab
 
 ## Usage
 
@@ -29,63 +28,70 @@ import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/s
 export const handle: Handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```
 
-The handle helper currently passes requests through unchanged. All server tracing is performed by the Vite plugin middleware.
+The handle:
+1. Injects the Vite DevTools client script + Svelte runtime script into every SSR response via `transformPageChunk`
+2. Traces the request (duration, status, headers, response preview, `routeId`)
+3. `noopHandle()` is a zero-overhead pass-through for production
 
 ## How It Works
 
-### Request Tracing
+### Event Store (`server-events.ts`)
 
-The Vite plugin installs middleware during development that intercepts every HTTP request:
-
-1. **Start timer** when request begins
-2. **Record event** when response finishes
-3. **Store event** in an in-memory buffer (max 1000 events)
-4. **Serve events** via `/__svelte-devtools/server-events` endpoint
-
-### Event Schema
+An in-memory ring buffer:
 
 ```typescript
 interface ServerEvent {
-  id: string;        // Unique event ID
-  type: string;      // 'server:trace' or 'server:error'
-  timestamp: number; // Request start time
-  duration?: number; // Request duration in ms
+  id: string;          // 'evt-...' or 'srv-...'
+  type: string;        // 'server:request' | 'server:ssr' | 'server:error' | 'server:trace'
+  timestamp: number;
+  duration?: number;
   data: {
     url: string;
     method: string;
-    statusCode: number;
+    statusCode?: number;
+    routeId?: string;            // SvelteKit route id (e.g. '/counter')
+    requestBody?: string;
+    responseSize?: number;
+    responsePreview?: string;
+    reqHeaders?: Record<string, unknown>;
+    resHeaders?: Record<string, unknown>;
+    _handler?: string;           // 'fetch-interceptor' | 'sveltekit' | 'generic'
   };
 }
 ```
+
+- Capped at `MAX_EVENTS = 1000` entries (oldest evicted)
+- `seenIds` dedup map avoids double-recording the same request (SvelteKit handle + generic middleware)
+- Exports `addServerEvent(event)`, `getServerEvents({last?, sinceId?})`, `clearServerEvents()`
 
 ### API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/__svelte-devtools/server-events` | `GET` | Get all server events (supports `?last=N` and `?sinceId=X`) |
+| `/__svelte-devtools/server-events` | `GET` | All server events (`?last=N`, `?sinceId=X`) |
 | `/__svelte-devtools/server-events` | `DELETE` | Clear all server events |
-
-Example:
+| `/__svelte-devtools/api/server-events` | `GET` / `DELETE` | Same data under the JSON API prefix |
 
 ```bash
-curl http://localhost:5173/__svelte-devtools/server-events
+curl http://localhost:5173/__svelte-devtools/api/server-events | jq '.events | length'
 ```
 
-## Client Display
+### Client Display
 
-The DevTools UI polls `/__svelte-devtools/server-events` every second and displays server events in the **Server View** tab.
+The DevTools panel polls `/__svelte-devtools/server-events` every second and displays the events in the **Network** tab (`NetworkDesk.svelte`), alongside client-side `client:request` events and a Mock Rules editor.
 
 ## Security Considerations
 
-1. **Dev-only**: Server tracing middleware only runs when `apply: 'serve'`
-2. **No production impact**: The plugin is never loaded in production builds
+1. **Dev-only**: All tracing middleware only runs when `apply: 'serve'`
+2. **No production impact**: `noopHandle()` passes requests through unchanged; the plugin is never loaded in production builds
 3. **Memory bounded**: Event buffer is capped at 1000 entries
+4. **Header privacy**: the `cookie` request header is logged only as `'[present]'` (generic middleware)
 
 ## Troubleshooting
 
 ### No server events in timeline
 
-Ensure you are in development mode and the DevTools UI is open:
+Ensure you are in development mode and the DevTools panel is open:
 
 ```javascript
 // In browser console
@@ -94,14 +100,18 @@ fetch('/__svelte-devtools/server-events')
   .then(console.log);
 ```
 
+Also make sure `src/hooks.server.ts` exists with `svelteDevToolsHandle()` — without it, SvelteKit requests bypass the generic Vite middleware for HTML pages.
+
 ## Implementation Status
 
 Completed:
-- ✅ Basic request tracing via Vite middleware
-- ✅ Server events endpoint (`GET` / `DELETE`)
-- ✅ Client-side polling and display
+- ✅ SvelteKit SSR request tracing (routeId, headers, previews)
+- ✅ `globalThis.fetch` interceptor for load functions (`server:request`)
+- ✅ Generic Vite middleware request tracing
+- ✅ Client-side `window.fetch` tracing (`client:request`)
+- ✅ Server events endpoints (`GET` / `DELETE`)
+- ✅ Client-side polling and display (Network tab)
 
 Planned:
-- 🚧 SvelteKit load function tracing
-- 🚧 Trace headers for server-client correlation
 - 🚧 Database query tracing
+- 🚧 Full network interception engine (block/mock) — see [ADR-0007](./adr/ADR-0007-network-interception-architecture.md)

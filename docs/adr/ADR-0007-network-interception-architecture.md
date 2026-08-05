@@ -1,7 +1,9 @@
 # ADR-0007: Network Interception Architecture
 
 ## Status
-Accepted
+Accepted — **partially implemented** (2026-08-04)
+
+> Current state: the **Network tab** (`NetworkDesk.svelte`) renders request lists (SSR traces, errors, client requests) and has a **Mock Rules editor** UI that posts `{type: 'svelte-devtools-set-mock-rules', rules}` to the parent window. A `NetworkInterceptor` class exists in `packages/runtime/src/network.ts` (fetch/XHR interception with block/mock/pass rules) but is **not exported from the runtime index and not wired in** — the runtime's live fetch handling is the lightweight `window.fetch` patch that emits `client:request` traces. SvelteKit server-side fetch interception via `globalThis.fetch` is live (in `sveltekit.ts`). Full block/mock interception is still future work.
 
 ## Context
 The DevTools can trace HTTP requests via `globalThis.fetch` wrapping and Vite middleware, but it cannot intercept, block, or mock them. During debugging, developers need the ability to inspect outgoing network calls, pause requests to examine payloads, block specific endpoints, and return synthetic responses without modifying application code.
