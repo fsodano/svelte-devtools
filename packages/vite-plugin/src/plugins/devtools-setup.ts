@@ -1,6 +1,6 @@
 import type { Plugin } from 'vite';
 import type { PluginAPI } from '../types.js';
-import { DOCK_CONFIG, RPC_METHODS, RPC_TYPES } from '@svelte-devtools/types';
+import { DOCK_CONFIG, RPC_METHODS, RPC_TYPES } from '@fsodano/svelte-devtools-types';
 import type { ViteDevToolsNodeContext } from '@vitejs/devtools-kit';
 import path from 'path';
 

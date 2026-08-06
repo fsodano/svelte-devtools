@@ -1,5 +1,5 @@
 {
-  "name": "@svelte-devtools/runtime",
+  "name": "@fsodano/svelte-devtools-runtime",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",

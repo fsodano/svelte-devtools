@@ -1,5 +1,5 @@
-import type { ComponentNode, TimelineEntry } from '@svelte-devtools/types';
-import { LIMITS } from '@svelte-devtools/types';
+import type { ComponentNode, TimelineEntry } from '@fsodano/svelte-devtools-types';
+import { LIMITS } from '@fsodano/svelte-devtools-types';
 
 export interface KitState {
   data?: unknown;

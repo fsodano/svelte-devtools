@@ -230,7 +230,7 @@ Each transformed file is scored by `analyzeMigration` (migration-analyzer.ts): 1
 
 ### Dock Registration
 
-The plugin registers with `@vitejs/devtools` via the `devtools.setup` hook (index.ts:373-382), using `DOCK_CONFIG` from `@svelte-devtools/types`:
+The plugin registers with `@vitejs/devtools` via the `devtools.setup` hook (index.ts:373-382), using `DOCK_CONFIG` from `@fsodano/svelte-devtools-types`:
 
 ```typescript
 devtools: {
@@ -261,7 +261,7 @@ Six RPC methods are registered in `devtools.setup` (index.ts:385-464):
 | `svelte-devtools:component-state` | query | Metadata for one `svt-*` id (`NOT_FOUND` error otherwise) |
 | `svelte-devtools:rescan` | mutation | Triggers a `full-reload` |
 
-> `RPC_METHODS` in `@svelte-devtools/types` also defines `get-timeline`, `get-state`, `update-component-state`, `set-network-rule`, and `get-routes`, but those are **not registered** by the live plugin yet.
+> `RPC_METHODS` in `@fsodano/svelte-devtools-types` also defines `get-timeline`, `get-state`, `update-component-state`, `set-network-rule`, and `get-routes`, but those are **not registered** by the live plugin yet.
 
 ### Logs API
 
@@ -337,7 +337,7 @@ if (/\.svelte-kit\/generated/.test(id)) return null;
 
 ## Configuration Options
 
-Defined in `@svelte-devtools/types` (`SvelteDevToolsPluginOptions`):
+Defined in `@fsodano/svelte-devtools-types` (`SvelteDevToolsPluginOptions`):
 
 ```typescript
 interface SvelteDevToolsPluginOptions {

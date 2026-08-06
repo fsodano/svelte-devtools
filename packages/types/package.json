@@ -1,5 +1,5 @@
 {
-  "name": "@svelte-devtools/types",
+  "name": "@fsodano/svelte-devtools-types",
   "version": "0.0.1",
   "type": "module",
   "main": "dist/index.js",
@@ -20,5 +20,8 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

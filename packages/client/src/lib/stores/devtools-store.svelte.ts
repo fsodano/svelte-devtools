@@ -9,7 +9,7 @@ import type {
   ComponentUnmountPayload,
   StateChangePayload,
   EffectRunPayload
-} from '@svelte-devtools/types';
+} from '@fsodano/svelte-devtools-types';
 
 interface ServerEvent {
   id: string;

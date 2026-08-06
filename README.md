@@ -142,7 +142,7 @@ The `svelteDevToolsHandle()` helper injects both the Vite DevTools client and th
 `svelteDevTools()` accepts an optional options object:
 
 ```typescript
-import type { SvelteDevToolsPluginOptions } from '@svelte-devtools/types';
+import type { SvelteDevToolsPluginOptions } from '@fsodano/svelte-devtools-types';
 
 svelteDevTools({
   // File patterns to include for transformation (default: [/\.svelte$/])
@@ -289,10 +289,10 @@ cd tests/apps/svelte-kit && npm run dev
 Individual package builds:
 
 ```bash
-npm run build:types        # @svelte-devtools/types
-npm run build:runtime      # @svelte-devtools/runtime
+npm run build:types        # @fsodano/svelte-devtools-types
+npm run build:runtime      # @fsodano/svelte-devtools-runtime
 npm run build:vite-plugin  # @fsodano/vite-plugin-svelte-devtools
-npm run build:client       # @svelte-devtools/client
+npm run build:client       # @fsodano/svelte-devtools-client
 ```
 
 **Important for contributors:** the DevTools panel is served from `packages/client/dist/`, not compiled on demand. After changing `packages/client/src/`, rebuild with `npm run build:client` (or `npm run build`), then restart the dev server. See [docs/00_index.md](docs/00_index.md) for the quick start and [docs/INDEX.md](docs/INDEX.md) for the developer workflow.

@@ -1,5 +1,5 @@
 /**
- * @svelte-devtools/bridge — abstract RPC transport layer
+ * @fsodano/svelte-devtools-bridge — abstract RPC transport layer
  * 
  * Provides a type-safe bidirectional communication layer between
  * the browser runtime and the Vite dev server.

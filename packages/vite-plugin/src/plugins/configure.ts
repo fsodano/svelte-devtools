@@ -2,7 +2,7 @@ import type { Plugin, ResolvedConfig, EnvironmentOptions, ConfigEnv } from 'vite
 import type { PluginAPI, ResolvedOptions } from '../types.js';
 import { resolveOptions, DEVTOOLS_PREFIX } from '../utils/options.js';
 import { buildIdFilter } from '../utils/id.js';
-import type { SvelteDevToolsPluginOptions } from '@svelte-devtools/types';
+import type { SvelteDevToolsPluginOptions } from '@fsodano/svelte-devtools-types';
 import fs from 'fs';
 import path from 'path';
 

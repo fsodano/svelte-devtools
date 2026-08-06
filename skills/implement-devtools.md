@@ -169,8 +169,8 @@ If everything is working:
 | Problem | Likely Cause | Fix |
 |---|---|---|
 | Plugin does not load in SvelteKit | Missing `hooks.server.ts` or wrong hooks setup | Add `src/hooks.server.ts` with `svelteDevToolsHandle()` and `noopHandle()` for production guard |
-| Runtime not found (blank iframe) | Runtime package was not built or path resolution failed | Rebuild the runtime: `npm run build:runtime -w @svelte-devtools/runtime` or `npm run build` from the monorepo root |
-| Blank iframe for the Svelte tab | Client UI package was not built | Rebuild the client: `npm run build:client -w @svelte-devtools/client` or `npm run build` from the monorepo root |
+| Runtime not found (blank iframe) | Runtime package was not built or path resolution failed | Rebuild the runtime: `npm run build:runtime -w @fsodano/svelte-devtools-runtime` or `npm run build` from the monorepo root |
+| Blank iframe for the Svelte tab | Client UI package was not built | Rebuild the client: `npm run build:client -w @fsodano/svelte-devtools-client` or `npm run build` from the monorepo root |
 | Transform not applied to a component | Include/exclude patterns filter it out, or it's in `.svelte-kit/generated/` | Check your `include` and `exclude` patterns. Generated files in `.svelte-kit/generated/` are automatically skipped. |
 | Component not in tree | Component ID collision or registration timing | Check `window.__SVELTE_DEVTOOLS_REGISTRY__` in the browser console. Each component should have a unique `svt-*` ID. |
 | State values do not update | `$inspect` injection did not fire, or the runtime is not loaded | Verify the runtime script is in the page HTML. Check `window.__SVELTE_DEVTOOLS_RUNTIME__` in the console. |

@@ -22,8 +22,9 @@
   "dependencies": {
     "@babel/parser": "^7.26.0",
     "@babel/types": "^7.26.0",
-    "@svelte-devtools/runtime": "file:../runtime",
-    "@svelte-devtools/types": "file:../types",
+    "@fsodano/svelte-devtools-client": "file:../client",
+    "@fsodano/svelte-devtools-runtime": "file:../runtime",
+    "@fsodano/svelte-devtools-types": "file:../types",
     "@vitejs/devtools-kit": "^0.4.0",
     "launch-editor": "^2.14.1",
     "magic-string": "^0.30.0",
@@ -41,5 +42,8 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

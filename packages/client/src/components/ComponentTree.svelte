@@ -128,7 +128,7 @@
       // Use untrack to prevent `components` from becoming a tracked dependency
       // (avoids cascading re-runs during bridge syncs after user has searched)
       const comps = untrack(() => components);
-      devtoolsStore.setSearchQuery(searchTerm, comps as unknown as import('@svelte-devtools/types').ComponentNode[]);
+      devtoolsStore.setSearchQuery(searchTerm, comps as unknown as import('@fsodano/svelte-devtools-types').ComponentNode[]);
     }
   });
 

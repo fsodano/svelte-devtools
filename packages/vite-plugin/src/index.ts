@@ -10,8 +10,8 @@ import {createRequire} from 'module';
 import sirv from 'sirv';
 import launchEditor from 'launch-editor';
 import {parse} from 'svelte/compiler';
-import type {ComponentMeta, StateDeclaration, SvelteDevToolsPluginOptions} from '@svelte-devtools/types';
-import {DOCK_CONFIG, RPC_METHODS, RPC_TYPES} from '@svelte-devtools/types';
+import type {ComponentMeta, StateDeclaration, SvelteDevToolsPluginOptions} from '@fsodano/svelte-devtools-types';
+import {DOCK_CONFIG, RPC_METHODS, RPC_TYPES} from '@fsodano/svelte-devtools-types';
 import type {ViteDevToolsNodeContext} from '@vitejs/devtools-kit';
 import {analyzeMigration} from './migration-analyzer.js';
 
@@ -135,7 +135,7 @@ export const afterNavigate = () => {};
             viteServer = server;
             let clientPath: string;
             try {
-                clientPath = path.resolve(path.dirname(require.resolve('@fsodano/vite-plugin-svelte-devtools/package.json')), '../client/dist');
+                clientPath = path.resolve(path.dirname(require.resolve('@fsodano/svelte-devtools-client/package.json')), 'dist');
             } catch {
                 clientPath = path.resolve(__dirname, '../../client/dist');
             }
@@ -143,7 +143,7 @@ export const afterNavigate = () => {};
             const distPath = path.resolve(__dirname, '../../../dist');
             let runtimePath: string;
             try {
-                runtimePath = path.resolve(path.dirname(require.resolve('@svelte-devtools/runtime/package.json')), '../runtime/dist');
+                runtimePath = path.resolve(path.dirname(require.resolve('@fsodano/svelte-devtools-runtime/package.json')), '../runtime/dist');
             } catch {
                 runtimePath = path.resolve(__dirname, '../../runtime/dist');
             }

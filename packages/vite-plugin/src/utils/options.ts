@@ -1,5 +1,5 @@
 import path from 'path';
-import type { SvelteDevToolsPluginOptions } from '@svelte-devtools/types';
+import type { SvelteDevToolsPluginOptions } from '@fsodano/svelte-devtools-types';
 
 export const DEVTOOLS_PREFIX = '/__svelte-devtools';
 

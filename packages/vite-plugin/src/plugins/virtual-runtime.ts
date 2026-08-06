@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { createRequire } from 'module';
-import { getInitScript } from '@svelte-devtools/runtime';
+import { getInitScript } from '@fsodano/svelte-devtools-runtime';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,7 +34,7 @@ export function virtualRuntime(api: PluginAPI): Plugin {
       let runtimeDistPath: string;
       try {
         runtimeDistPath = path.resolve(
-          path.dirname(require.resolve('@svelte-devtools/runtime/package.json')),
+          path.dirname(require.resolve('@fsodano/svelte-devtools-runtime/package.json')),
           'dist'
         );
       } catch {
