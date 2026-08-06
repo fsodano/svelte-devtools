@@ -135,7 +135,7 @@ export const afterNavigate = () => {};
             viteServer = server;
             let clientPath: string;
             try {
-                clientPath = path.resolve(path.dirname(require.resolve('@fsodano/vite-plugin-svelte-devtools/package.json')), '../client/dist');
+                clientPath = path.resolve(path.dirname(require.resolve('@svelte-devtools/client/package.json')), 'dist');
             } catch {
                 clientPath = path.resolve(__dirname, '../../client/dist');
             }
