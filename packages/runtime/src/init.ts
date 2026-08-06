@@ -15,7 +15,7 @@ import type {
   ComponentInstance,
   SvelteDevToolsAPI,
   RuneCall,
-} from '@svelte-devtools/types';
+} from '@fsodano/svelte-devtools-types';
 
 export interface BufferedCall {
   method: string;

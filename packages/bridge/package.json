@@ -1,5 +1,5 @@
 {
-  "name": "@svelte-devtools/bridge",
+  "name": "@fsodano/svelte-devtools-bridge",
   "version": "0.0.1",
   "type": "module",
   "private": true,
@@ -22,7 +22,7 @@
     "birpc": "^0.2.19"
   },
   "peerDependencies": {
-    "@svelte-devtools/types": "file:../types"
+    "@fsodano/svelte-devtools-types": "file:../types"
   },
   "devDependencies": {
     "@types/chrome": "^0.2.2"

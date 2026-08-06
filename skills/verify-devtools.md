@@ -23,7 +23,7 @@ This builds all packages in order: types → runtime → vite-plugin → client.
 
 If only the client UI changed:
 ```bash
-npm run build:client -w @svelte-devtools/client
+npm run build:client -w @fsodano/svelte-devtools-client
 ```
 
 ## Step 2: Start a Test App
@@ -90,7 +90,7 @@ After authorization, the dock shows buttons for available DevTools plugins (e.g.
 
 ## Step 4: Open the Svelte DevTools Panel
 
-The plugin registers its dock entry as `type: 'iframe'` with `url: '/__svelte-devtools/'` (`DOCK_CONFIG` in `@svelte-devtools/types`). How Vite DevTools Kit renders that iframe — embedded in the dock or in a **DocumentPictureInPicture popup window** — depends on the Kit version and browser. In Chromium with popup support it typically opens as a popup; in headless mode it falls back to an embedded iframe.
+The plugin registers its dock entry as `type: 'iframe'` with `url: '/__svelte-devtools/'` (`DOCK_CONFIG` in `@fsodano/svelte-devtools-types`). How Vite DevTools Kit renders that iframe — embedded in the dock or in a **DocumentPictureInPicture popup window** — depends on the Kit version and browser. In Chromium with popup support it typically opens as a popup; in headless mode it falls back to an embedded iframe.
 
 ### Click the Svelte dock button:
 

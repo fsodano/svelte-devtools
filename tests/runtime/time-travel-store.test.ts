@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
-// ─── Types (mirror from @svelte-devtools/types) ────────────────────────────
+// ─── Types (mirror from @fsodano/svelte-devtools-types) ────────────────────────────
 
 interface ComponentNode {
   id: string;

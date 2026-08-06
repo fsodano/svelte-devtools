@@ -1,5 +1,5 @@
-import type {BridgeHandler, ComponentInstance, ComponentMountPayload, SvelteDevToolsAPI} from '@svelte-devtools/types';
-import {mapRuntimeEventTypeToBridge, RUNE_TYPES} from '@svelte-devtools/types';
+import type {BridgeHandler, ComponentInstance, ComponentMountPayload, SvelteDevToolsAPI} from '@fsodano/svelte-devtools-types';
+import {mapRuntimeEventTypeToBridge, RUNE_TYPES} from '@fsodano/svelte-devtools-types';
 
 const isDebug = typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>).__SVELTE_DEVTOOLS_DEBUG__;
 

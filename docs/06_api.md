@@ -64,7 +64,7 @@ interface SvelteDevToolsRuntime {
 
 ### `window.__SVELTE_DEVTOOLS__`
 
-Public API surface for the panel iframe (see `SvelteDevToolsAPI` in `@svelte-devtools/types`):
+Public API surface for the panel iframe (see `SvelteDevToolsAPI` in `@fsodano/svelte-devtools-types`):
 
 ```typescript
 interface SvelteDevToolsAPI {
@@ -98,7 +98,7 @@ const meta = registry.get('svt-abc123');
 // { id: 'svt-abc123', name: 'Counter', filename: '/src/lib/Counter.svelte', propKeys: ["name"] }
 ```
 
-## Type Definitions (from `@svelte-devtools/types`)
+## Type Definitions (from `@fsodano/svelte-devtools-types`)
 
 ### Component Types
 
@@ -250,7 +250,7 @@ interface AgentResponse<T = unknown> {
 }
 ```
 
-### Constants (`@svelte-devtools/types/constants`)
+### Constants (`@fsodano/svelte-devtools-types/constants`)
 
 - `EVENT_TYPES`, `RUNE_TYPES` — event/rune name constants
 - `RPC_METHODS`, `RPC_TYPES` — RPC method names and 'query' | 'mutation'
@@ -300,7 +300,7 @@ Registered in `devtools.setup` via `ctx.rpc.register`:
 | `svelte-devtools:component-state` | query | Metadata for one `svt-*` id |
 | `svelte-devtools:rescan` | mutation | Trigger full-reload re-analysis |
 
-> `RPC_METHODS` in `@svelte-devtools/types` also lists `get-timeline`, `get-state`, `update-component-state`, `set-network-rule`, `get-routes` — **not yet registered** by the live plugin.
+> `RPC_METHODS` in `@fsodano/svelte-devtools-types` also lists `get-timeline`, `get-state`, `update-component-state`, `set-network-rule`, `get-routes` — **not yet registered** by the live plugin.
 
 ## HTTP API (CI-safe)
 
@@ -363,7 +363,7 @@ interface DevToolsStore {
 
 ## Type Exports
 
-All types are exported from `@svelte-devtools/types`:
+All types are exported from `@fsodano/svelte-devtools-types`:
 
 ```typescript
 import type {
@@ -379,5 +379,5 @@ import type {
   AgentResponse,
   ServerEvent,
   // ... and more
-} from '@svelte-devtools/types';
+} from '@fsodano/svelte-devtools-types';
 ```

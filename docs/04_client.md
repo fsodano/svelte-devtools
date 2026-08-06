@@ -2,7 +2,7 @@
 
 The client (`packages/client`) is the DevTools panel UI — a Svelte 5 app built with Vite and served from `dist/` at `/__svelte-devtools/` inside an iframe dock of the Vite DevTools panel.
 
-> **Serving**: the panel is **pre-built** (`vite build` → `client/dist/`) and served statically by the Vite plugin. Changes to `packages/client/src/` require `npm run build:client` (or `npm run build`) plus a dev-server restart to take effect. The dock entry is configured with `type: 'iframe'` and `url: '/__svelte-devtools/'` (`DOCK_CONFIG` in `@svelte-devtools/types`). Whether the Vite DevTools Kit renders that iframe in a popup window is the Kit's own behavior.
+> **Serving**: the panel is **pre-built** (`vite build` → `client/dist/`) and served statically by the Vite plugin. Changes to `packages/client/src/` require `npm run build:client` (or `npm run build`) plus a dev-server restart to take effect. The dock entry is configured with `type: 'iframe'` and `url: '/__svelte-devtools/'` (`DOCK_CONFIG` in `@fsodano/svelte-devtools-types`). Whether the Vite DevTools Kit renders that iframe in a popup window is the Kit's own behavior.
 
 ## Architecture
 
@@ -86,7 +86,7 @@ The sidebar (`Sidebar.svelte`) and shell (`App.svelte`) define **10 tabs**:
 The bridge (`src/lib/bridge/window-bridge.ts`) handles communication with the parent window (main app) via `postMessage` plus a reconciliation poll.
 
 - Listens for `message` events filtered by `data.source === 'svelte-devtools'`
-- Maps runtime event types to bridge types via `mapRuntimeEventTypeToBridge` (from `@svelte-devtools/types`)
+- Maps runtime event types to bridge types via `mapRuntimeEventTypeToBridge` (from `@fsodano/svelte-devtools-types`)
 - Remaps payloads per type (`mapPostMessagePayload`)
 - Polls `window.parent.__SVELTE_DEVTOOLS__.getAllComponents()` every 500ms (100ms connect interval, 5s timeout) to synthesize `component:mount` events for components missed by event push
 

@@ -1,4 +1,4 @@
-import type { SourceLocation } from '@svelte-devtools/types';
+import type { SourceLocation } from '@fsodano/svelte-devtools-types';
 
 export interface ComponentInfo {
     id: string;

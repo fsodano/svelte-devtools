@@ -1,5 +1,5 @@
 import {ComponentRegistry} from './instrumentation/registry.js';
-import type {ComponentInstance, SvelteDevToolsAPI} from '@svelte-devtools/types';
+import type {ComponentInstance, SvelteDevToolsAPI} from '@fsodano/svelte-devtools-types';
 export { getInitScript } from './init.js';
 
 type ComponentState = ComponentInstance;

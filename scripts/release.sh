@@ -10,11 +10,11 @@ npm test
 echo "Publishing packages in order..."
 
 # Types package
-echo "Publishing @svelte-devtools/types..."
+echo "Publishing @fsodano/svelte-devtools-types..."
 cd packages/types && npm publish --access public && cd ../..
 
 # Runtime package  
-echo "Publishing @svelte-devtools/runtime..."
+echo "Publishing @fsodano/svelte-devtools-runtime..."
 cd packages/runtime && npm publish --access public && cd ../..
 
 # Vite plugin package
@@ -22,7 +22,7 @@ echo "Publishing @fsodano/vite-plugin-svelte-devtools..."
 cd packages/vite-plugin && npm publish --access public && cd ../..
 
 # Client package
-echo "Publishing @svelte-devtools/client..."
+echo "Publishing @fsodano/svelte-devtools-client..."
 cd packages/client && npm publish --access public && cd ../..
 
 echo "✅ All packages published successfully!"

@@ -1,5 +1,5 @@
 {
-  "name": "@svelte-devtools/client",
+  "name": "@fsodano/svelte-devtools-client",
   "version": "0.0.1",
   "type": "module",
   "private": false,
@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "@phosphor-icons/core": "^2.1.1",
-    "@svelte-devtools/types": "file:../types",
+    "@fsodano/svelte-devtools-types": "file:../types",
     "@sveltejs/vite-plugin-svelte": "^7.0.0"
   },
   "publishConfig": {

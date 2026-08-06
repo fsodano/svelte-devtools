@@ -7,7 +7,7 @@ import MagicString from 'magic-string';
 import { parse as parseJS } from '@babel/parser';
 import * as t from '@babel/types';
 import { parse } from 'svelte/compiler';
-import type { StateDeclaration } from '@svelte-devtools/types';
+import type { StateDeclaration } from '@fsodano/svelte-devtools-types';
 import { analyzeMigration } from '../migration-analyzer.js';
 
 export function transform(api: PluginAPI): Plugin {

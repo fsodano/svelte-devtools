@@ -339,8 +339,8 @@ fetch('/__svelte-devtools/svelte-runtime.js')
 If the endpoints return 404, rebuild the client and runtime packages:
 
 ```bash
-npm run build:client -w @svelte-devtools/client
-npm run build:runtime -w @svelte-devtools/runtime
+npm run build:client -w @fsodano/svelte-devtools-client
+npm run build:runtime -w @fsodano/svelte-devtools-runtime
 ```
 
 ### SSR components not tracked

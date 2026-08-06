@@ -1,5 +1,5 @@
 import type { ResolvedConfig, ViteDevServer } from 'vite';
-import type { ComponentMeta, SvelteDevToolsPluginOptions } from '@svelte-devtools/types';
+import type { ComponentMeta, SvelteDevToolsPluginOptions } from '@fsodano/svelte-devtools-types';
 
 export interface ResolvedOptions {
   root: string;

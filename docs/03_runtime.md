@@ -157,7 +157,7 @@ window.postMessage({
 
 ### Client-side Type Mapping
 
-The panel maps runtime event names to bridge event names via `mapRuntimeEventTypeToBridge` (`@svelte-devtools/types`): `state`/`derived`/`inspect` → `state:change`, `effect`/`effect.pre` → `effect:run`, `props`/`bindable`/`component-register` → `component:mount`, `trace:trigger` → `trace:trigger`, `runtime-ready` → `runtime:ready`.
+The panel maps runtime event names to bridge event names via `mapRuntimeEventTypeToBridge` (`@fsodano/svelte-devtools-types`): `state`/`derived`/`inspect` → `state:change`, `effect`/`effect.pre` → `effect:run`, `props`/`bindable`/`component-register` → `component:mount`, `trace:trigger` → `trace:trigger`, `runtime-ready` → `runtime:ready`.
 
 ## State Handling & Batching
 

@@ -7,10 +7,21 @@
 # Packages are published in dependency order:
 #   types (no deps) -> runtime (no deps) -> client -> vite-plugin
 # bridge is private ("private": true) and intentionally NOT published.
+#
+# 2FA: pass --otp <code> to use a one-time password (fresh code per package).
 set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "$0")/../packages" && pwd)"
 ORDER=(types runtime client vite-plugin)
+
+OTP=""
+if [[ "${1:-}" == "--otp" ]]; then
+    OTP="${2:-}"
+fi
+OTP_ARGS=()
+if [[ -n "$OTP" ]]; then
+    OTP_ARGS=(--otp "$OTP")
+fi
 
 publish_one() {
     local name="$1"
@@ -39,7 +50,11 @@ publish_one() {
     ' "$pkg"
 
     echo "── Publishing $name ..."
-    (cd "$dir" && npm publish --tag latest)
+    if ! (cd "$dir" && npm publish --tag latest "${OTP_ARGS[@]}"); then
+        echo "✗ publish failed for $name — restoring package.json"
+        mv "$orig" "$pkg"
+        exit 1
+    fi
 
     echo "── Restoring $name package.json ..."
     mv "$orig" "$pkg"

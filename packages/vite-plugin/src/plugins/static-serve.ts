@@ -36,11 +36,11 @@ export function staticServe(api: PluginAPI): Plugin {
       // dirname is packages/vite-plugin/dist/plugins/ (built) or src/plugins/ (source)
       // ../../../ from there reaches the packages/ directory
       const runtimeDistPath = path.resolve(
-        resolvePackageRoot('@svelte-devtools/runtime', path.resolve(__dirname, '../../../runtime')),
+        resolvePackageRoot('@fsodano/svelte-devtools-runtime', path.resolve(__dirname, '../../../runtime')),
         'dist'
       );
       const clientDistPath = path.resolve(
-        resolvePackageRoot('@svelte-devtools/client', path.resolve(__dirname, '../../../client')),
+        resolvePackageRoot('@fsodano/svelte-devtools-client', path.resolve(__dirname, '../../../client')),
         'dist'
       );
       const distPath = path.resolve(__dirname, '../../../dist');

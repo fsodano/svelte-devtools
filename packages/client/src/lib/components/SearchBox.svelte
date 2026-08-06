@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ComponentNode } from '@svelte-devtools/types';
+  import type { ComponentNode } from '@fsodano/svelte-devtools-types';
 
   let {
     onSearch,
