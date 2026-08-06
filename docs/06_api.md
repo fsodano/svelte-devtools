@@ -267,15 +267,15 @@ interface AgentResponse<T = unknown> {
 Creates the Vite plugin (single plugin object, `apply: 'serve'`, `enforce: 'pre'`).
 
 ```typescript
-import { svelteDevTools } from '@svelte-devtools/vite-plugin';
+import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools';
 
 const plugin = svelteDevTools(options?: SvelteDevToolsPluginOptions);
 ```
 
-### `@svelte-devtools/vite-plugin/sveltekit`
+### `@fsodano/vite-plugin-svelte-devtools/sveltekit`
 
 ```typescript
-import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+import { svelteDevToolsHandle, noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
 
 export const handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```

@@ -73,7 +73,7 @@ npm install @vitejs/devtools
 **Production** (once published):
 
 ```bash
-npm install -D @svelte-devtools/vite-plugin @vitejs/devtools
+npm install -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools
 ```
 
 ### 2. Configure Vite
@@ -85,7 +85,7 @@ npm install -D @svelte-devtools/vite-plugin @vitejs/devtools
 import { defineConfig } from 'vite';
 import { DevTools } from '@vitejs/devtools';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
-import { svelteDevTools } from '@svelte-devtools/vite-plugin';
+import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools';
 
 export default defineConfig({
   plugins: [DevTools(), svelte(), svelteDevTools()]
@@ -99,7 +99,7 @@ export default defineConfig({
 import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { DevTools } from '@vitejs/devtools';
-import { svelteDevTools } from '@svelte-devtools/vite-plugin';
+import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools';
 
 export default defineConfig({
   plugins: [DevTools(), sveltekit(), svelteDevTools()]
@@ -108,7 +108,7 @@ export default defineConfig({
 // src/hooks.server.ts
 import { dev } from '$app/environment';
 import type { Handle } from '@sveltejs/kit';
-import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+import { svelteDevToolsHandle, noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
 
 export const handle: Handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```

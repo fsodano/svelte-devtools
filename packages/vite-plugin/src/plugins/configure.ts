@@ -64,7 +64,7 @@ export function configure(api: PluginAPI, inlineOptions: SvelteDevToolsPluginOpt
         console.info(
           '[Svelte DevTools] SvelteKit detected — add to src/hooks.server.ts:\n' +
           '  import { dev } from \'$app/environment\';\n' +
-          '  import { svelteDevToolsHandle, noopHandle } from \'@svelte-devtools/vite-plugin/sveltekit\';\n' +
+          '  import { svelteDevToolsHandle, noopHandle } from \'@fsodano/vite-plugin-svelte-devtools/sveltekit\';\n' +
           '  export const handle = dev ? svelteDevToolsHandle() : noopHandle();'
         );
       }

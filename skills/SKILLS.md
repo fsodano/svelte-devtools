@@ -1,6 +1,6 @@
 ---
 name: svelte-devtools-skills
-description: Use when adding Svelte DevTools to a project, debugging Svelte 5 runes, or inspecting component state. Covers implementation, configuration, and troubleshooting of the @svelte-devtools/vite-plugin.
+description: Use when adding Svelte DevTools to a project, debugging Svelte 5 runes, or inspecting component state. Covers implementation, configuration, and troubleshooting of the @fsodano/vite-plugin-svelte-devtools.
 ---
 
 # Svelte DevTools Skills
@@ -13,7 +13,7 @@ This directory holds skill files for AI agents working with the Svelte DevTools 
 
 Step-by-step guide to add Svelte DevTools to any project. Covers:
 
-- Installing `@svelte-devtools/vite-plugin` and `@vitejs/devtools`
+- Installing `@fsodano/vite-plugin-svelte-devtools` and `@vitejs/devtools`
 - Configuring Vite for plain Svelte and SvelteKit projects (plugin ordering)
 - Setting up SvelteKit hooks for SSR support
 - Plugin options (include, exclude, enableStateInspection)

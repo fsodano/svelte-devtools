@@ -1,5 +1,5 @@
 {
-  "name": "@svelte-devtools/vite-plugin",
+  "name": "@fsodano/vite-plugin-svelte-devtools",
   "version": "0.0.1",
   "type": "module",
   "description": "Professional Vite plugin for Svelte 5 DevTools",

@@ -116,7 +116,7 @@ describe('handleApiRequest', () => {
             const body = parseRes(res) as Record<string, unknown>;
             expect(body).toMatchObject({
                 ok: true,
-                name: '@svelte-devtools/vite-plugin',
+                name: '@fsodano/vite-plugin-svelte-devtools',
                 version: '0.0.1',
             });
             expect(body.endpoints).toBeInstanceOf(Array);

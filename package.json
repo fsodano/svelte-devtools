@@ -9,13 +9,13 @@
   "scripts": {
     "build": "npm run build:types && npm run build:runtime && npm run build:vite-plugin && npm run build:client",
     "build:runtime": "npm run build -w @svelte-devtools/runtime",
-    "build:vite-plugin": "npm run build -w @svelte-devtools/vite-plugin",
+    "build:vite-plugin": "npm run build -w @fsodano/vite-plugin-svelte-devtools",
     "build:client": "npm run build -w @svelte-devtools/client",
     "build:types": "npm run build -w @svelte-devtools/types",
     "test": "npm run build && vitest run",
     "test:watch": "vitest",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "watch": "npm run build && npm run dev -w @svelte-devtools/types & npm run dev -w @svelte-devtools/runtime & npm run dev -w @svelte-devtools/vite-plugin & npm run dev -w @svelte-devtools/bridge & npm run dev -w @svelte-devtools/client & wait",
+    "watch": "npm run build && npm run dev -w @svelte-devtools/types & npm run dev -w @svelte-devtools/runtime & npm run dev -w @fsodano/vite-plugin-svelte-devtools & npm run dev -w @svelte-devtools/bridge & npm run dev -w @svelte-devtools/client & wait",
     "clean": "rm -rf dist/ && rm -rf packages/*/dist/",
     "prepublishOnly": "npm run build && npm test"
   },

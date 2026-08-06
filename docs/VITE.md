@@ -616,7 +616,7 @@ This is useful during DevTools development because the runtime's `console.log` c
 
 ```typescript
 // src/hooks.server.ts
-import { svelteDevToolsHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+import { svelteDevToolsHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
 
 export const handle = svelteDevToolsHandle();
 ```
@@ -628,7 +628,7 @@ The Vite plugin detects SvelteKit during `configResolved` and logs a message tel
 ```
 [Svelte DevTools] Detected SvelteKit. Add to src/hooks.server.ts:
   import { dev } from '$app/environment';
-  import { svelteDevToolsHandle, noopHandle } from '@svelte-devtools/vite-plugin/sveltekit';
+  import { svelteDevToolsHandle, noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
   export const handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```
 
@@ -712,7 +712,7 @@ The plugin's dependency on Vite is declared as `"vite": "^8.0.3"` in `package.js
 ## Audit Report — Vite 8 / Rolldown Compatibility
 
 **Date:** 2026-07-19
-**Scope:** `@svelte-devtools/vite-plugin` (packages/vite-plugin)
+**Scope:** `@fsodano/vite-plugin-svelte-devtools` (packages/vite-plugin)
 **Verdict:** Largely compatible — 4 issues found (2 high, 1 medium, 1 low), 3 optimization opportunities.
 
 > **Update (2026-08-04):** The 🔴 Must Fix items from this audit have been **resolved**:

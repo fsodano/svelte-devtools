@@ -18,7 +18,7 @@ echo "Publishing @svelte-devtools/runtime..."
 cd packages/runtime && npm publish --access public && cd ../..
 
 # Vite plugin package
-echo "Publishing @svelte-devtools/vite-plugin..."
+echo "Publishing @fsodano/vite-plugin-svelte-devtools..."
 cd packages/vite-plugin && npm publish --access public && cd ../..
 
 # Client package

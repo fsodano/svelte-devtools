@@ -125,7 +125,7 @@ export const afterNavigate = () => {};
                     console.info(
                         '[Svelte DevTools] SvelteKit detected — add to src/hooks.server.ts:\n' +
                         '  import { dev } from \'$app/environment\';\n' +
-                        '  import { svelteDevToolsHandle, noopHandle } from \'@svelte-devtools/vite-plugin/sveltekit\';\n' +
+                        '  import { svelteDevToolsHandle, noopHandle } from \'@fsodano/vite-plugin-svelte-devtools/sveltekit\';\n' +
                         '  export const handle = dev ? svelteDevToolsHandle() : noopHandle();'
                     );
                 }
@@ -135,7 +135,7 @@ export const afterNavigate = () => {};
             viteServer = server;
             let clientPath: string;
             try {
-                clientPath = path.resolve(path.dirname(require.resolve('@svelte-devtools/vite-plugin/package.json')), '../client/dist');
+                clientPath = path.resolve(path.dirname(require.resolve('@fsodano/vite-plugin-svelte-devtools/package.json')), '../client/dist');
             } catch {
                 clientPath = path.resolve(__dirname, '../../client/dist');
             }
