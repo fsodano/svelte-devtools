@@ -259,6 +259,5 @@ Implemented:
 6. ✅ Network mock rules (client-side fetch/XHR interception groundwork)
 
 Future ideas:
-1. 🚧 Wire the `bridge` package (birpc) into the client for typed bidirectional RPC
-2. 🚧 Network interception engine (ADR-0007) fully integrated with the runtime
+1. 🚧 Network interception engine (ADR-0007) fully integrated with the runtime
 3. 🚧 Build-mode DevTools for production debugging

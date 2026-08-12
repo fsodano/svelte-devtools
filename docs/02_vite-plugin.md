@@ -290,9 +290,9 @@ transformIndexHtml(html: string) {
 }
 ```
 
-### SvelteKit `$app/navigation` Interception
+### SvelteKit `$app/navigation` Bridge (ADR-0012)
 
-For cross-route time travel, the plugin rewrites `$app/navigation` to a virtual module exposing the real `goto` on `window.__SVELTE_DEVTOOLS_REAL_GOTO__` (index.ts:55-81). SvelteKit calls `goto` from the panel iframe directly, bypassing SvelteKit's navigation guard during snapshot restore.
+The plugin no longer intercepts `$app/navigation` — app code always resolves SvelteKit's real module, so `goto`, `invalidate`, `invalidateAll`, `beforeNavigate`, and `afterNavigate` behave exactly as SvelteKit defines them. For cross-route time travel, a devtools-only virtual module (`\0virtual:svelte-devtools-navigation-bridge`) imports the real `$app/navigation` and assigns `goto` to `window.__SVELTE_DEVTOOLS_REAL_GOTO__` (index.ts `resolveId`/`load`). It is injected as `<script type="module" src="/@svelte-devtools-navigation-bridge">` into the page only when SvelteKit is present — via `transformIndexHtml` (plain Vite path) and the SvelteKit handle's `transformPageChunk` (SSR path, sveltekit.ts). Vite's transform middleware serves the URL through the plugin pipeline; it is never served by static middleware. Plain Vite apps get no bridge script.
 
 ### tsconfig Path Aliases
 
@@ -300,7 +300,7 @@ In `configResolved`, the plugin reads `tsconfig.json` `compilerOptions.paths` an
 
 ## HTTP API Endpoints
 
-All endpoints under `/__svelte-devtools/api/` return JSON with CORS headers (see `server-api.ts`):
+All endpoints under `/__svelte-devtools/api/` require the per-run bearer token (`Authorization: Bearer <token>`, or `?token=<token>` for beacon-only requests that cannot set headers). Requests without a valid token get `401`. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server, or copy the token printed in the terminal. CORS reflects an origin only for `http://localhost:*`, `http://127.0.0.1:*`, and configured origins; requests without an `Origin` header get no CORS header (see `server-api.ts`, `http-guard.ts`, `token.ts`).
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -310,12 +310,18 @@ All endpoints under `/__svelte-devtools/api/` return JSON with CORS headers (see
 | `GET` | `/api/remote` | Remote-debugging payload |
 | `GET` | `/api/server-events` | Server request traces (`?last=N`, `?sinceId=X`) |
 | `DELETE` | `/api/server-events` | Clear server event buffer |
-| `GET` | `/api/migration` | `{overall, totalFiles, perFile}` |
+| `GET` | `/api/migration` | `{overall, totalFiles, perFile}`; `overall` is `null` until components are scored |
 | `GET` | `/api/snapshots` | Snapshot branch tree (`parentId`, `branchId`) |
-| `POST` | `/api/set-state` | `{componentId, key, value}` — edit cached state |
+| `POST` | `/api/set-state` | Not implemented: returns `501` (`{componentId, key, value}`) |
 | `GET` | `/api/source?file=<path>` | Source code with line numbers (403 outside project) |
 | `POST` | `/api/sync` | (internal) Panel syncs state here every 2s |
 | `GET` | `/api/routes` | SvelteKit route map scanned from `src/routes` |
+
+```bash
+# Verify the plugin is running
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/
+```
 
 ## SvelteKit Integration
 
