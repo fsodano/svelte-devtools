@@ -43,9 +43,17 @@ describe('createWindowBridge', () => {
     delete (window as any).__SVELTE_DEVTOOLS__;
   });
 
-  /** Helper: simulate a postMessage event from the runtime */
-  function simulateMessage(data: Record<string, unknown>) {
-    const event = new MessageEvent('message', { data });
+  /** Helper: simulate a postMessage event from the parent runtime window */
+  function simulateMessage(
+    data: unknown,
+    overrides: { source?: unknown; origin?: string } = {},
+  ) {
+    const event = new MessageEvent('message', {
+      data,
+      // window.parent === mockParent at runtime (see beforeEach override)
+      source: (overrides.source ?? window.parent) as unknown as Window,
+      origin: overrides.origin ?? 'http://localhost:5173',
+    });
     messageHandlers.forEach((h) => h(event));
   }
 
@@ -99,8 +107,7 @@ describe('createWindowBridge', () => {
       const handler = vi.fn();
       bridge.on('state:change', handler);
 
-      const event = new MessageEvent('message', { data: null });
-      messageHandlers.forEach((h) => h(event));
+      simulateMessage(null);
 
       expect(handler).not.toHaveBeenCalled();
     });
@@ -141,6 +148,117 @@ describe('createWindowBridge', () => {
       simulateMessage({ source: 'svelte-devtools', type: 'state', payload: { value: 42 } });
 
       expect(handler).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── postMessage Security (HIGH-1) ─────────────────────────────────────────
+
+  describe('postMessage security', () => {
+    beforeEach(() => {
+      bridge = createWindowBridge();
+    });
+
+    it('accepts messages from the parent window on a localhost origin', () => {
+      const handler = vi.fn();
+      bridge.on('state:change', handler);
+
+      simulateMessage({ source: 'svelte-devtools', type: 'state', payload: { value: 42 } });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('accepts messages from 127.0.0.1 and [::1] origins', () => {
+      const handler = vi.fn();
+      bridge.on('state:change', handler);
+
+      simulateMessage({ source: 'svelte-devtools', type: 'state', payload: { value: 1 } }, { origin: 'http://127.0.0.1:5174' });
+      simulateMessage({ source: 'svelte-devtools', type: 'state', payload: { value: 2 } }, { origin: 'http://[::1]:5173' });
+
+      expect(handler).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects messages that did not come from the parent window', () => {
+      const handler = vi.fn();
+      bridge.on('state:change', handler);
+
+      simulateMessage(
+        { source: 'svelte-devtools', type: 'state', payload: { value: 42 } },
+        { source: {} as unknown as Window },
+      );
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('rejects messages from hostile origins', () => {
+      const handler = vi.fn();
+      bridge.on('state:change', handler);
+
+      simulateMessage(
+        { source: 'svelte-devtools', type: 'state', payload: { value: 42 } },
+        { origin: 'https://evil.example.com' },
+      );
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('rejects messages with a null origin', () => {
+      const handler = vi.fn();
+      bridge.on('state:change', handler);
+
+      simulateMessage(
+        { source: 'svelte-devtools', type: 'state', payload: { value: 42 } },
+        { origin: 'null' },
+      );
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('rejects file:// origins', () => {
+      const handler = vi.fn();
+      bridge.on('state:change', handler);
+
+      simulateMessage(
+        { source: 'svelte-devtools', type: 'state', payload: { value: 42 } },
+        { origin: 'file:///tmp/panel.html' },
+      );
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── Unmount listener security (HIGH-1 second listener) ────────────────────
+
+  describe('unmount listener security', () => {
+    beforeEach(() => {
+      mockParent.__SVELTE_DEVTOOLS__ = {
+        refresh: vi.fn(),
+        getAllComponents: vi.fn().mockReturnValue([
+          { id: 'svt-001', name: 'App', el: null, children: [], state: [], props: {}, effects: [], mountTime: Date.now() },
+        ]),
+      };
+      bridge = createWindowBridge();
+    });
+
+    it('ignores unmount messages from hostile origins but honors valid ones', () => {
+      const mountHandler = vi.fn();
+      bridge.on('component:mount', mountHandler);
+      bridge.refresh();
+      expect(mountHandler).toHaveBeenCalledTimes(1);
+
+      // Hostile-origin unmount must not evict the tracked component
+      simulateMessage(
+        { source: 'svelte-devtools', type: 'component-unmount', payload: { componentId: 'svt-001' } },
+        { origin: 'https://evil.example.com' },
+      );
+      bridge.refresh();
+      expect(mountHandler).toHaveBeenCalledTimes(1);
+
+      // Valid unmount from the parent window evicts it (re-mount on refresh)
+      simulateMessage(
+        { source: 'svelte-devtools', type: 'component-unmount', payload: { componentId: 'svt-001' } },
+      );
+      bridge.refresh();
+      expect(mountHandler).toHaveBeenCalledTimes(2);
     });
   });
 

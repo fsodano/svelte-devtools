@@ -3,6 +3,24 @@ import {mapRuntimeEventTypeToBridge, RUNE_TYPES} from '@fsodano/svelte-devtools-
 
 const isDebug = typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>).__SVELTE_DEVTOOLS_DEBUG__;
 
+// Security: only trust messages from the same-origin app page (the parent
+// window). The runtime posts from there; any other sender is hostile.
+const ALLOWED_LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+function isAllowedMessageOrigin(origin: string): boolean {
+    try {
+        const url = new URL(origin);
+        return (url.protocol === 'http:' || url.protocol === 'https:')
+            && ALLOWED_LOCAL_HOSTNAMES.has(url.hostname);
+    } catch {
+        return false;
+    }
+}
+
+function isValidBridgeMessage(event: MessageEvent, targetWindow: Window): boolean {
+    return event.source === targetWindow && isAllowedMessageOrigin(event.origin);
+}
+
 export function createWindowBridge() {
     const listeners = new Map<string, Set<BridgeHandler>>();
     const mountedComponents = new Set<string>();
@@ -11,6 +29,8 @@ export function createWindowBridge() {
         const targetWindow = window.parent !== window ? window.parent : window;
 
         targetWindow.addEventListener('message', (event) => {
+            if (!isValidBridgeMessage(event, targetWindow)) return;
+
             const data = event.data;
             if (!data || data.source !== 'svelte-devtools') return;
 
@@ -80,6 +100,8 @@ const payload: ComponentMountPayload = {
 
             // Listen for unmount events to clean up tracking
             targetWindow.addEventListener('message', (event) => {
+                if (!isValidBridgeMessage(event, targetWindow)) return;
+
                 const data = event.data;
                 if (data?.source === 'svelte-devtools' && data?.type === 'component-unmount') {
                     const payload = data.payload as { componentId?: string; id?: string };
