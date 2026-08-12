@@ -223,13 +223,15 @@ interface AgentResponse<T> {
 | `svelte-devtools:build-status` | query | Build health: component count, tracked runes, errors. |
 | `svelte-devtools:get-components` | query | List all registered components with metadata (rune counts, migration result). |
 | `svelte-devtools:component-state` | query | Metadata for one component by its `svt-*` id. |
-| `svelte-devtools:migration-score` | query | Svelte 4 → 5 migration progress across the codebase. |
+| `svelte-devtools:migration-score` | query | Svelte 4 → 5 migration progress; `overall` is `null` until components are scored. |
 | `svelte-devtools:open-in-editor` | mutation | Open a file at a line in the editor. |
 | `svelte-devtools:rescan` | mutation | Force a full-reload so all components are re-analyzed. |
 
 ### HTTP API
 
-Everything is also exposed as JSON at `/__svelte-devtools/api/` on the dev server (CORS-enabled, CI-safe):
+Everything is also exposed as JSON at `/__svelte-devtools/api/` on the dev server. Every request requires the per-run token: send it as an `Authorization: Bearer <token>` header, or as a `?token=<token>` query parameter for `navigator.sendBeacon` calls, which cannot set headers. Requests without a valid token get `401`. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server to fix the token for scripts, or copy the token printed in the server terminal.
+
+CORS is allow-listed, not wildcard. The API reflects an origin only for `http://localhost:*`, `http://127.0.0.1:*`, and any origin you configure (see `SVELTE_DEVTOOLS_ALLOWED_ORIGINS`). Requests without an `Origin` header get no CORS header at all.
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -237,20 +239,22 @@ Everything is also exposed as JSON at `/__svelte-devtools/api/` on the dev serve
 | `GET` | `/api/components` | All components and state (synced from the panel). |
 | `GET` | `/api/timeline` | Timeline events (mounts, state changes, effects). |
 | `GET` | `/api/server-events` | Server request traces with response previews. |
-| `GET` | `/api/migration` | Svelte 4→5 migration scores. |
+| `GET` | `/api/migration` | Svelte 4→5 migration scores; `overall` is `null` until components are scored. |
 | `GET` | `/api/snapshots` | Snapshot branch tree (`parentId`, `branchId`, timestamps). |
 | `GET` | `/api/routes` | SvelteKit route map scanned from `src/routes`. |
 | `GET` | `/api/remote` | Remote-debugging payload synced from the panel. |
 | `GET` | `/api/source?file=<path>` | Source file lookup with line numbers. |
-| `POST` | `/api/set-state` | Edit component state (`{componentId, key, value}`). |
+| `POST` | `/api/set-state` | Not implemented: returns `501`. Reserved for live state editing. |
 | `POST` | `/api/sync` | (internal) The panel syncs runtime state here every 2s. |
 
 ```bash
 # Quick health check
-curl http://localhost:5173/__svelte-devtools/api/
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/
 
 # List components
-curl http://localhost:5173/__svelte-devtools/api/components | jq '.count, .components[].name'
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/components | jq '.count, .components[].name'
 ```
 
 ---
@@ -263,7 +267,6 @@ packages/
   runtime/       Browser runtime: $inspect handling, component registry, postMessage, inspector
   client/        DevTools panel UI (Svelte 5, 10 tabs, built with Vite → dist/)
   types/         Shared TypeScript types and constants
-  bridge/        birpc-based RPC layer (experimental, not yet wired in)
 ```
 
 ---
@@ -297,6 +300,20 @@ npm run build:client       # @fsodano/svelte-devtools-client
 
 **Important for contributors:** the DevTools panel is served from `packages/client/dist/`, not compiled on demand. After changing `packages/client/src/`, rebuild with `npm run build:client` (or `npm run build`), then restart the dev server. See [docs/00_index.md](docs/00_index.md) for the quick start and [docs/INDEX.md](docs/INDEX.md) for the developer workflow.
 
+### Internal dependencies are plain semver
+
+This monorepo uses npm workspaces. Publishable packages reference sibling packages with **plain semver ranges** — e.g. `"@fsodano/svelte-devtools-types": "^0.0.1"` — never `file:` or `workspace:` specifiers. npm is the package manager: it does not support the `workspace:` protocol, and `file:` paths would be packed verbatim into published manifests, breaking consumer installs.
+
+During development, npm resolves those ranges against the local workspace copies (the workspace versions satisfy the ranges), so builds keep using freshly compiled siblings. Published tarballs carry the same registry-safe ranges with no rewrite step.
+
+Before publishing, run the release gate:
+
+```bash
+npm run release:check
+```
+
+It fails with a non-zero exit code if any publishable package manifest contains a `file:` or `workspace:` specifier, and it dry-runs `npm pack` for every publishable workspace to prove the tarballs are pack-safe. See [ADR-0014](docs/adr/ADR-0014-publish-safe-workspace-dependencies.md) for the full decision.
+
 ---
 
 ## Acknowledgements
@@ -304,7 +321,6 @@ npm run build:client       # @fsodano/svelte-devtools-client
 - [Vite DevTools Kit](https://github.com/vitejs/devtools) — the host panel, dock system, and RPC infrastructure this plugin builds on.
 - [vuejs/devtools](https://github.com/vuejs/devtools) — design inspiration for the panel UX (see [docs/inspiration.md](docs/inspiration.md)).
 - [svelte-devtools (Chrome extension)](https://github.com/sveltejs/svelte-devtools) — prior art for Svelte component inspection.
-- [birpc](https://github.com/antfu/birpc) — used by the experimental bridge package.
 
 ---
 
