@@ -138,7 +138,7 @@ npm run dev
 | 6 | [API Reference](./06_api.md) | Public API and type definitions |
 | — | [Vite 8 Guide](./VITE.md) | Vite 8 / Rolldown internals for plugin development |
 | — | [Inspiration](./inspiration.md) | Vue DevTools feature comparison |
-| — | [ADR](./adr/) | Architecture Decision Records |
+| — | [ADR](./adr/README.md) | Architecture Decision Records (8 accepted, 6 proposed) |
 
 ## Package Structure
 
@@ -147,8 +147,7 @@ packages/
 ├── vite-plugin/       - Build-time transforms, SvelteKit hooks, server tracing, HTTP API
 ├── runtime/           - Browser runtime: state handling, component registry, inspector
 ├── client/            - DevTools panel UI (iframe, served from dist/)
-├── types/             - Shared TypeScript types and constants
-└── bridge/            - birpc-based RPC layer (experimental, not yet wired in)
+└── types/             - Shared TypeScript types and constants
 ```
 
 ## How It Works
