@@ -4,6 +4,13 @@
  * Provides HTTP endpoints at /__svelte-devtools/api/* that agents (both human
  * and AI) can query to inspect the state of a running Svelte application.
  *
+ * Security (ADR-0009):
+ *   1. Host header is validated before anything else runs (DNS-rebinding
+ *      defense).
+ *   2. Every request after the OPTIONS preflight requires the per-run bearer
+ *      token, as a header or ?token= query parameter.
+ *   3. CORS reflects only allow-listed origins — never a wildcard.
+ *
  * For runtime data (components, timeline, remote) that lives in the browser,
  * the DevTools iframe client periodically POSTs its state to /api/sync.
  * The other endpoints serve from this cached state.
@@ -11,6 +18,14 @@
 
 import type { ViteDevServer } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { isAuthorized } from './token.js';
+import {
+    isAllowedHost,
+    isAllowedOrigin,
+    sendForbiddenHost,
+    sendUnauthorized,
+} from './http-guard.js';
+import { computeMigrationScores } from './registry.js';
 
 // ============================================================================
 // In-memory cache populated by the DevTools client via POST /api/sync
@@ -45,10 +60,15 @@ let cachedState: CachedState = {
 // Helpers
 // ============================================================================
 
-function json(res: ServerResponse, data: unknown, status = 200): void {
+function json(req: IncomingMessage, res: ServerResponse, data: unknown, status = 200): void {
     res.statusCode = status;
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // CORS: reflect an allow-listed Origin; never emit a wildcard (ADR-0009).
+    res.setHeader('Vary', 'Origin');
+    const origin = req.headers.origin;
+    if (origin && isAllowedOrigin(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
     res.end(JSON.stringify(data));
 }
 
@@ -72,16 +92,47 @@ function isMethod(req: IncomingMessage, method: string): boolean {
 export async function handleApiRequest(
     req: IncomingMessage,
     res: ServerResponse,
-    _server: ViteDevServer,
+    server: ViteDevServer,
     pathname: string,
 ): Promise<void> {
     try {
+        // Layer 1: Host validation. Fails before any handler runs,
+        // authenticated or not, so DNS rebinding cannot reach the API.
+        if (!isAllowedHost(req.headers.host)) {
+            sendForbiddenHost(res);
+            return;
+        }
+
+        // CORS preflight for cross-origin agents. Deliberately unauthenticated:
+        // the browser cannot attach the Authorization header to a preflight.
+        if (isMethod(req, 'OPTIONS')) {
+            const origin = req.headers.origin;
+            if (origin && isAllowedOrigin(origin)) {
+                res.statusCode = 204;
+                res.setHeader('Access-Control-Allow-Origin', origin);
+                res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+                res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+                res.setHeader('Access-Control-Max-Age', '600');
+                res.setHeader('Vary', 'Origin');
+                res.end();
+            } else {
+                json(req, res, { error: 'Forbidden origin' }, 403);
+            }
+            return;
+        }
+
+        // Layer 2: per-run bearer token on every method and path.
+        if (!isAuthorized(req)) {
+            sendUnauthorized(res);
+            return;
+        }
+
         switch (pathname) {
             // ── Status ──
             case '/status':
             case '/':
             case '': {
-                json(res, {
+                json(req, res, {
                     ok: true,
                     name: '@fsodano/vite-plugin-svelte-devtools',
                     version: '0.0.1',
@@ -99,13 +150,14 @@ export async function handleApiRequest(
                         '/__svelte-devtools/api/routes',
                     ],
                     legacyEndpoints: '/__svelte-devtools/server-events, /__svelte-devtools/migration-score',
+                    auth: 'Bearer token (header) or ?token= (query)',
                 });
                 return;
             }
 
             // ── Components (from cached sync) ──
             case '/components': {
-                json(res, {
+                json(req, res, {
                     ok: true,
                     count: cachedState.components.length,
                     components: cachedState.components,
@@ -116,7 +168,7 @@ export async function handleApiRequest(
 
             // ── Timeline (from cached sync) ──
             case '/timeline': {
-                json(res, {
+                json(req, res, {
                     ok: true,
                     count: cachedState.timeline.length,
                     entries: cachedState.timeline,
@@ -127,7 +179,7 @@ export async function handleApiRequest(
 
             // ── Remote debugging API ──
             case '/remote': {
-                json(res, {
+                json(req, res, {
                     ok: true,
                     ...cachedState.remote,
                     cachedAt: cachedState.updatedAt,
@@ -143,39 +195,25 @@ export async function handleApiRequest(
                     const params = new URLSearchParams(rawUrl.includes('?') ? rawUrl.split('?')[1] : '');
                     const last = parseInt(params.get('last') || '', 10) || undefined;
                     const sinceId = params.get('sinceId') || undefined;
-                    json(res, { ok: true, events: getServerEvents({ last, sinceId }) });
+                    json(req, res, { ok: true, events: getServerEvents({ last, sinceId }) });
                 } else if (req.method === 'DELETE') {
                     clearServerEvents();
-                    json(res, { ok: true });
+                    json(req, res, { ok: true });
                 } else {
-                    json(res, { error: 'Method not allowed' }, 405);
+                    json(req, res, { error: 'Method not allowed' }, 405);
                 }
                 return;
             }
 
-            // ── Migration score (from existing migration-analyzer) ──
+            // ── Migration score from the live build-time registry (ADR-0010) ──
             case '/migration': {
-                const { readFileSync } = await import('node:fs');
-                const { analyzeMigration } = await import('./migration-analyzer.js');
-                const WORKSPACE_REGISTRY = (globalThis as Record<string, unknown>)['__SVELTE_DEVTOOLS_REGISTRY__'];
-                const registryEntries = (WORKSPACE_REGISTRY as Map<string, { migrationResult?: { filename: string; percentage: number } }> | undefined);
-                const results: unknown[] = [];
-                if (registryEntries) {
-                    for (const [, entry] of registryEntries) {
-                        if (entry.migrationResult) results.push(entry.migrationResult);
-                    }
-                }
-                const total = results.length;
-                const avgScore = total > 0
-                    ? Math.round(results.reduce((s: number, r: unknown) => s + (r as { percentage: number }).percentage, 0) / total)
-                    : 100;
-                json(res, { ok: true, overall: avgScore, totalFiles: total, perFile: results });
+                json(req, res, { ok: true, ...computeMigrationScores() });
                 return;
             }
 
             // ── Snapshot tree (branch visualization) ──
             case '/snapshots': {
-                json(res, {
+                json(req, res, {
                     ok: true,
                     snapshots: cachedState.snapshots,
                     branches: cachedState.branches,
@@ -185,53 +223,61 @@ export async function handleApiRequest(
                 return;
             }
 
-            // ── Set component state (for agent-driven state editing) ──
+            // ── Set component state ──
+            // Option B (ADR-0010): live state editing requires a runtime
+            // channel that does not exist. Return 501 instead of mutating the
+            // sync cache, so an agent can never mistake a cache write for a
+            // live edit.
             case '/set-state': {
                 if (!isMethod(req, 'POST')) {
-                    json(res, { error: 'Method not allowed, use POST' }, 405);
+                    json(req, res, { error: 'Method not allowed, use POST' }, 405);
                     return;
                 }
                 const body = await readBody(req);
                 const data = JSON.parse(body);
-                const { componentId, key, value } = data;
+                const { componentId, key } = data;
                 if (!componentId || !key) {
-                    json(res, { error: 'Missing componentId or key' }, 400);
+                    json(req, res, { error: 'Missing componentId or key' }, 400);
                     return;
                 }
-                cachedState.components = (cachedState.components as Record<string, unknown>[]).map(c =>
-                    c.id === componentId
-                        ? { ...c, state: { ...(c.state as Record<string, unknown> || {}), [key]: value } }
-                        : c
-                );
-                json(res, { ok: true, componentId, key, value });
+                json(req, res, {
+                    error: 'NOT_IMPLEMENTED',
+                    message: 'Live state editing is not implemented. POST /api/set-state cannot write to the running app; refusing to report a cache-only write as a live edit.',
+                }, 501);
                 return;
             }
 
-            // ── Source file lookup ──
+            // ── Source file lookup (canonicalized to the Vite config root) ──
             case '/source': {
                 const rawUrl = req.url || '';
                 const params = new URLSearchParams(rawUrl.includes('?') ? rawUrl.split('?')[1] : '');
                 const file = params.get('file');
-                if (!file) { json(res, { error: 'Missing ?file= param' }, 400); return; }
+                if (!file) { json(req, res, { error: 'Missing ?file= param' }, 400); return; }
                 try {
-                    const { readFileSync, existsSync } = await import('node:fs');
-                    const { resolve, isAbsolute } = await import('node:path');
-                    const root = process.cwd();
-                    // Accept absolute paths, or paths relative to the workspace root
-                    let resolved = isAbsolute(file) ? file : resolve(root, file);
-                    if (!existsSync(resolved)) {
-                        // Try relative to the devtools plugin root
-                        const alt = resolve(root, '../..', file);
-                        if (existsSync(alt)) resolved = alt;
+                    const { readFileSync, realpathSync } = await import('node:fs');
+                    const { resolve, isAbsolute, sep } = await import('node:path');
+                    const root = server.config?.root ?? process.cwd();
+                    const rootReal = realpathSync(root);
+                    // Resolve relative to the Vite config root, then canonicalize
+                    // with realpath so symlink and `..` escapes are caught.
+                    const resolved = isAbsolute(file) ? file : resolve(root, file);
+                    let real: string;
+                    try {
+                        real = realpathSync(resolved);
+                    } catch {
+                        json(req, res, { error: 'File does not exist' }, 404);
+                        return;
                     }
-                    if (!resolved.startsWith(root) && !resolved.includes('/svelte-dev-extension/')) {
-                        json(res, { error: 'File outside project' }, 403); return;
+                    const insideRoot = real === rootReal || real.startsWith(rootReal + sep);
+                    if (!insideRoot) {
+                        json(req, res, { error: 'File outside project' }, 403);
+                        return;
                     }
-                    const code = readFileSync(resolved, 'utf-8');
+                    const code = readFileSync(real, 'utf-8');
                     const lines = code.split('\n').map((l: string, i: number) => ({ line: i + 1, text: l }));
-                    json(res, { ok: true, file: resolved, lines, totalLines: lines.length });
+                    json(req, res, { ok: true, file: real, lines, totalLines: lines.length });
                 } catch (e) {
-                    json(res, { error: `Cannot read file: ${e instanceof Error ? e.message : String(e)}` }, 404);
+                    json(req, res, { error: `Cannot read file: ${e instanceof Error ? e.message : String(e)}` }, 404);
                 }
                 return;
             }
@@ -239,7 +285,7 @@ export async function handleApiRequest(
             // ── Sync (POST from DevTools client) ──
             case '/sync': {
                 if (!isMethod(req, 'POST')) {
-                    json(res, { error: 'Method not allowed, use POST' }, 405);
+                    json(req, res, { error: 'Method not allowed, use POST' }, 405);
                     return;
                 }
                 const body = await readBody(req);
@@ -250,7 +296,7 @@ export async function handleApiRequest(
                 if (data.snapshots) cachedState.snapshots = data.snapshots;
                 if (data.branches) cachedState.branches = data.branches;
                 cachedState.updatedAt = Date.now();
-                json(res, { ok: true, cachedAt: cachedState.updatedAt });
+                json(req, res, { ok: true, cachedAt: cachedState.updatedAt });
                 return;
             }
 
@@ -258,7 +304,7 @@ export async function handleApiRequest(
             case '/routes': {
                 const { readdirSync, statSync, existsSync } = await import('node:fs');
                 const { join, relative, resolve } = await import('node:path');
-                const root = process.cwd();
+                const root = server.config?.root ?? process.cwd();
                 const routesDir = join(root, 'src', 'routes');
                 const svelteKitRoutes: Array<{
                     id: string; cleanedUrl: string; files: Record<string, boolean>;
@@ -302,15 +348,15 @@ export async function handleApiRequest(
                     }
                     scanDir(routesDir, '');
                 }
-                json(res, { ok: true, routes: svelteKitRoutes });
+                json(req, res, { ok: true, routes: svelteKitRoutes });
                 return;
             }
 
             default:
-                json(res, { error: `Unknown API endpoint: ${pathname}` }, 404);
+                json(req, res, { error: `Unknown API endpoint: ${pathname}` }, 404);
         }
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        json(res, { error: msg }, 500);
+        json(req, res, { error: msg }, 500);
     }
 }
