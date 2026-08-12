@@ -39,9 +39,11 @@ The `dev` guard means production builds (`npm run build`) have zero devtools ove
 ## Verifying
 
 ```bash
-# API health check (dev server must be running)
-curl http://localhost:5174/__svelte-devtools/api/
+# API health check (dev server must be running; every endpoint requires the per-run token)
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5174/__svelte-devtools/api/
 
 # Components after opening the page
-curl http://localhost:5174/__svelte-devtools/api/components | jq '.count'
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5174/__svelte-devtools/api/components | jq '.count'
 ```

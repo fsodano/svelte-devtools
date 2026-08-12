@@ -112,18 +112,20 @@ After clicking, the DevTools client loads (`/__svelte-devtools/`) and begins:
 curl -s http://localhost:5173/__svelte-devtools/ | grep -c "svelte"
 
 # Check components are being tracked (sync happens every 2s)
-curl -s http://localhost:5173/__svelte-devtools/api/components | jq '.count'
+curl -s -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/components | jq '.count'
 # Expect > 0 after the browser has been open for a few seconds
 ```
 
-## Step 5: Verify via HTTP API (CI-safe)
+## Step 5: Verify via HTTP API
 
-All endpoints at `/__svelte-devtools/api/` return JSON with CORS headers.
+Every endpoint at `/__svelte-devtools/api/` requires the per-run token. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server, or copy the token printed in the terminal. Send it as an `Authorization: Bearer <token>` header, or as a `?token=<token>` query parameter for beacon-only requests that cannot set headers. CORS is allow-listed to `http://localhost:*`, `http://127.0.0.1:*`, and configured origins; requests without an `Origin` header get no CORS header.
 
 ### Status check
 
 ```bash
-curl http://localhost:5173/__svelte-devtools/api/
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/
 ```
 
 Returns the plugin name, version, and available endpoints.
@@ -131,7 +133,8 @@ Returns the plugin name, version, and available endpoints.
 ### Components
 
 ```bash
-curl http://localhost:5173/__svelte-devtools/api/components | jq '.count, .components[].name'
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/components | jq '.count, .components[].name'
 ```
 
 Expect:
@@ -142,7 +145,8 @@ Expect:
 ### Timeline
 
 ```bash
-curl http://localhost:5173/__svelte-devtools/api/timeline | jq '.count'
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/timeline | jq '.count'
 ```
 
 Expect entries with types: `component:mount`, `state:change`, `effect:run`, `trace:trigger`, `server:request`.
@@ -150,7 +154,8 @@ Expect entries with types: `component:mount`, `state:change`, `effect:run`, `tra
 ### Server Events
 
 ```bash
-curl http://localhost:5173/__svelte-devtools/api/server-events | jq '.events | length'
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/server-events | jq '.events | length'
 ```
 
 Server request traces captured by the Vite plugin. Each event includes URL, method, status code, request/response bodies, and timing info.
@@ -158,7 +163,8 @@ Server request traces captured by the Vite plugin. Each event includes URL, meth
 ### Snapshots (time-travel)
 
 ```bash
-curl http://localhost:5173/__svelte-devtools/api/snapshots
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/snapshots
 ```
 
 Returns the branch/snapshot tree with parentId, branchId, and timestamps.
@@ -166,33 +172,38 @@ Returns the branch/snapshot tree with parentId, branchId, and timestamps.
 ### Migration Score
 
 ```bash
-curl http://localhost:5173/__svelte-devtools/api/migration
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/migration
 ```
 
-Svelte 4→5 migration progress per file (percentage and pattern breakdown).
+Svelte 4→5 migration progress per file (percentage and pattern breakdown). `overall` is `null` until components are scored.
 
 ### Routes (SvelteKit)
 
 ```bash
-curl http://localhost:5173/__svelte-devtools/api/routes
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/routes
 ```
 
 SvelteKit route map scanned from `src/routes` (route groups, params, page/layout/api files).
 
 ### State Editing (set-state)
 
+`POST /api/set-state` is **not implemented** and returns `501`. It does not edit state. Do not use it to change app state.
+
 ```bash
 curl -X POST http://localhost:5173/__svelte-devtools/api/set-state \
+  -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"componentId": "svt-xxx", "key": "count", "value": 42}'
+# Expect: HTTP 501 with a JSON error
 ```
-
-Updates cached component state on the server. The next client sync picks it up.
 
 ### Source File Lookup
 
 ```bash
-curl "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
 ```
 
 Returns the source code of the specified file.
@@ -271,8 +282,10 @@ async function verifyDevTools() {
     await page.waitForTimeout(1000);
   }
 
-  // Verify via HTTP API (works even without panel open)
-  const res = await page.request.get('http://localhost:5173/__svelte-devtools/api/components');
+  // Verify via HTTP API (requires the per-run token)
+  const res = await page.request.get('http://localhost:5173/__svelte-devtools/api/components', {
+    headers: { Authorization: 'Bearer ' + process.env.SVELTE_DEVTOOLS_TOKEN }
+  });
   const data = await res.json();
   console.log(`Components: ${data.count}`);
 
@@ -340,7 +353,7 @@ await browser_run_code_unsafe({
 
 ### CI / headless mode
 
-The DevTools iframe is accessible in headless mode since it's same-origin. All verification (components, timeline, snapshots) works without a visible browser window. The HTTP API is the CI-safe alternative.
+The DevTools iframe is accessible in headless mode since it's same-origin. All verification (components, timeline, snapshots) works without a visible browser window. The HTTP API works headlessly too, with the per-run token passed as an `Authorization: Bearer` header or `?token=` query parameter.
 
 ## Common Issues
 
