@@ -1,5 +1,6 @@
 import { createWindowBridge } from '../bridge/window-bridge.js';
 import { createTimeTravelStore } from './time-travel-store.svelte.js';
+import { apiFetch, beaconUrl } from '../api.js';
 import type {
   ComponentNode,
   TimelineEntry,
@@ -131,7 +132,7 @@ function createDevtoolsStore() {
       const url = lastEventId
         ? `/__svelte-devtools/server-events?sinceId=${encodeURIComponent(lastEventId)}`
         : '/__svelte-devtools/server-events?last=50';
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       if (!res.ok) return;
       const data = await res.json();
       if (!Array.isArray(data)) return;
@@ -170,11 +171,12 @@ function createDevtoolsStore() {
         snapshots: snapshotTree,
         branches: branchList,
       });
-      // Use sendBeacon for fire-and-forget (doesn't block on page unload)
+      // Use sendBeacon for fire-and-forget (doesn't block on page unload).
+      // sendBeacon cannot set headers, so the token travels as ?token=.
       if (navigator.sendBeacon) {
-        navigator.sendBeacon('/__svelte-devtools/api/sync', payload);
+        navigator.sendBeacon(beaconUrl('/__svelte-devtools/api/sync'), payload);
       } else {
-        await fetch('/__svelte-devtools/api/sync', { method: 'POST', body: payload, headers: { 'Content-Type': 'application/json' } });
+        await apiFetch('/__svelte-devtools/api/sync', { method: 'POST', body: payload, headers: { 'Content-Type': 'application/json' } });
       }
     } catch {
       // Server not available yet — skip
