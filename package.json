@@ -1,6 +1,7 @@
 {
   "name": "svelte-devtools",
   "version": "0.0.1",
+  "private": true,
   "type": "module",
   "description": "Full-stack debugging for Svelte 5 and SvelteKit",
   "workspaces": [
@@ -13,10 +14,12 @@
     "build:client": "npm run build -w @fsodano/svelte-devtools-client",
     "build:types": "npm run build -w @fsodano/svelte-devtools-types",
     "test": "npm run build && vitest run",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "watch": "npm run build && npm run dev -w @fsodano/svelte-devtools-types & npm run dev -w @fsodano/svelte-devtools-runtime & npm run dev -w @fsodano/vite-plugin-svelte-devtools & npm run dev -w @fsodano/svelte-devtools-bridge & npm run dev -w @fsodano/svelte-devtools-client & wait",
+    "watch": "npm run build && npm run dev -w @fsodano/svelte-devtools-types & npm run dev -w @fsodano/svelte-devtools-runtime & npm run dev -w @fsodano/vite-plugin-svelte-devtools & npm run dev -w @fsodano/svelte-devtools-client & wait",
     "clean": "rm -rf dist/ && rm -rf packages/*/dist/",
+    "release:check": "node scripts/release-check.mjs",
     "prepublishOnly": "npm run build && npm test"
   },
   "publishConfig": {
@@ -24,6 +27,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "@types/node": "^25.5.0",
     "happy-dom": "^20.9.0",
     "rolldown": "^1.0.0-rc.13",
