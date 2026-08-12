@@ -12,7 +12,7 @@ Vue DevTools is structured across these packages:
 |---------|---------|----------------|
 | `packages/app` | Main app shell (sidebar, layout) | `packages/client/` |
 | `packages/client` | Tab pages (components, router, timeline, etc.) | `packages/client/src/components/` |
-| `packages/core` | Core logic (RPC, state management, Vue plugin) | `packages/runtime/` + `packages/bridge/` |
+| `packages/core` | Core logic (RPC, state management, Vue plugin) | `packages/runtime/` |
 | `packages/ui` | Reusable UI components (Button, Badge, DarkToggle, etc.) | Inline in `packages/client/` |
 | `packages/vite` | Vite plugin | `packages/vite-plugin/` |
 | `packages/shared` | Constants, env detection, utilities | `packages/types/` |
@@ -40,7 +40,7 @@ Vue DevTools is structured across these packages:
 - **Source link**: Click to open in editor (via `openInEditor` composable)
 - **Custom inspector tabs**: Plugins can register custom tabs
 
-**Svelte adaptation**: ✅ `ComponentTree.svelte` (search, render-duration badges, go-to-source) + `ComponentDetail.svelte` (Props/State/DOM/Source sub-tabs). ✅ Element highlighting via the runtime's inspect overlay (`enableInspector`/`disableInspector`, hover overlay + click-to-select). ⚠️ State editing exists via the time-travel store's `setStateEdit` and the `/api/set-state` endpoint, but there is no inline value editor in the detail panel yet. Slot detection and more tag types not implemented.
+**Svelte adaptation**: ✅ `ComponentTree.svelte` (search, render-duration badges, go-to-source) + `ComponentDetail.svelte` (Props/State/DOM/Source sub-tabs). ✅ Element highlighting via the runtime's inspect overlay (`enableInspector`/`disableInspector`, hover overlay + click-to-select). ⚠️ State editing exists only via the time-travel store's `setStateEdit`; the `/api/set-state` endpoint returns `501` (not implemented). There is no inline value editor in the detail panel yet. Slot detection and more tag types not implemented.
 
 ### 2c. Router Inspector (`pages/router.vue`)
 - `Router` panel component from `@vue/devtools-applet`

@@ -390,11 +390,11 @@ If a `.svelte` file has a syntax error, the plugin logs the error and skips tran
 
 ## HTTP REST API
 
-The devtools exposes an HTTP API at `/__svelte-devtools/api/` on the dev server. This allows agents to query the application state without browser access — useful for CI, AI tooling, and automation.
+The devtools exposes an HTTP API at `/__svelte-devtools/api/` on the dev server. This allows agents to query the application state without browser access. Every endpoint requires the per-run token: send it as an `Authorization: Bearer <token>` header, or as a `?token=<token>` query parameter for `navigator.sendBeacon` calls, which cannot set headers. Requests without a valid token get `401`. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server, or copy the token printed in the server terminal.
 
 ### Endpoints
 
-All endpoints return JSON with `Content-Type: application/json` and CORS headers.
+All endpoints return JSON with `Content-Type: application/json`. CORS is allow-listed, not wildcard: origins are reflected only for `http://localhost:*`, `http://127.0.0.1:*`, and configured origins. Requests without an `Origin` header get no CORS header.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -402,62 +402,66 @@ All endpoints return JSON with `Content-Type: application/json` and CORS headers
 | `GET` | `/__svelte-devtools/api/components` | All registered components and their state |
 | `GET` | `/__svelte-devtools/api/timeline` | Timeline of events (mounts, state changes, effects) |
 | `GET` | `/__svelte-devtools/api/server-events` | Server request traces with bodies |
-| `GET` | `/__svelte-devtools/api/migration` | Svelte 4→5 migration scores |
+| `GET` | `/__svelte-devtools/api/migration` | Svelte 4→5 migration scores; `overall` is `null` until components are scored |
 | `GET` | `/__svelte-devtools/api/snapshots` | Snapshot branch tree (parentId, branchId, timestamps) |
 | `GET` | `/__svelte-devtools/api/routes` | SvelteKit route map scanned from `src/routes` |
 | `GET` | `/__svelte-devtools/api/remote` | Remote-debugging payload synced from the panel |
 | `GET` | `/__svelte-devtools/api/source?file=<path>` | Source code file lookup |
-| `POST` | `/__svelte-devtools/api/set-state` | Edit component state (`{componentId, key, value}`) |
+| `POST` | `/__svelte-devtools/api/set-state` | Not implemented: returns `501` (`{componentId, key, value}`) |
 | `POST` | `/__svelte-devtools/api/sync` | (internal) Client syncs runtime state here |
 
 ### Example Usage
 
 ```bash
 # Check plugin is loaded
-curl http://localhost:5173/__svelte-devtools/api/
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/
 
 # List all components
-curl http://localhost:5173/__svelte-devtools/api/components | jq '.count, .components[].name'
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/components | jq '.count, .components[].name'
 
 # Get timeline events
-curl http://localhost:5173/__svelte-devtools/api/timeline | jq '.count'
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/timeline | jq '.count'
 
 # Get server event traces
-curl http://localhost:5173/__svelte-devtools/api/server-events | jq '.events | length'
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/server-events | jq '.events | length'
 
 # Get migration scores (Svelte 4→5)
-curl http://localhost:5173/__svelte-devtools/api/migration
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/migration
 
 # Get snapshot branch tree
-curl http://localhost:5173/__svelte-devtools/api/snapshots | jq '.snapshots | length'
-
-# Edit component state
-curl -X POST http://localhost:5173/__svelte-devtools/api/set-state \
-  -H 'Content-Type: application/json' \
-  -d '{"componentId": "svt-xxx", "key": "count", "value": 99}'
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/snapshots | jq '.snapshots | length'
 
 # Look up a source file
-curl "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
 ```
 
 ### State Editing
 
-The API supports editing component state programmatically — useful for AI agents that want to test scenarios:
+`POST /api/set-state` is **not implemented**. It returns `501` with a JSON error. Live state editing requires a runtime channel that does not exist yet, so the endpoint never mutates component state and never reports a cache-only write as a live edit (ADR-0010). Do not rely on it to change app state.
 
 ```bash
-# Set a component's state value
+# This returns 501, not {ok: true}
 curl -X POST http://localhost:5173/__svelte-devtools/api/set-state \
+  -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"componentId": "svt-xxx", "key": "count", "value": 42}'
 ```
 
-This updates the cached component state on the server. The next time the client syncs, the DevTools timeline records the change and the new value is displayed.
+The only state write path today is the panel's time-travel restore, which calls the runtime's registered setters directly in the browser.
 
 ### Snapshot Visualization
 
 ```bash
 # Get snapshot / branch tree
-curl http://localhost:5173/__svelte-devtools/api/snapshots
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/snapshots
 ```
 
 Returns the list of captured snapshots with their branch IDs, parent IDs, and timestamps — enabling agents to reconstruct the branching timeline. Each snapshot can have a `parentId` (for linear navigation) and `branchId` (for fork detection), enabling git-style branch topology visualization.
@@ -466,7 +470,8 @@ Returns the list of captured snapshots with their branch IDs, parent IDs, and ti
 
 ```bash
 # Get source code of a file
-curl "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
 ```
 
 ### Response Format
@@ -483,5 +488,5 @@ curl "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
 ### Notes
 
 - Component and timeline data is cached via periodic sync from the browser. If the DevTools panel has not been opened, the cache may be empty.
-- Server events and migration scores are computed server-side and always available.
+- Server events are computed server-side and always available. Migration scores come from the live build-time registry: with no scored components, `overall` is `null` and `totalFiles` is `0`.
 - Port numbers (5173, 5174, etc.) vary by project.

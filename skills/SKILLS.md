@@ -26,7 +26,7 @@ Use this skill when the task involves installing or configuring the devtools plu
 Guide for AI agents to debug Svelte 5 apps using the devtools agent API. Covers:
 
 - RPC methods (6 live: `build-status`, `get-components`, `component-state`, `migration-score`, `open-in-editor`, `rescan`)
-- HTTP REST API at `/__svelte-devtools/api/*` (components, timeline, server-events, snapshots, migration, routes, set-state, source)
+- HTTP REST API at `/__svelte-devtools/api/*` (token-authenticated: components, timeline, server-events, snapshots, migration, routes, source)
 - Agent response schema (`AgentResponse<T>`)
 - Debugging flow from health check to component inspection
 - Browser console globals (`__SVELTE_DEVTOOLS_RUNTIME__`, `__SVELTE_DEVTOOLS_REGISTRY__`, `__SVELTE_DEVTOOLS__`)
@@ -42,7 +42,7 @@ End-to-end verification workflow for the Svelte DevTools plugin. Covers:
 - Vite DevTools authorization flow (terminal token)
 - Opening the DevTools panel (iframe dock entry; Vite DevTools Kit decides popup vs embedded)
 - Full Playwright automation script
-- HTTP API verification for all endpoints (components, timeline, server-events, snapshots, migration, set-state, source, routes)
+- HTTP API verification for all endpoints (token-authenticated: components, timeline, server-events, snapshots, migration, source, routes)
 - Time-travel verification (Record button, undo/redo, snapshot counting)
 - Common issues and troubleshooting checklist
 
