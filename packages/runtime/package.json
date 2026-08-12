@@ -13,7 +13,8 @@
   },
   "scripts": {
     "build": "tsc && rolldown -c",
-    "dev": "rolldown -c --watch"
+    "dev": "rolldown -c --watch",
+    "prepublishOnly": "npm run build"
   },
   "files": [
     "dist"

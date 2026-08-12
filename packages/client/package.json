@@ -6,14 +6,15 @@
   "description": "Svelte DevTools client UI (iframe)",
   "scripts": {
     "build": "vite build",
-    "dev": "vite build --watch"
+    "dev": "vite build --watch",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "vis-network": "^9.1.9"
   },
   "devDependencies": {
     "@phosphor-icons/core": "^2.1.1",
-    "@fsodano/svelte-devtools-types": "file:../types",
+    "@fsodano/svelte-devtools-types": "^0.0.1",
     "@sveltejs/vite-plugin-svelte": "^7.0.0"
   },
   "publishConfig": {
