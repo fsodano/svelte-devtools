@@ -27,6 +27,7 @@ function createMockResolveWithResponse(response: Response) {
 }
 
 const RUNTIME_SCRIPT = '<script type="module" src="/__svelte-devtools/svelte-runtime.js"></script>';
+const NAVIGATION_BRIDGE_SCRIPT = '<script type="module" src="/@svelte-devtools-navigation-bridge"></script>';
 
 // --- Globals cleanup ---
 
@@ -69,6 +70,24 @@ describe('sveltekit', () => {
       const headIdx = body.indexOf('</head>');
       expect(scriptIdx).toBeGreaterThanOrEqual(0);
       expect(scriptIdx).toBeLessThan(headIdx);
+    });
+
+    it('injects the navigation bridge script before the runtime script', async () => {
+      const handle = svelteDevToolsHandle();
+      const html = '<html><head><title>Test</title></head><body><div>hello</div></body></html>';
+      const resolve = createMockResolve(html);
+      const event = createMockEvent('/page', 'GET', '/page');
+
+      await handle({ event, resolve });
+
+      const result = await resolve.mock.results[0].value;
+      const body = await result.text();
+      expect(body).toContain(NAVIGATION_BRIDGE_SCRIPT);
+      const bridgeIdx = body.indexOf(NAVIGATION_BRIDGE_SCRIPT);
+      const runtimeIdx = body.indexOf(RUNTIME_SCRIPT);
+      expect(bridgeIdx).toBeGreaterThanOrEqual(0);
+      expect(runtimeIdx).toBeGreaterThanOrEqual(0);
+      expect(bridgeIdx).toBeLessThan(runtimeIdx);
     });
 
     it('falls back to injecting before </body> when no </head>', async () => {

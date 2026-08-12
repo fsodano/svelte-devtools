@@ -10,10 +10,13 @@ import {createRequire} from 'module';
 import sirv from 'sirv';
 import launchEditor from 'launch-editor';
 import {parse} from 'svelte/compiler';
-import type {ComponentMeta, StateDeclaration, SvelteDevToolsPluginOptions} from '@fsodano/svelte-devtools-types';
+import type {StateDeclaration, SvelteDevToolsPluginOptions} from '@fsodano/svelte-devtools-types';
 import {DOCK_CONFIG, RPC_METHODS, RPC_TYPES} from '@fsodano/svelte-devtools-types';
 import type {ViteDevToolsNodeContext} from '@vitejs/devtools-kit';
 import {analyzeMigration} from './migration-analyzer.js';
+import {COMPONENT_REGISTRY, computeMigrationScores} from './registry.js';
+import {getDevtoolsToken, isAuthorized} from './token.js';
+import {configureHttpGuards, isAllowedHost, sendForbiddenHost, sendUnauthorized} from './http-guard.js';
 
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
@@ -21,7 +24,13 @@ const __dirname = path.dirname(__filename);
 
 const DEVTOOLS_PREFIX = '/__svelte-devtools';
 const GLOBAL_KEY = '__svelte_devtools_addEvent__';
-const COMPONENT_REGISTRY = new Map<string, ComponentMeta>();
+// ADR-0012 Phase 2: the navigation bridge is a Vite-transformed virtual module.
+// The injected page script loads it by URL; Vite's transform middleware maps
+// that URL to the `\0`-prefixed id and runs the module through the normal
+// plugin pipeline (resolveId -> load -> import analysis), so the real
+// `$app/navigation` import is rewritten to SvelteKit's module URL.
+const NAVIGATION_BRIDGE_URL = '/@svelte-devtools-navigation-bridge';
+const NAVIGATION_BRIDGE_ID = '\0virtual:svelte-devtools-navigation-bridge';
 let logsApi: Record<string, (arg: unknown) => unknown> | null = null;
 let viteServer: ViteDevServer | null = null;
 let batchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -39,9 +48,10 @@ function getStableId(id: string, root: string): string {
 }
 
 export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugin {
-    const {exclude = [/node_modules/], include = [/\.svelte$/], enableStateInspection = true} = options;
+    const {exclude = [/node_modules/], include = [/\.svelte$/], enableStateInspection = true, allowedOrigins, allowedHosts} = options;
     let root = process.cwd();
     let config: ResolvedConfig;
+    let hasSvelteKit = false;
 
     // Vite 8: use createFilter for include/exclude matching
     const filter = createFilter(include, exclude);
@@ -53,28 +63,27 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
         enforce: 'pre',
 
         resolveId(id: string) {
-            // Intercept $app/navigation to inject goto interceptor
-            if (id === '\$app/navigation' || id === '\0$app/navigation') {
-                return '\0virtual:svelte-devtools-navigation';
+            // ADR-0012 Phase 2: $app/navigation is no longer intercepted. App
+            // code resolves SvelteKit's real module, so navigation stays native.
+            // Only the devtools-only bridge URL maps to the virtual module.
+            if (id === NAVIGATION_BRIDGE_URL) {
+                return NAVIGATION_BRIDGE_ID;
             }
             return null;
         },
 
         load(id: string) {
-            if (id === '\0virtual:svelte-devtools-navigation') {
+            if (id === NAVIGATION_BRIDGE_ID) {
                 return `
-import { goto as svelteKitGoto } from '\0$app/navigation';
+import { goto } from '$app/navigation';
 
-// Expose the real unblocked goto to the DevTools iframe for cross-route time travel
+// ADR-0012 Phase 2: expose the real SvelteKit goto to the DevTools iframe for
+// cross-route time travel. This module is injected into the page (SvelteKit
+// only) and never imported by app code, so app navigation keeps SvelteKit's
+// real implementation.
 if (typeof window !== 'undefined') {
-    window.__SVELTE_DEVTOOLS_REAL_GOTO__ = svelteKitGoto;
+    window.__SVELTE_DEVTOOLS_REAL_GOTO__ = goto;
 }
-
-export const goto = svelteKitGoto;
-export const invalidate = () => {};
-export const invalidateAll = () => {};
-export const beforeNavigate = () => {};
-export const afterNavigate = () => {};
 `;
             }
             return null;
@@ -118,7 +127,7 @@ export const afterNavigate = () => {};
                 }
             }
 
-                const hasSvelteKit = resolvedConfig.plugins.some(
+                hasSvelteKit = resolvedConfig.plugins.some(
                     (p: { name?: string }) => p?.name === 'vite-plugin-sveltekit'
                 );
                 if (hasSvelteKit && isDebug) {
@@ -133,6 +142,15 @@ export const afterNavigate = () => {};
 
         configureServer(server: ViteDevServer) {
             viteServer = server;
+
+            // ADR-0009: per-run API token printed next to the Manual Auth Token.
+            const token = getDevtoolsToken();
+            configureHttpGuards({allowedOrigins, allowedHosts});
+            console.log('\x1b[32m[Svelte DevTools] Agent API token (SVELTE_DEVTOOLS_TOKEN):\x1b[0m');
+            console.log(`\x1b[32m  ${token}\x1b[0m`);
+            console.log('  Use it for /__svelte-devtools/api/* and legacy endpoints:');
+            console.log('  curl -H "Authorization: Bearer <token>" http://localhost:<port>/__svelte-devtools/api/');
+
             let clientPath: string;
             try {
                 clientPath = path.resolve(path.dirname(require.resolve('@fsodano/svelte-devtools-client/package.json')), 'dist');
@@ -253,7 +271,26 @@ export const afterNavigate = () => {};
                 next();
             });
 
+            // ADR-0009: reject disallowed Host values on every protected route
+            // before the request reaches any handler. Static panel/runtime
+            // assets are unaffected.
+            server.middlewares.use(DEVTOOLS_PREFIX, (req, res, next) => {
+                const url = req.url?.split('?')[0] || '';
+                const protectedPath = url === '/api' || url.startsWith('/api/') ||
+                    url.startsWith('/server-events') || url.startsWith('/migration-score') ||
+                    url.startsWith('/open-in-editor');
+                if (protectedPath && !isAllowedHost(req.headers.host)) {
+                    sendForbiddenHost(res);
+                    return;
+                }
+                next();
+            });
+
             server.middlewares.use('/__svelte-devtools/server-events', async (req, res, _next) => {
+                if (!isAuthorized(req)) {
+                    sendUnauthorized(res);
+                    return;
+                }
                 try {
                     const {method} = req;
                     if (method === 'GET') {
@@ -284,6 +321,10 @@ export const afterNavigate = () => {};
             });
 
             server.middlewares.use('/__svelte-devtools/open-in-editor', (req, res, _next) => {
+                if (!isAuthorized(req)) {
+                    sendUnauthorized(res);
+                    return;
+                }
                 if (req.method !== 'POST') {
                     res.statusCode = 405;
                     res.end(JSON.stringify({error: 'Method not allowed'}));
@@ -312,20 +353,18 @@ export const afterNavigate = () => {};
             });
 
             server.middlewares.use('/__svelte-devtools/migration-score', async (req, res, _next) => {
+                if (!isAuthorized(req)) {
+                    sendUnauthorized(res);
+                    return;
+                }
                 if (req.method !== 'GET') {
                     res.statusCode = 405;
                     res.end(JSON.stringify({error: 'Method not allowed'}));
                     return;
                 }
-                const results = Array.from(COMPONENT_REGISTRY.values())
-                    .filter(m => m.migrationResult)
-                    .map(m => m.migrationResult!);
-                const total = results.length;
-                const avgScore = total > 0
-                    ? Math.round(results.reduce((s, r) => s + r.percentage, 0) / total)
-                    : 100;
                 res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({overall: avgScore, totalFiles: total, perFile: results}));
+                res.setHeader('Cache-Control', 'no-store');
+                res.end(JSON.stringify({ok: true, ...computeMigrationScores()}));
             });
 
             // ── API endpoints (Connect strips /__svelte-devtools/api prefix) ──
@@ -337,6 +376,29 @@ export const afterNavigate = () => {};
 
             server.middlewares.use(DEVTOOLS_PREFIX, (req, res, next) => {
                 const url = req.url?.split('?')[0] || '';
+
+                // ADR-0009: inject the per-run token into the prebuilt panel
+                // HTML so the client can authenticate its own API requests.
+                if (url === '' || url === '/' || url === '/index.html') {
+                    const indexHtmlPath = path.join(clientPath, 'index.html');
+                    if (fs.existsSync(indexHtmlPath)) {
+                        const html = fs.readFileSync(indexHtmlPath, 'utf-8');
+                        const tokenScript = `<script>window.__SVELTE_DEVTOOLS_TOKEN__=${JSON.stringify(token)};</script>`;
+                        const injected = html.includes('</head>')
+                            ? html.replace('</head>', `${tokenScript}</head>`)
+                            : html + tokenScript;
+                        res.setHeader('Content-Type', 'text/html');
+                        res.setHeader('Cache-Control', 'no-store');
+                        // The panel carries the per-run API token in its HTML.
+                        // Prevent hostile sites from framing it (clickjacking)
+                        // while keeping the same-origin dev app iframe allowed.
+                        res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+                        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+                        res.end(injected);
+                        return;
+                    }
+                }
+
                 if (url.startsWith('/') && !url.startsWith('//')) {
                     const filePath = url.slice(1);
 
@@ -366,7 +428,13 @@ export const afterNavigate = () => {};
 
         transformIndexHtml(html: string) {
             const runtimeScript = `<script type="module" src="${DEVTOOLS_PREFIX}/svelte-runtime.js"></script>`;
-            return html.replace('</head>', `${runtimeScript}</head>`);
+            // ADR-0012 Phase 2: inject the navigation bridge only in SvelteKit
+            // apps. Plain Vite apps never import $app/navigation, so the bridge
+            // would have nothing to bind and stays out of their HTML.
+            const navigationBridge = hasSvelteKit
+                ? `<script type="module" src="${NAVIGATION_BRIDGE_URL}"></script>`
+                : '';
+            return html.replace('</head>', `${navigationBridge}${runtimeScript}</head>`);
         },
 
 
@@ -409,14 +477,7 @@ export const afterNavigate = () => {};
                     name: RPC_METHODS.MIGRATION_SCORE,
                     type: RPC_TYPES.QUERY,
                     handler: async () => {
-                        const results = Array.from(COMPONENT_REGISTRY.values())
-                            .filter(m => m.migrationResult)
-                            .map(m => m.migrationResult!);
-                        const total = results.length;
-                        const avgScore = total > 0
-                            ? Math.round(results.reduce((s, r) => s + r.percentage, 0) / total)
-                            : 100;
-                        return { overall: avgScore, totalFiles: total, perFile: results };
+                        return computeMigrationScores();
                     }
                 });
 

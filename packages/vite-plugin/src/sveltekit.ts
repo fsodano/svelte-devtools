@@ -60,6 +60,13 @@ export function svelteDevToolsHandle(): Handle {
         const svelteRuntime =
             `<script type="module" src="/__svelte-devtools/svelte-runtime.js"></script>`;
 
+        // ADR-0012 Phase 2: the navigation bridge is a Vite-transformed virtual
+        // module (packages/vite-plugin/src/index.ts) that assigns the real
+        // SvelteKit goto to window.__SVELTE_DEVTOOLS_REAL_GOTO__. Injected here
+        // because SvelteKit SSR bypasses Vite's transformIndexHtml.
+        const navigationBridge =
+            `<script type="module" src="/@svelte-devtools-navigation-bridge"></script>`;
+
         // Inject @vitejs/devtools client for SvelteKit SSR (Vite's transformIndexHtml is bypassed by SSR)
         const devtoolsInjectPath = (globalThis as Record<string, unknown>).__SVELTE_DEVTOOLS_INJECT_PATH__ as string | undefined;
         const devtoolsInject = devtoolsInjectPath
@@ -99,13 +106,13 @@ export function svelteDevToolsHandle(): Handle {
                         if (bodyIdx === -1) {
                             const htmlIdx = html.lastIndexOf('</html>');
                             if (htmlIdx !== -1) {
-                                return html.slice(0, htmlIdx) + devtoolsInject + svelteRuntime + html.slice(htmlIdx);
+                                return html.slice(0, htmlIdx) + devtoolsInject + navigationBridge + svelteRuntime + html.slice(htmlIdx);
                             }
-                            return html + devtoolsInject + svelteRuntime;
+                            return html + devtoolsInject + navigationBridge + svelteRuntime;
                         }
-                        return html.slice(0, bodyIdx) + devtoolsInject + svelteRuntime + html.slice(bodyIdx);
+                        return html.slice(0, bodyIdx) + devtoolsInject + navigationBridge + svelteRuntime + html.slice(bodyIdx);
                     }
-                    return html.slice(0, idx) + devtoolsInject + svelteRuntime + html.slice(idx);
+                    return html.slice(0, idx) + devtoolsInject + navigationBridge + svelteRuntime + html.slice(idx);
                 } catch (err) {
                     console.warn('[Svelte DevTools] transformPageChunk failed:', err);
                     return html;
