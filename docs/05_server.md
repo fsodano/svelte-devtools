@@ -66,6 +66,8 @@ interface ServerEvent {
 
 ### API Endpoints
 
+All endpoints require the per-run bearer token (`Authorization: Bearer <token>`, or `?token=<token>` for beacon-only requests). Requests without a valid token get `401`. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server, or copy the token printed in the terminal.
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/__svelte-devtools/server-events` | `GET` | All server events (`?last=N`, `?sinceId=X`) |
@@ -73,7 +75,8 @@ interface ServerEvent {
 | `/__svelte-devtools/api/server-events` | `GET` / `DELETE` | Same data under the JSON API prefix |
 
 ```bash
-curl http://localhost:5173/__svelte-devtools/api/server-events | jq '.events | length'
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/server-events | jq '.events | length'
 ```
 
 ### Client Display
@@ -86,6 +89,7 @@ The DevTools panel polls `/__svelte-devtools/server-events` every second and dis
 2. **No production impact**: `noopHandle()` passes requests through unchanged; the plugin is never loaded in production builds
 3. **Memory bounded**: Event buffer is capped at 1000 entries
 4. **Header privacy**: the `cookie` request header is logged only as `'[present]'` (generic middleware)
+5. **Token required**: every server-events endpoint requires the per-run bearer token; CORS is allow-listed to localhost and configured origins (ADR-0009)
 
 ## Troubleshooting
 
@@ -94,8 +98,8 @@ The DevTools panel polls `/__svelte-devtools/server-events` every second and dis
 Ensure you are in development mode and the DevTools panel is open:
 
 ```javascript
-// In browser console
-fetch('/__svelte-devtools/server-events')
+// In browser console (the plugin exposes the per-run token on the page)
+fetch('/__svelte-devtools/server-events?token=' + encodeURIComponent(window.__SVELTE_DEVTOOLS_TOKEN__))
   .then(r => r.json())
   .then(console.log);
 ```

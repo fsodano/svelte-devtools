@@ -285,7 +285,7 @@ export const handle = dev ? svelteDevToolsHandle() : noopHandle();
 
 ### Plugin Hooks
 
-The plugin implements: `resolveId`/`load` (SvelteKit `$app/navigation` virtual module), `configResolved` (rolldown detection, tsconfig path aliases), `configureServer` (middleware: tracing, server-events, open-in-editor, migration-score, API, static assets), `transformIndexHtml` (runtime script — plain Vite), `transform` (`$inspect` injection + metadata + effect tracking + migration analysis), and `devtools.setup` (dock registration + RPC).
+The plugin implements: `resolveId`/`load` (devtools-only navigation bridge virtual module for SvelteKit), `configResolved` (rolldown detection, tsconfig path aliases, SvelteKit detection), `configureServer` (middleware: tracing, server-events, open-in-editor, migration-score, API, static assets), `transformIndexHtml` (runtime script — plain Vite; navigation bridge — SvelteKit only), `transform` (`$inspect` injection + metadata + effect tracking + migration analysis), and `devtools.setup` (dock registration + RPC). `$app/navigation` is not intercepted.
 
 ## RPC Methods (live)
 
@@ -302,9 +302,11 @@ Registered in `devtools.setup` via `ctx.rpc.register`:
 
 > `RPC_METHODS` in `@fsodano/svelte-devtools-types` also lists `get-timeline`, `get-state`, `update-component-state`, `set-network-rule`, `get-routes` — **not yet registered** by the live plugin.
 
-## HTTP API (CI-safe)
+## HTTP API (token-authenticated)
 
-All endpoints at `/__svelte-devtools/api/` return JSON with CORS headers (`Access-Control-Allow-Origin: *`):
+All endpoints at `/__svelte-devtools/api/` require the per-run bearer token. The token is generated once per dev-server run, printed in the terminal, and read from `SVELTE_DEVTOOLS_TOKEN` when set. Send it as an `Authorization: Bearer <token>` header, or as a `?token=<token>` query parameter for `navigator.sendBeacon` calls, which cannot set headers. Requests without a valid token get `401` with no data in the body.
+
+CORS is allow-listed, not wildcard. The API reflects an origin only for `http://localhost:*`, `http://127.0.0.1:*`, and origins you configure (see `SVELTE_DEVTOOLS_ALLOWED_ORIGINS`). Responses always carry `Vary: Origin`. Requests with no `Origin` header (curl, server-to-server) get no CORS header at all.
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -314,24 +316,34 @@ All endpoints at `/__svelte-devtools/api/` return JSON with CORS headers (`Acces
 | `GET` | `/api/remote` | Remote-debugging payload |
 | `GET` | `/api/server-events` | Server traces (`?last=N`, `?sinceId=X`) |
 | `DELETE` | `/api/server-events` | Clear server event buffer |
-| `GET` | `/api/migration` | Migration scores, `{overall, totalFiles, perFile}` |
+| `GET` | `/api/migration` | Migration scores, `{overall, totalFiles, perFile}`; `overall` is `null` until components are scored |
 | `GET` | `/api/snapshots` | `{snapshots, branches, count, cachedAt}` |
-| `POST` | `/api/set-state` | Edit state, body `{componentId, key, value}` |
+| `POST` | `/api/set-state` | Not implemented: returns `501`, body `{componentId, key, value}` |
 | `GET` | `/api/source?file=<path>` | Source code with line numbers (403 outside project) |
 | `POST` | `/api/sync` | (internal) Panel syncs components/timeline/snapshots here every 2s |
 | `GET` | `/api/routes` | SvelteKit route map scanned from `src/routes` |
 
-Also available (legacy paths): `/__svelte-devtools/server-events` (GET/DELETE), `/__svelte-devtools/open-in-editor` (POST), `/__svelte-devtools/migration-score` (GET).
+Also available (legacy paths): `/__svelte-devtools/server-events` (GET/DELETE), `/__svelte-devtools/open-in-editor` (POST), `/__svelte-devtools/migration-score` (GET). The legacy endpoints require the same bearer token.
 
-### Example: set component state
+### Example: authenticated request
+
+```bash
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/components | jq '.count'
+```
+
+### Example: set component state (501)
 
 ```bash
 curl -X POST http://localhost:5173/__svelte-devtools/api/set-state \
+  -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"componentId": "svt-xxx", "key": "count", "value": 42}'
 ```
 
-> Component/timeline/snapshot data is cached via periodic sync from the panel. If the panel has not been opened, the cache may be empty (`cachedAt: 0`). Server events and migration scores are computed server-side and always available.
+Returns `501` with a JSON error. Live state editing is not implemented, so the endpoint never mutates component state and never reports a cache-only write as a live edit (ADR-0010).
+
+> Component/timeline/snapshot data is cached via periodic sync from the panel. If the panel has not been opened, the cache may be empty (`cachedAt: 0`). Server events are computed server-side and always available. Migration scores come from the live build-time registry: with no scored components, `overall` is `null` and `totalFiles` is `0` (ADR-0010).
 
 ## Store API
 
