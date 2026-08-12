@@ -1,5 +1,6 @@
 <script lang="ts">
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
+  import { apiFetch } from '../lib/api.js';
 
   const serverEvents = $derived(
     devtoolsStore.serverEvents as Array<{
@@ -56,14 +57,14 @@
 
   async function refresh(): Promise<void> {
     try {
-      const res = await fetch('/__svelte-devtools/server-events?last=50');
+      const res = await apiFetch('/__svelte-devtools/server-events?last=50');
       if (res.ok) devtoolsStore.setServerEvents(await res.json());
     } catch { /* noop */ }
   }
 
   async function clearAll(): Promise<void> {
     try {
-      await fetch('/__svelte-devtools/server-events', { method: 'DELETE' });
+      await apiFetch('/__svelte-devtools/server-events', { method: 'DELETE' });
     } catch { /* noop */ }
   }
 

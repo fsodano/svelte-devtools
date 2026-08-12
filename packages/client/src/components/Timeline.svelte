@@ -19,6 +19,7 @@
 
   import JsonTree from "./JsonTree.svelte";
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
+  import { formatEntryDetail } from './timeline-format.js';
 
   // --- Event entries state ---
   let entries = $derived(devtoolsStore.timeline);
@@ -68,51 +69,6 @@
     });
   }
 
-  function formatDuration(d: number | undefined): string {
-    if (!d) return '';
-    return d > 16
-      ? `<span style="color: #f48771">${d.toFixed(1)}ms</span>`
-      : `${d.toFixed(1)}ms`;
-  }
-
-  function formatEntryDetail(entry: TimelineEntry): string {
-    const d = entry.data as Record<string, unknown> | undefined;
-    if (!d) return '';
-    switch (entry.type) {
-      case 'component:mount': {
-        const name = (d as { name?: string }).name || 'unknown';
-        const filename = (d as { filename?: string }).filename || '';
-        return `<span style="color: #9cdcfe">${name}</span>${filename ? ` <span style="color: #858585">${filename}</span>` : ''}`;
-      }
-      case 'component:unmount': {
-        const name = (d as { name?: string }).name || (d.id as string) || 'unknown';
-        return `<span style="color: #f48771">${name}</span>`;
-      }
-      case 'state:change': {
-        const key = (d.key as string) || '?';
-        const val = d.value; const prev = d.prevValue;
-        const comp = (d.componentName as string) || '';
-        const valStr = val !== undefined ? JSON.stringify(val) : 'undefined';
-        const prevStr = prev !== undefined ? JSON.stringify(prev) : 'undefined';
-        const ci = comp ? `<span style="color: #9cdcfe">${comp}</span>.` : '';
-        return `${ci}<span style="color: #dcdcaa">${key}</span>: <span style="color: #858585">${prevStr}</span> → <span style="color: #4ec9b0">${valStr}</span>`;
-      }
-      case 'effect:run': {
-        const name = (d as { effectName?: string }).effectName || 'anonymous';
-        return `<span style="color: #c586c0">${name}</span>`;
-      }
-      case 'client:request': case 'server:request': case 'server:ssr': case 'server:trace': case 'server:error': {
-        const method = (d as { method?: string }).method || 'GET';
-        const url = (d as { url?: string }).url || '';
-        const sc = (d as { statusCode?: number }).statusCode;
-        const mc = method === 'GET' ? '#4ec9b0' : method === 'POST' ? '#dcdcaa' : '#ce9178';
-        const ss = sc ? ` <span style="color:${sc >= 400 ? '#f48771' : '#6a9955'}">${sc}</span>` : '';
-        return `<span style="color: ${mc}">${method}</span> <span style="color: #9cdcfe">${url}</span>${ss}`;
-      }
-      default: return '';
-    }
-  }
-
   function getEventIcon(type: string): string {
     switch (type) {
       case 'component:mount': return '📦';
@@ -158,10 +114,16 @@
               <span class="icon">{getEventIcon(entry.type)}</span>
               <span class="entry-title">{entry.type}</span>
               <span class="time">{formatTime(entry.timestamp)}</span>
-              {#if entry.duration}<span class="duration">{@html formatDuration(entry.duration)}</span>{/if}
+              {#if entry.duration}
+                <span class="duration" style:color={entry.duration > 16 ? '#f48771' : null}>{entry.duration.toFixed(1)}ms</span>
+              {/if}
             </button>
             {#if ['component:mount','component:unmount','state:change','effect:run','server:ssr','server:request','server:error','client:request'].includes(entry.type)}
-              <div class="entry-summary"><span class="detail-text">{@html formatEntryDetail(entry)}</span></div>
+              <div class="entry-summary"><span class="detail-text">
+                {#each formatEntryDetail(entry) as seg, i (i)}
+                  {#if seg.color}<span style="color: {seg.color}">{seg.text}</span>{:else}{seg.text}{/if}
+                {/each}
+              </span></div>
             {/if}
           {/each}
         {:else}
