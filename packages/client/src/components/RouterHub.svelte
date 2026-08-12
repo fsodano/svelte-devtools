@@ -1,5 +1,6 @@
 <script lang="ts">
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte.js';
+  import { apiFetch } from '../lib/api.js';
 
   interface SvelteKitRoute {
     id: string;
@@ -26,7 +27,7 @@
     loading = true;
     error = '';
     try {
-      const res = await fetch('/__svelte-devtools/api/routes');
+      const res = await apiFetch('/__svelte-devtools/api/routes');
       if (!res.ok) { error = `API returned ${res.status}`; loading = false; return; }
       const data = await res.json();
       if (data.ok && Array.isArray(data.routes)) {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte.js';
+  import { apiFetch } from '../lib/api.js';
 
   interface NetworkEntry {
     id: string;
@@ -60,7 +61,7 @@
 
   async function fetchServerEvents() {
     try {
-      const res = await fetch('/__svelte-devtools/server-events?last=50');
+      const res = await apiFetch('/__svelte-devtools/server-events?last=50');
       if (!res.ok) return;
       const data = await res.json();
       if (!data?.events) return;

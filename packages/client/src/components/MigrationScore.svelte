@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
+	import { apiFetch } from '../lib/api.js';
 
 	let migrationData = $state<{
-		overall: number;
+		overall: number | null;
 		totalFiles: number;
 		perFile: Array<{
 			filename: string;
@@ -19,7 +20,7 @@
 	async function fetchMigrationScore(): Promise<void> {
 		loading = true;
 		try {
-			const res = await fetch('/__svelte-devtools/migration-score');
+			const res = await apiFetch('/__svelte-devtools/migration-score');
 			if (res.ok) migrationData = await res.json();
 		} catch {
 			/* noop */
@@ -54,6 +55,10 @@
 		if (pct >= 50) return '#d4a017';
 		return 'var(--status-disconnected)';
 	}
+
+	function overallColor(overall: number | null): string {
+		return overall === null ? 'var(--text-muted)' : scoreColor(overall);
+	}
 </script>
 
 <div class="migration-view">
@@ -66,8 +71,8 @@
 		<div class="loading">Loading migration data...</div>
 	{:else if migrationData}
 		<div class="overall-score">
-			<span class="score-badge" style="color: {scoreColor(migrationData.overall)}">
-				{migrationData.overall}%
+			<span class="score-badge" style="color: {overallColor(migrationData.overall)}">
+				{migrationData.overall === null ? '—' : `${migrationData.overall}%`}
 			</span>
 			<span class="file-count">{migrationData.totalFiles} files</span>
 		</div>
