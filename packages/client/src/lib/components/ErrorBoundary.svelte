@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  let { fallback = null, children }: { fallback?: Snippet, children: Snippet } = $props();
+  let { fallback = null, children }: { fallback?: Snippet<[error: Error]> | null, children: Snippet } = $props();
 
   let error = $state<Error | null>(null);
   let hasError = $state(false);
