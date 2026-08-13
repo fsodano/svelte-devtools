@@ -18,8 +18,7 @@
       "DOM.Iterable"
     ],
     "types": [
-      "chrome",
-      "node"
+    "node"
     ],
     "resolveJsonModule": true,
     "isolatedModules": true,
