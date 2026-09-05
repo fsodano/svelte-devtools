@@ -23,17 +23,17 @@ export async function openDevToolsPanel(page, url, capturedToken) {
   }
   await expect(dock.getByRole('button', { name: /Unauthorized/, includeHidden: true })).toHaveCount(0);
   const entries = dock.locator('.vite-devtools-dock-entry');
-  let opened = false;
-  for (const entry of await entries.all()) {
-    await entry.dispatchEvent('pointerenter');
-    if (await dock.locator('.z-floating-tooltip').filter({ hasText: /^Svelte$/ }).count()) {
-      await entry.locator('button').evaluate((button) => button.click());
-      opened = true;
-      break;
+  await expect.poll(async () => {
+    for (const entry of await entries.all()) {
+      await entry.dispatchEvent('pointerenter');
+      if (await dock.locator('.z-floating-tooltip').filter({ hasText: /^Svelte$/ }).count()) {
+        await entry.locator('button').evaluate((button) => button.click());
+        return true;
+      }
+      await entry.dispatchEvent('pointerleave');
     }
-    await entry.dispatchEvent('pointerleave');
-  }
-  expect(opened, 'Svelte dock entry must be registered').toBe(true);
+    return false;
+  }, { message: 'Svelte dock entry must be registered', timeout: 15000 }).toBe(true);
   await expect.poll(() => page.frames().some((frame) => frame.url().includes('__svelte-devtools'))).toBe(true);
   const frame = page.frames().find((candidate) => candidate.url().includes('__svelte-devtools'));
   await frame.locator('.sidebar').waitFor();

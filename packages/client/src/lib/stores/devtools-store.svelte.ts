@@ -2,7 +2,7 @@ import { tick } from 'svelte';
 import { startCommandClient } from '../command-client.js';
 import { createWindowBridge } from '../bridge/window-bridge.js';
 import { createTimeTravelStore } from './time-travel-store.svelte.js';
-import { apiFetch, beaconUrl } from '../api.js';
+import { apiFetch } from '../api.js';
 import type {
   ComponentNode,
   TimelineEntry,
@@ -161,7 +161,10 @@ function createDevtoolsStore() {
 
   // Sync runtime state to server API cache every 2 seconds so HTTP API
   // endpoints can serve component/timeline data to AI agents and tooling.
+  let syncInFlight = false;
   async function syncStateToServer(): Promise<void> {
+    if (syncInFlight) return;
+    syncInFlight = true;
     try {
       const snapshotTree = timeTravel.snapshots.map(s => ({
         id: s.id, parentId: s.parentId, branchId: s.branchId,
@@ -175,16 +178,15 @@ function createDevtoolsStore() {
         snapshots: snapshotTree,
         branches: branchList,
       });
-      // Use sendBeacon for fire-and-forget (doesn't block on page unload).
-      // sendBeacon cannot set headers, so the token travels as ?token=.
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(beaconUrl('/__svelte-devtools/api/sync'), payload);
-      } else {
-        await apiFetch('/__svelte-devtools/api/sync', { method: 'POST', body: payload, headers: { 'Content-Type': 'application/json' } });
-      }
+      // Periodic snapshots can exceed the browser's small beacon quota. Use a
+      // normal authenticated request and do not queue overlapping full snapshots.
+      await apiFetch('/__svelte-devtools/api/sync', {
+        method: 'POST', body: payload, headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10000),
+      });
     } catch {
-      // Server not available yet — skip
-    }
+      // The next poll retries; cache freshness reveals a disconnected server.
+    } finally { syncInFlight = false; }
   }
 
   let syncTimer: ReturnType<typeof setInterval> | null = null;
@@ -287,6 +289,14 @@ function createDevtoolsStore() {
 
   function handleComponentUnmount(payload: unknown): void {
     const data = payload as ComponentUnmountPayload;
+    // A destroyed Spring cannot emit its settled value. Release its motion
+    // bookkeeping so it cannot block recording for surviving components.
+    const prefix = `${data.id}::`;
+    for (const key of activeMotions) if (key.startsWith(prefix)) activeMotions.delete(key);
+    for (const key of _lastCur.keys()) if (key.startsWith(prefix)) _lastCur.delete(key);
+    for (let index = pendingStateChanges.length - 1; index >= 0; index--) {
+      if (pendingStateChanges[index].componentId === data.id) pendingStateChanges.splice(index, 1);
+    }
     const unmounted = components.find(c => c.id === data.id);
     components = components.filter(c => c.id !== data.id);
     addToTimeline({

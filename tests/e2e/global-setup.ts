@@ -17,10 +17,9 @@ import {
  * Starts the plain Svelte test app (`tests/apps/svelte`) on port 5173 with its
  * local `vite` binary and `--strictPort` (so a busy port fails loudly instead
  * of silently drifting to another port), waits for HTTP 200, and watches the
- * server stdout for the Vite DevTools "Manual Auth Token".
+ * server stdout for the Vite DevTools authorization code.
  *
- * The token only appears once a browser connects — the devtools client sends
- * its auth request on page load — so the setup writes it to TOKEN_FILE as soon
+ * The supported host can print its code before a browser connects, so the setup writes it to TOKEN_FILE as soon
  * as it is printed, and the spec reads that file after navigating.
  *
  * Playwright runs the *return value* of this function as the teardown, in the

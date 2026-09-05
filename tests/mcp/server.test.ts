@@ -21,6 +21,13 @@ afterEach(async () => {
 });
 
 describe('DevTools MCP', () => {
+  it.each(['another-panel', undefined])('rejects unverified session targeting (%s)', async sessionId => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ ok: true, sessionId, cachedAt: Date.now(), components: [] })));
+    const client = await connect();
+    const result = await client.callTool({ name: 'svelte_components', arguments: { sessionId: 'requested-panel' } });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain('SESSION_MISMATCH');
+  });
   it('sends a session-targeted mutation and returns its live acknowledgement', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true, value: 42, recording: true }));
     vi.stubGlobal('fetch', fetchMock);

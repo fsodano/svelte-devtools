@@ -133,7 +133,7 @@
       {:else if type === "undefined"}
         <span class="undefined">undefined</span>
       {:else}
-        <span class="unknown">{String(val)}</span>
+        <span class="unknown">{typeof val === "function" ? "[Function]" : String(val)}</span>
       {/if}
     </span>
   {/if}

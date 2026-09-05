@@ -14,6 +14,8 @@ it('connects same-origin panel rules to real browser fetch interception and retu
   const listenerSpy = vi.spyOn(window, 'addEventListener');
   globalThis.fetch = vi.fn().mockResolvedValue(new Response('original'));
   installNetworkTools(emit);
+  expect(globalThis.XMLHttpRequest).toBe(originalXHR);
+  expect(new XMLHttpRequest()).toBeInstanceOf(originalXHR);
   const listener = listenerSpy.mock.calls.find(([type]) => type === 'message')![1] as EventListener;
   const rule = { id: 'from-panel', pattern: '/api/items$', statusCode: 201, body: '{"mocked":true}', enabled: true };
   try {

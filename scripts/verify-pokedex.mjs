@@ -55,7 +55,7 @@ try {
   await frame.locator('html').screenshot({ path: `${output}/graph-wide.png` });
   await page.setViewportSize({ width: 760, height: 900 });
   await frame.locator('.sidebar button[title="Network"]').click();
-  await page.evaluate(() => fetch('/__svelte-devtools/api/', { headers: { Authorization: 'Bearer svelte-devtools-local-audit-token' } }));
+  await page.evaluate(() => fetch('/?network-inspection=1'));
   const request = frame.locator('.entry-row').first();
   await request.click();
   await frame.locator('html').screenshot({ path: `${output}/network-narrow.png` });

@@ -37,11 +37,15 @@ try {
   const args = JSON.parse(readFileSync(output, 'utf8'));
   assert(args.includes(file), `Editor did not receive source path: ${JSON.stringify(args)}`);
   assert(args.includes('3'), `Editor did not receive line: ${JSON.stringify(args)}`);
+  assert(args.includes('2'), `Editor did not receive column: ${JSON.stringify(args)}`);
   assert.equal((await request({ file: '../../../package.json' })).status, 400);
   assert.equal((await request({ file: 'missing.svelte' })).status, 400);
   console.log('Editor integration passed: real server launched configured editor with source path and line; rejected outside/missing paths.');
 } finally {
-  server.kill('SIGTERM');
-  await new Promise(resolve => server.once('exit', resolve));
+  if (server.exitCode === null && server.signalCode === null) {
+    const stopped = new Promise(resolve => server.once('exit', resolve));
+    server.kill('SIGTERM');
+    await stopped;
+  }
   rmSync(directory, { recursive: true, force: true });
 }

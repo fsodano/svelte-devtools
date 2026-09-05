@@ -51,7 +51,7 @@ export class NetworkInterceptor {
   /**
    * Install the interceptor, overriding window.fetch and XMLHttpRequest.
    */
-  install(): boolean {
+  install(options: { fetchOnly?: boolean } = {}): boolean {
     if (this.installed) return false;
     this.installed = true;
     this.generation++;
@@ -63,6 +63,9 @@ export class NetworkInterceptor {
       globalThis.fetch = async function fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
         return self.handleFetch(input, init);
       };
+
+      this.originalXHR = null;
+      if (options.fetchOnly) return true;
 
       // Override XMLHttpRequest
       const origXHR: typeof XMLHttpRequest = globalThis.XMLHttpRequest;
@@ -251,22 +254,33 @@ export class NetworkInterceptor {
    */
   private async handleFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const resolvedInput = typeof input === 'string' ? new URL(input, globalThis.location?.href).href : input;
+    const target = new URL(resolvedInput instanceof Request ? resolvedInput.url : String(resolvedInput));
+    if (target.origin === globalThis.location?.origin
+      && (/^\/__svelte-devtools(?:\/|$)/.test(target.pathname) || /^\/\.devtools(?:\/|$)/.test(target.pathname))) {
+      return this.originalFetch!(input, init);
+    }
     const request = new Request(resolvedInput instanceof Request ? resolvedInput.clone() : resolvedInput, init);
+    request.signal.throwIfAborted();
     const url = request.url;
     const method = request.method.toUpperCase();
     const generation = this.generation;
-    const requestBody = this.capturePreview(request);
+    // Reading an init stream would lock the very stream passed to native fetch.
+    const requestBody = init?.body instanceof ReadableStream
+      ? Promise.resolve({ text: '(stream)', truncated: true })
+      : this.capturePreview(request, request.signal);
 
     // Check mock rules
     const rule = this.matchRequest(url, method);
     if (rule && rule.enabled) {
+      const body = await requestBody;
+      request.signal.throwIfAborted();
       this.emitRequest({
         id: `net-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         url,
         method,
         statusCode: rule.statusCode,
         requestHeaders: Object.fromEntries(request.headers.entries()),
-        requestBody: (await requestBody).text,
+        requestBody: body.text,
         responseBody: rule.body,
         responseHeaders: rule.headers,
         duration: 0,
@@ -328,7 +342,7 @@ export class NetworkInterceptor {
   }
 
   /** Read a bounded preview and cancel only the inspection branch when done. */
-  private capturePreview(body: Response | Request): Promise<{ text: string; truncated: boolean }> {
+  private capturePreview(body: Response | Request, signal?: AbortSignal): Promise<{ text: string; truncated: boolean }> {
     if (!body.body) return Promise.resolve({ text: '', truncated: false });
     return new Promise(resolve => {
       const reader = body.body!.getReader();
@@ -341,6 +355,7 @@ export class NetworkInterceptor {
         finished = true;
         clearTimeout(timer);
         this.previewCleanups.delete(cancel);
+        signal?.removeEventListener('abort', cancel);
         text += decoder.decode();
         resolve({ text, truncated });
         // A tee branch's cancel promise can wait for the application's branch.
@@ -350,6 +365,7 @@ export class NetworkInterceptor {
       const cancel = () => finish(true);
       const timer = setTimeout(cancel, 250);
       this.previewCleanups.add(cancel);
+      signal?.addEventListener('abort', cancel, { once: true });
       void (async () => {
         try {
           while (!finished) {

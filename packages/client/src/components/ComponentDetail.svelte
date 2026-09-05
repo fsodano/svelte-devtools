@@ -40,6 +40,7 @@
   }
 
   function formatValue(value: unknown): string {
+    if (typeof value === "function") return "[Function]";
     if (value === null) return "null";
     if (value === undefined) return "undefined";
     if (typeof value === "string") return `"${value}"`;

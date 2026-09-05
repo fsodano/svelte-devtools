@@ -316,7 +316,7 @@ describe('handleApiRequest', () => {
             expect(body).toMatchObject({
                 ok: true,
                 name: '@fsodano/vite-plugin-svelte-devtools',
-                version: '0.0.1',
+                version: '0.1.0',
             });
             expect(body.endpoints).toBeInstanceOf(Array);
             expect((body.endpoints as string[]).length).toBeGreaterThan(0);
@@ -693,6 +693,22 @@ describe('handleApiRequest', () => {
     });
 
     describe('session-scoped inspection and pagination', () => {
+        it('keeps legacy anonymous syncs out of named panel caches and rejects invalid IDs', async () => {
+            const sync = async (data: unknown) => {
+                const res = createMockRes();
+                await handleApiRequest(authReq('/', 'POST', JSON.stringify(data)), res, mockServer, '/sync');
+                return res;
+            };
+            expect((await sync({ sessionId: 'named-panel', components: [{ id: 'owned' }] })).statusCode).toBe(200);
+            expect((await sync({ components: [{ id: 'anonymous' }] })).statusCode).toBe(200);
+            expect((await sync({ sessionId: '', components: [{ id: 'invalid' }] })).statusCode).toBe(400);
+            const res = createMockRes();
+            await handleApiRequest(authReq('/?sessionId=named-panel'), res, mockServer, '/components');
+            expect(parseRes(res)).toMatchObject({ sessionId: 'named-panel', components: [{ id: 'owned' }] });
+            const anonymous = createMockRes();
+            await handleApiRequest(authReq('/'), anonymous, mockServer, '/components');
+            expect(parseRes(anonymous)).toMatchObject({ sessionId: null, components: [{ id: 'anonymous' }] });
+        });
         it('keeps two panel caches separate and returns metadata without large state', async () => {
             for (const [sessionId, value] of [['panel-one', 1], ['panel-two', 2]] as const) {
                 const req = authReq('/', 'POST', JSON.stringify({ sessionId,

@@ -3,7 +3,7 @@ import { NetworkInterceptor, type NetworkMockRule, type NetworkRequest } from '.
 /** Connect the panel's session rules to browser request interception. */
 export function installNetworkTools(onRequest: (request: NetworkRequest) => void): void {
   const interceptor = new NetworkInterceptor(onRequest);
-  interceptor.install();
+  interceptor.install({ fetchOnly: true });
   window.addEventListener('message', (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
     const data = event.data;

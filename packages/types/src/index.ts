@@ -360,3 +360,5 @@ export interface ComponentInfo {
 
 export * from './constants.js';
 export { isJsonEditable } from './json-state.js';
+
+export { toDisplayValue } from './display-value.js';

@@ -1,5 +1,5 @@
 import { openDevToolsPanel } from './panel-helpers.mjs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import * as fs from 'node:fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -7,22 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { BASE_URL, TOKEN_FILE, API_TOKEN } from './constants';
 
-/**
- * Browser smoke test for the Svelte DevTools panel (ADR-0013).
- *
- * Flow (documented in AGENTS.md as the "manual dialog" method — the only
- * reliably working auth flow for the Vite DevTools kit):
- *   1. Load the test app — the devtools client requests authorization and the
- *      global setup captures the printed Manual Auth Token to TOKEN_FILE.
- *   2. Click the dock's "Unauthorized" button (inside the shadow root).
- *   3. Type the token into the auth dialog and click "Authorize".
- *   4. Open the "Svelte" dock entry and wait for the DevTools iframe.
- *   5. Assert a real component from the test app appears in the component tree.
- *
- * Headless Chromium renders the dock embedded in the page (DocumentPictureInPicture
- * is unavailable), so the panel is a plain iframe reachable via page.frames().
- */
-
+/** Authenticate with the supported host's six-digit code, then inspect real data over UI and MCP. */
 test('authenticates the dock and renders the Svelte panel with real components', async ({
 	page,
 }, testInfo) => {

@@ -215,3 +215,23 @@ test('applies acknowledged HTTP state commands to one live instance with undo su
   await expect(page.getByTestId('second-count')).toHaveText('1');
   await expect(frame.locator('.count')).toHaveText('2 / 2');
 });
+
+test('continues recording after a Spring component unmounts during motion', async ({ page }) => {
+  const frame = await openPanel(page, '/motion-unmount.html');
+  await frame.locator('.sidebar button[title="Time Travel"]').click();
+  await frame.locator('.record-btn').click();
+  const digits = page.locator('.counter-digits');
+  const settledStyle = await digits.getAttribute('style');
+  await page.getByRole('button', { name: 'Increase the counter by one' }).evaluate((button: HTMLButtonElement) => button.click());
+  await expect.poll(() => digits.getAttribute('style')).not.toBe(settledStyle);
+  await page.getByRole('button', { name: 'Unmount motion', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+  await expect(digits).toHaveCount(0);
+  // Let the normal state capture complete before making an independent edit.
+  await page.waitForTimeout(250);
+  const before = await frame.locator('.count').textContent();
+  await page.getByRole('button', { name: 'Increment survivor', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.getByTestId('survivor-count')).toHaveText('1');
+  await expect(frame.locator('.count')).not.toHaveText(before!);
+  await frame.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(page.getByTestId('survivor-count')).toHaveText('0');
+});

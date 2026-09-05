@@ -19,7 +19,7 @@ export function createDevtoolsMcpServer(options: DevtoolsMcpOptions): McpServer 
     throw new Error('SVELTE_DEVTOOLS_URL must be an HTTP(S) origin without credentials, path, query, or fragment.');
   }
   if (!options.token.trim()) throw new Error('Set SVELTE_DEVTOOLS_TOKEN to the token used by the Vite dev server.');
-  const server = new McpServer({ name: 'svelte-devtools', version: '0.0.1' }, { instructions });
+  const server = new McpServer({ name: 'svelte-devtools', version: '0.1.0' }, { instructions });
   const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
   async function request(path: string, query: Record<string, string> = {}, body?: unknown): Promise<Record<string, unknown>> {
@@ -90,7 +90,8 @@ export function createDevtoolsMcpServer(options: DevtoolsMcpOptions): McpServer 
     }
   }
 
-  function freshness(data: Record<string, unknown>, maxAgeMs: number) {
+  function freshness(data: Record<string, unknown>, maxAgeMs: number, sessionId?: string) {
+    if (sessionId && data.sessionId !== sessionId) throw new Error('SESSION_MISMATCH: the API did not return the requested panel session. Update the DevTools server and select a session from svelte_status.');
     const cachedAt = typeof data.cachedAt === 'number' ? data.cachedAt : 0;
     const ageMs = cachedAt > 0 ? Math.max(0, Date.now() - cachedAt) : null;
     if (ageMs === null) throw new Error('NO_RUNTIME_DATA: open the app, authorize the dock, and open the Svelte panel. Wait for its first sync.');
@@ -118,7 +119,7 @@ export function createDevtoolsMcpServer(options: DevtoolsMcpOptions): McpServer 
     inputSchema: { id: z.string().optional(), name: z.string().optional(), includeState: z.boolean().default(true), sessionId, offset, limit, maxAgeMs }, annotations,
   }, ({ id, name, includeState, sessionId, offset, limit, maxAgeMs }) => result(async () => {
     const data = await request('components', { offset: String(offset), limit: String(limit), includeState: String(includeState), ...(id ? { id } : {}), ...(name ? { name } : {}), ...(sessionId ? { sessionId } : {}) });
-    const sync = freshness(data, maxAgeMs);
+    const sync = freshness(data, maxAgeMs, sessionId);
     const components = (data.components as Array<Record<string, unknown>>).filter(c =>
       (!id || c.id === id) && (!name || String(c.name).toLowerCase().includes(name.toLowerCase())));
     const serverPaged = typeof data.total === 'number' && typeof data.offset === 'number';
@@ -135,7 +136,7 @@ export function createDevtoolsMcpServer(options: DevtoolsMcpOptions): McpServer 
     inputSchema: { type: z.string().optional(), sessionId, offset, limit, maxAgeMs }, annotations,
   }, ({ type, sessionId, offset, limit, maxAgeMs }) => result(async () => {
     const data = await request('timeline', { offset: String(offset), limit: String(limit), ...(type ? { type } : {}), ...(sessionId ? { sessionId } : {}) });
-    const sync = freshness(data, maxAgeMs);
+    const sync = freshness(data, maxAgeMs, sessionId);
     const entries = (data.entries as Array<Record<string, unknown>>).filter(e => !type || e.type === type);
     const serverPaged = typeof data.total === 'number' && typeof data.offset === 'number';
     return { ok: true, freshness: sync, sessionId: data.sessionId, total: serverPaged ? data.total : entries.length, offset, entries: serverPaged ? entries : entries.slice(offset, offset + limit) };
@@ -146,7 +147,7 @@ export function createDevtoolsMcpServer(options: DevtoolsMcpOptions): McpServer 
     inputSchema: { sessionId, offset, limit, maxAgeMs }, annotations,
   }, ({ sessionId, offset, limit, maxAgeMs }) => result(async () => {
     const data = await request('snapshots', { offset: String(offset), limit: String(limit), ...(sessionId ? { sessionId } : {}) });
-    const sync = freshness(data, maxAgeMs);
+    const sync = freshness(data, maxAgeMs, sessionId);
     const snapshots = data.snapshots as unknown[];
     const serverPaged = typeof data.total === 'number' && typeof data.offset === 'number';
     return { ok: true, freshness: sync, sessionId: data.sessionId, total: serverPaged ? data.total : snapshots.length, offset, snapshots: serverPaged ? snapshots : snapshots.slice(offset, offset + limit), branches: data.branches };

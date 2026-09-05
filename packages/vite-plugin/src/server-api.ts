@@ -52,10 +52,10 @@ interface CachedState {
 function emptyCache(sessionId: string | null = null): CachedState {
     return { sessionId, components: [], timeline: [], remote: {}, snapshots: [], branches: [], updatedAt: 0 };
 }
-const serverCaches = new WeakMap<object, { latest: CachedState; sessions: Map<string, CachedState> }>();
+const serverCaches = new WeakMap<object, { latest: CachedState; anonymous: CachedState; sessions: Map<string, CachedState> }>();
 function getCaches(server: object) {
     let caches = serverCaches.get(server);
-    if (!caches) { caches = { latest: emptyCache(), sessions: new Map() }; serverCaches.set(server, caches); }
+    if (!caches) { const anonymous = emptyCache(); caches = { latest: anonymous, anonymous, sessions: new Map() }; serverCaches.set(server, caches); }
     return caches;
 }
 
@@ -152,7 +152,7 @@ export async function handleApiRequest(
                 json(req, res, {
                     ok: true,
                     name: '@fsodano/vite-plugin-svelte-devtools',
-                    version: '0.0.1',
+                    version: '0.1.0',
                     endpoints: [
                         '/__svelte-devtools/api/',
                         '/__svelte-devtools/api/components',
@@ -349,7 +349,12 @@ export async function handleApiRequest(
                 }
                 const body = await readBody(req);
                 const data = JSON.parse(body);
-                if (typeof data.sessionId === 'string' && data.sessionId.length > 0 && data.sessionId.length <= 128) {
+                if (!data || typeof data !== 'object' || Array.isArray(data) || (Object.prototype.hasOwnProperty.call(data, 'sessionId') &&
+                    (typeof data.sessionId !== 'string' || !data.sessionId || data.sessionId.length > 128))) {
+                    json(req, res, { error: 'Invalid sync sessionId' }, 400); return;
+                }
+                cachedState = caches.anonymous;
+                if (typeof data.sessionId === 'string') {
                     cachedState = caches.sessions.get(data.sessionId) ?? emptyCache(data.sessionId);
                     if (!caches.sessions.has(data.sessionId) && caches.sessions.size >= 64) {
                         caches.sessions.delete(caches.sessions.keys().next().value!);

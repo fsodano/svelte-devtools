@@ -306,6 +306,78 @@ describe('NetworkInterceptor', () => {
     });
   });
 
+  describe('fetch-only production boundary', () => {
+    it('preserves native XHR identity and constants when fetchOnly is enabled', () => {
+      const native = globalThis.XMLHttpRequest;
+      interceptor.install({ fetchOnly: true });
+      expect(globalThis.XMLHttpRequest).toBe(native);
+      expect(new XMLHttpRequest()).toBeInstanceOf(native);
+      expect(XMLHttpRequest.DONE).toBe(native.DONE);
+      interceptor.uninstall();
+      expect(globalThis.XMLHttpRequest).toBe(native);
+    });
+
+    it.each(['/__svelte-devtools/api/sync', '/__svelte-devtools', '/.devtools/auth', '/.devtools'])('does not mock or record own infrastructure %s', async path => {
+      const response = new Response('native transport');
+      const native = vi.fn().mockResolvedValue(response);
+      globalThis.fetch = native;
+      const callback = vi.fn();
+      interceptor = new NetworkInterceptor(callback);
+      interceptor.install({ fetchOnly: true });
+      interceptor.setRules([{ id: 'wildcard', pattern: '.*', statusCode: 200, body: 'mock', enabled: true }]);
+      const input = new URL(path, window.location.href).href;
+      expect(await fetch(input)).toBe(response);
+      expect(native).toHaveBeenCalledWith(input, undefined);
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('keeps similarly named app paths and other origins eligible for mock rules', async () => {
+      interceptor.install({ fetchOnly: true });
+      interceptor.setRules([{ id: 'wildcard', pattern: '.*', statusCode: 200, body: 'mock', enabled: true }]);
+      expect(await (await fetch(new URL('/__svelte-devtools-example', window.location.href))).text()).toBe('mock');
+      expect(await (await fetch('https://other.example/__svelte-devtools/api/')).text()).toBe('mock');
+    });
+
+    it('leaves pass-through init upload streams available to native fetch', async () => {
+      const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode('upload')); controller.close(); } });
+      const native = vi.fn(async (_input, init) => {
+        expect(init.body).toBe(stream);
+        expect(stream.locked).toBe(false);
+        expect(await new Response(stream).text()).toBe('upload');
+        return new Response('accepted');
+      });
+      globalThis.fetch = native;
+      interceptor.install({ fetchOnly: true });
+      expect(await (await fetch('http://example.com/upload', { method: 'POST', body: stream, duplex: 'half' } as RequestInit)).text()).toBe('accepted');
+    });
+
+    it('rejects an already aborted Request instead of returning a mock', async () => {
+      const callback = vi.fn();
+      interceptor = new NetworkInterceptor(callback);
+      interceptor.install({ fetchOnly: true });
+      interceptor.setRules([{ id: 'wildcard', pattern: '.*', statusCode: 200, body: 'mock', enabled: true }]);
+      const controller = new AbortController();
+      controller.abort();
+      await expect(fetch(new Request('http://example.com/items', { signal: controller.signal }))).rejects.toMatchObject({ name: 'AbortError' });
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('rejects a mock when aborted before its response is delivered', async () => {
+      const callback = vi.fn();
+      interceptor = new NetworkInterceptor(callback);
+      interceptor.install({ fetchOnly: true });
+      interceptor.setRules([{ id: 'wildcard', pattern: '.*', statusCode: 200, body: 'mock', enabled: true }]);
+      const controller = new AbortController();
+      let source!: ReadableStreamDefaultController<Uint8Array>;
+      const body = new ReadableStream<Uint8Array>({ start(value) { source = value; } });
+      const pending = fetch('http://example.com/upload', { method: 'POST', body, signal: controller.signal, duplex: 'half' } as RequestInit);
+      controller.abort();
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      source.close();
+      expect(callback).not.toHaveBeenCalled();
+    });
+  });
+
   describe('streaming response previews', () => {
     it('returns headers before an SSE stream closes and preserves the original body', async () => {
       let controller!: ReadableStreamDefaultController<Uint8Array>;

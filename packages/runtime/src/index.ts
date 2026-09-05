@@ -1,6 +1,6 @@
 import { installNetworkTools } from './network-bridge.js';
 import {ComponentRegistry} from './instrumentation/registry.js';
-import { LIMITS, isJsonEditable, type TimelineEntry } from '@fsodano/svelte-devtools-types';
+import { LIMITS, isJsonEditable, toDisplayValue, type TimelineEntry } from '@fsodano/svelte-devtools-types';
 import type {ComponentInstance, SvelteDevToolsAPI} from '@fsodano/svelte-devtools-types';
 export { getInitScript } from './init.js';
 
@@ -57,7 +57,7 @@ function clearEventObservers(): void {
 }
 
 export const runtime = {
-    version: '0.0.1',
+    version: '0.1.0',
     init(): void {
         if (state.connected) return;
         state.connected = true;
@@ -262,7 +262,8 @@ export const runtime = {
             ? (window as unknown as Record<string, unknown>).__SVELTE_DEVTOOLS_REGISTRY__
             : undefined;
         const meta = (registry as Map<string, { propKeys?: string[] }> | undefined)?.get(componentId);
-        if (meta?.propKeys?.includes(key)) {
+        const isProp = meta?.propKeys?.includes(key) === true;
+        if (isProp) {
             component.props = { ...component.props, [key]: value };
         }
         if (isDebug) console.log('[Runtime:handleState] Component state updated:', componentId, 'key:', key, 'value:', value);
@@ -273,7 +274,7 @@ export const runtime = {
             componentName: component.name,
             key,
             value,
-            inspectType: type,  // forward the $inspect type ('state' | 'derived' | 'props')
+            inspectType: isProp ? 'props' : type, // $inspect reports init/update; metadata identifies prop echoes.
             timestamp: performance.now()
         });
     },
@@ -414,57 +415,8 @@ export const runtime = {
     }
 };
 
-function sanitizeForPostMessage(value: unknown, ancestors = new WeakSet<object>()): unknown {
-    if (typeof value === 'function') {
-        return '[Function]';
-    }
-    if ((typeof Element !== 'undefined' && value instanceof Element) || (typeof Node !== 'undefined' && value instanceof Node)) {
-        return '[DOM Node]';
-    }
-    if (value === null || typeof value !== 'object') {
-        return value;
-    }
-    if (ancestors.has(value)) return '[Circular]';
-    ancestors.add(value);
-    try {
-        if (Array.isArray(value)) {
-            return value.map(item => sanitizeForPostMessage(item, ancestors));
-        }
-        if (value instanceof Map) {
-            const obj: Record<string, unknown> = {};
-            value.forEach((v, k) => {
-                obj[String(k)] = sanitizeForPostMessage(v, ancestors);
-            });
-            return obj;
-        }
-        if (value instanceof Set) {
-            return Array.from(value).map(item => sanitizeForPostMessage(item, ancestors));
-        }
-
-        const obj: Record<string, unknown> = {};
-        const seen = new Set<string>();
-        let proto: unknown = value;
-
-        while (proto && proto !== Object.prototype) {
-            const descriptors = Object.getOwnPropertyDescriptors(proto);
-            for (const [key, desc] of Object.entries(descriptors)) {
-                if (seen.has(key)) continue;
-                seen.add(key);
-                if (typeof desc.get === 'function') {
-                    try {
-                        obj[key] = sanitizeForPostMessage(desc.get.call(value), ancestors);
-                    } catch (e) {
-                        obj[key] = '[Error]';
-                    }
-                } else if (typeof desc.value !== 'function') {
-                    obj[key] = sanitizeForPostMessage(desc.value, ancestors);
-                }
-            }
-            proto = Object.getPrototypeOf(proto);
-        }
-
-        return Object.keys(obj).length > 0 || Object.getPrototypeOf(value) === Object.prototype ? obj : String(value);
-    } finally { ancestors.delete(value); }
+function sanitizeForPostMessage(value: unknown): unknown {
+    return toDisplayValue(value);
 }
 
 // ============================================================================

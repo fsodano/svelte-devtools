@@ -89,9 +89,9 @@ The DevTools exposes a REST API at `/__svelte-devtools/api/` that agents can use
 | `GET` | `/api/server-events` | Server request traces with response bodies |
 | `GET` | `/api/migration` | Svelte 4→5 migration scores; `overall` is `null` until components are scored |
 | `GET` | `/api/snapshots` | Snapshot branch tree (parentId, branchId, timestamps) |
-| `GET` | `/api/routes` | SvelteKit route map scanned from `src/routes` |
+| `GET` | `/api/routes` | SvelteKit route inventory from the resolved routes directory (`src/routes` fallback) |
 | `GET` | `/api/remote` | Remote-debugging payload synced from the panel |
-| `POST` | `/api/set-state` | Not implemented: returns `501` (`{componentId, key, value}`) |
+| `POST` | `/api/set-state` | Acknowledged live edit (`{sessionId, componentId, key, value}`); select a session from API status |
 | `GET` | `/api/source?file=<path>` | Source code file lookup |
 | `POST` | `/api/sync` | (internal) Client syncs runtime state here |
 

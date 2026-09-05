@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { indexComponentTree, flattenComponentTree } from '../lib/component-tree.js';
   import { getSourceLocation, formatSourceLocation, openInEditor } from '../lib/open-in-editor.js';
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
 
@@ -32,12 +33,10 @@
   let searchTerm = $state('');
   let virtualizedHeight = 400;
 
-  function getRootComponents(): Component[] {
-    return components.filter((c) => !c.parentId);
-  }
+  const treeIndex = $derived(indexComponentTree(components));
 
   function getChildren(parentId: string): Component[] {
-    return components.filter((c) => c.parentId === parentId);
+    return treeIndex.children.get(parentId) ?? [];
   }
 
   function toggleExpand(id: string): void {
@@ -68,29 +67,7 @@
     }
   }
 
-  function flattenTree(
-    components: Component[],
-    expanded: ExpandedState,
-    depth: number = 0,
-  ): { component: Component; depth: number }[] {
-    const result: { component: Component; depth: number }[] = [];
-
-    for (const component of components) {
-      result.push({ component, depth });
-      if (isExpanded(component.id) && getChildren(component.id).length > 0) {
-        result.push(
-          ...flattenTree(getChildren(component.id), expanded, depth + 1),
-        );
-      }
-    }
-
-    return result;
-  }
-
-  const flatList = $derived.by(() => {
-    const roots = getRootComponents();
-    return flattenTree(roots, expanded);
-  });
+  const flatList = $derived(flattenComponentTree(treeIndex, expanded));
 
   const filteredList = $derived.by(() => {
     if (!searchTerm.trim()) return flatList;
