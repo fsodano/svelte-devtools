@@ -4,7 +4,7 @@ The MCP server adapts the authenticated HTTP API to eight read-only tools and on
 
 ## Local setup
 
-1. Follow [source installation](02_vite-plugin.md#installation), then run `npm ci` and `npm run build` at the repository root. Release 0.1.1 is available as source; its npm packages are not published.
+1. Follow [source installation](02_vite-plugin.md#installation), then run `npm ci` and `npm run build` at the repository root. Release 0.2.0 is available as source; its npm packages are not published.
 2. Start an instrumented test application with `SVELTE_DEVTOOLS_TOKEN` set to a local value.
 3. Open the application in a browser. Authorize the supported 0.4.8 Vite dock with the separate six-digit devframe code shown in the server terminal. Open the Svelte panel.
 4. Configure your MCP client with the absolute CLI path and the same API token.
