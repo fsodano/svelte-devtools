@@ -129,7 +129,7 @@ let maxSnapshots = $state(LIMITS.MAX_STATE_SNAPSHOTS); // 50
 - **`capture(label?)`** — deep-clones components + timeline + `kitState` (URL); dedups against `lastRestoredSnapshotJSON` and the last capture; truncates future snapshots when capturing from the past; capped at 50
 - **`restore(index, truncate?)`** — sets time-travel mode, stashes route state, temporarily hangs `window.fetch`, applies snapshot state via `parentApi.setComponentState` per key, restores timeline, and (cross-route) navigates via `window.__SVELTE_DEVTOOLS_REAL_GOTO__` or a synthetic `<a>` click, then polls for the route to mount
 - **`undo()` / `redo()`** — restore `currentIndex ± 1`
-- **`setStateEdit(componentId, key, value)`** — live-edit state and capture a `'state-edit'` snapshot
+- **`setStateEdit(componentId, key, value)`** — apply a live state edit; its observed state change participates in snapshot recording when recording is enabled
 - **`branches`** — computed getter grouping snapshots by `branchId` (currently all `'main'`; the UI renders a flat list, not a branch grid)
 
 Recording must be enabled for captures: the panel starts "Paused" and only records after the Record button is clicked.
@@ -154,12 +154,14 @@ Filter chips (All / Components / State / Effects / Server / Client Requests), Cl
 
 - **Record button** (`.record-btn`) toggles "Paused" ↔ "Recording" — snapshots are only captured while recording
 - **Toolbar** (`.tb-btn`) — undo, redo, play, clear; snapshot counter `.count` shows `current / total`
-- **Snapshot list** — rows with `.dot`/`.fill` indicators; clicking a row opens the 280px detail panel
+- **Snapshot list** — rows with `.dot`/`.fill` indicators; clicking a row opens the resizable detail panel
 - **Detail panel** — metadata + "Changes from previous snapshot" diff view (struck-through old value → arrow → new value), plus a "Restore this snapshot" button
 
 ### NetworkDesk
 
-Request list (SSR traces, errors, client requests) + a Mock Rules editor that posts `{type: 'svelte-devtools-set-mock-rules', rules}` to the parent window.
+The history model combines server traces and browser requests, retaining at most 500 rows. In release 0.1.1, the Network poller expects an object with `events`, while its legacy endpoint returns an array. Server traces are available through HTTP/MCP but do not populate this panel through that poller. See [server display limitation](05_server.md#client-display). Clear dismisses the visible history. Polling does not overlap, and retained server events do not immediately repopulate cleared rows. The detail pane is resizable and scrolls independently.
+
+Create a mock rule from a recorded browser request, edit its response, and enable it in Mock Rules. Interception applies to browser `fetch` only. Native XMLHttpRequest, server fetches, and DevTools infrastructure requests pass through. A truncated response preview is not a complete response body; review it before using it as a mock.
 
 ### RouterHub
 
@@ -167,19 +169,9 @@ Fetches `/__svelte-devtools/api/routes` (filesystem scan of `src/routes`), rende
 
 ## Go to Source (Open in Editor)
 
-`src/lib/open-in-editor.ts`:
+The client helper in `src/lib/open-in-editor.ts` sends an authenticated request to `/__svelte-devtools/open-in-editor`. The middleware validates a project source path and invokes the configured local editor. A filename is sufficient when no line location is available. The panel reports launch errors so a failed request is visible.
 
-```typescript
-async function openInEditor(filename: string, line?: number, column?: number) {
-  await fetch('/__svelte-devtools/open-in-editor', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ file: filename, line, column })
-  });
-}
-```
-
-The Vite plugin's `/__svelte-devtools/open-in-editor` middleware resolves the path against the project root and calls `launchEditor` (which opens VS Code or your configured editor).
+This is a local development-server integration, not a browser API that can open arbitrary editors. See [editor configuration](02_vite-plugin.md) and the [API reference](06_api.md).
 
 ## Styling
 

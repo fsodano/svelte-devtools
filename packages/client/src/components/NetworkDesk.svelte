@@ -373,7 +373,7 @@
     <div class="rule-editor">
       <div class="rule-form">
         <h3 class="rule-form-title">{editingRuleId ? 'Edit mock rule' : 'New mock rule'}</h3>
-        <p class="rule-hint">Mock browser fetch and XHR requests. Rules run in list order; the first match wins. Rules last until the app reloads.</p>
+        <p class="rule-hint">Mock browser fetch requests. Rules run in list order; the first match wins. Rules last until the app reloads.</p>
         {#if draftHint}<p class="draft-hint">{draftHint}</p>{/if}
         <label for="mock-pattern">URL pattern (regular expression)</label>
         <input id="mock-pattern" type="text" bind:value={newPattern} placeholder="URL regex pattern (e.g. /api/.*)" class="rule-input" />

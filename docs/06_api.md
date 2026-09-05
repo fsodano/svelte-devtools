@@ -2,6 +2,12 @@
 
 Public APIs and type definitions for Svelte DevTools.
 
+## Scope and retention
+
+This reference describes source release 0.1.1. Runtime inspection comes from the selected browser session's periodic authenticated panel sync. It is cached data, not a direct query of an unopened application. Use status discovery and `sessionId` to select the intended session. State edits wait for that session's runtime acknowledgement.
+
+The Network panel retains 500 combined browser/server rows. The server trace buffer and runtime timeline each retain up to 1,000 entries. These storage limits are distinct from page sizes and MCP output limits. MCP has nine tools and bounded response parsing; see [MCP limits](07_mcp.md). SQL query spans are not implemented.
+
 ## Global APIs
 
 ### `window.__SVELTE_DEVTOOLS_RUNTIME__`

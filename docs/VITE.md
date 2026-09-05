@@ -1,5 +1,7 @@
 # Vite 8 for Svelte DevTools Plugin Development
 
+> **Current release context (0.1.1):** The fixtures use Vite 8.2.2 and `@vitejs/devtools` 0.4.8. Declared minimums are Vite 8.0.3 and Svelte 5.20. See [source setup](02_vite-plugin.md#installation). The dated audit below is historical: its old dependency table and resolved failure descriptions are not the current package contract. Svelte 5.20 client/SSR compiler checks do not establish a full minimum-version browser matrix.
+
 A practical guide to Vite 8 internals, plugin architecture, and the patterns used by the Svelte DevTools plugin. This doc assumes you know what Vite does at a high level. It focuses on what changed in Vite 8 and how to work with it effectively for DevTools plugin development.
 
 ## Contents

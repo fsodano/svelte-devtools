@@ -13,7 +13,7 @@ This directory holds skill files for AI agents working with the Svelte DevTools 
 
 Step-by-step guide to add Svelte DevTools to any project. Covers:
 
-- Installing `@fsodano/vite-plugin-svelte-devtools` and `@vitejs/devtools`
+- Building release 0.1.1 from source and installing the local plugin with the pinned host
 - Configuring Vite for plain Svelte and SvelteKit projects (plugin ordering)
 - Setting up SvelteKit hooks for SSR support
 - Plugin options (include, exclude, enableStateInspection)
@@ -25,7 +25,8 @@ Use this skill when the task involves installing or configuring the devtools plu
 
 Guide for AI agents to debug Svelte 5 apps using the devtools agent API. Covers:
 
-- RPC methods (6 live: `build-status`, `get-components`, `component-state`, `migration-score`, `open-in-editor`, `rescan`)
+- MCP-first discovery with nine tools (eight inspection tools and one acknowledged state edit)
+- Build metadata RPC methods (6 live: `build-status`, `get-components`, `component-state`, `migration-score`, `open-in-editor`, `rescan`)
 - HTTP REST API at `/__svelte-devtools/api/*` (token-authenticated: components, timeline, server-events, snapshots, migration, routes, source)
 - Agent response schema (`AgentResponse<T>`)
 - Debugging flow from health check to component inspection
@@ -39,9 +40,9 @@ Use this skill when the task involves inspecting component state, debugging rune
 End-to-end verification workflow for the Svelte DevTools plugin. Covers:
 
 - Building and starting a test app
-- Vite DevTools authorization flow (terminal token)
+- Vite DevTools 0.4.8 authorization flow (six-digit devframe code)
 - Opening the DevTools panel (iframe dock entry; Vite DevTools Kit decides popup vs embedded)
-- Full Playwright automation script
+- Maintained Playwright suite and shared panel helper
 - HTTP API verification for all endpoints (token-authenticated: components, timeline, server-events, snapshots, migration, source, routes)
 - Time-travel verification (Record button, undo/redo, snapshot counting)
 - Common issues and troubleshooting checklist

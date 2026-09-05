@@ -9,7 +9,7 @@ SvelteKit server-side integration for tracing HTTP requests during SSR.
 The Vite plugin provides server-side request tracing out of the box:
 
 - **SvelteKit SSR traces** — the `svelteDevToolsHandle()` hook traces every SSR response with `event.route.id`, method, status, duration, headers, and JSON response previews (`server:ssr` / `server:error` event types)
-- **SvelteKit fetch traces** — a `globalThis.fetch` interceptor installed at module load captures load-function fetches as `server:request` events (it must be installed before SvelteKit caches fetch for load functions)
+- **SvelteKit fetch traces** — a `globalThis.fetch` interceptor installed when `svelteDevToolsHandle()` is created captures server fetches as `server:request` events. Importing the module or using `noopHandle()` does not install it
 - **Generic HTTP traces** — a Vite middleware records every non-asset, non-devtools request (URL, method, status, duration, response preview, request/response headers)
 - **Client fetch traces** — the browser runtime also intercepts `window.fetch`, emitting `client:request` events shown in the Network tab
 
@@ -81,7 +81,9 @@ curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
 
 ### Client Display
 
-The DevTools panel polls `/__svelte-devtools/server-events` every second and displays the events in the **Network** tab (`NetworkDesk.svelte`), alongside client-side `client:request` events and a Mock Rules editor.
+The Network panel attempts to poll `/__svelte-devtools/server-events` every second. In release 0.1.1, this legacy endpoint returns an array but the poller reads `data.events`. Consequently, server traces do not populate the panel through this path. Use authenticated `/__svelte-devtools/api/server-events` or the MCP server-events tool to inspect them. Repairing this display path is separate follow-up work.
+
+Browser `client:request` events and browser fetch mock rules remain available in Network. There is no separate Server tab in the current application shell.
 
 ## Security Considerations
 
@@ -106,6 +108,12 @@ fetch('/__svelte-devtools/server-events?token=' + encodeURIComponent(window.__SV
 
 Also make sure `src/hooks.server.ts` exists with `svelteDevToolsHandle()` — without it, SvelteKit requests bypass the generic Vite middleware for HTML pages.
 
+## Current boundaries
+
+Tracing does not instrument SQLite or other database queries. A Todo request trace shows the HTTP operation; it does not contain SQL statements, query timing, or correlated database spans.
+
+Response previews are collected asynchronously so tracing does not wait for an SSE or streaming body to finish. SvelteKit previews are bounded to 2,000 bytes for JSON responses and 500 bytes for other responses, with a 250 ms collection deadline. Request-body previews are bounded to 2,000 bytes. These previews can be incomplete and do not replace the application response stream.
+
 ## Implementation Status
 
 Completed:
@@ -114,8 +122,8 @@ Completed:
 - ✅ Generic Vite middleware request tracing
 - ✅ Client-side `window.fetch` tracing (`client:request`)
 - ✅ Server events endpoints (`GET` / `DELETE`)
-- ✅ Client-side polling and display (Network tab)
+- ⚠️ Network server-trace display: blocked by the response-shape mismatch described above
 
 Planned:
 - 🚧 Database query tracing
-- 🚧 Full network interception engine (block/mock) — see [ADR-0007](./adr/ADR-0007-network-interception-architecture.md)
+- 🚧 Server-side request mocking. Browser `fetch` mocking is already available in the Network panel; it does not intercept server requests.

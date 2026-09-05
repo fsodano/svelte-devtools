@@ -5,7 +5,7 @@ description: Use when debugging Svelte 5 reactivity issues, inspecting component
 
 # Debugging with Svelte DevTools
 
-Reference for Svelte DevTools 0.1.0 on Svelte 5.20+ and Vite 8. Use MCP first for agent discovery and runtime inspection. See [MCP setup](../docs/07_mcp.md) for the local stdio server.
+Reference for Svelte DevTools 0.1.1 on Svelte 5.20+ and Vite 8. Use MCP first for agent discovery and runtime inspection. See [MCP setup](../docs/07_mcp.md) for the local stdio server.
 
 ## Agent API Overview
 

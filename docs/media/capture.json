@@ -1,0 +1,32 @@
+{
+  "fixture": "tests/apps/svelte/state-edit.html",
+  "clips": [
+    {
+      "name": "agent-state-edit",
+      "start": 2.72,
+      "duration": 12.241
+    },
+    {
+      "name": "network-mocking",
+      "start": 15.018,
+      "duration": 11.337
+    }
+  ],
+  "toolFlow": [
+    "svelte_status",
+    "svelte_components",
+    "svelte_set_state"
+  ],
+  "assertions": [
+    "first instance 1→7; sibling stays 1",
+    "undo 1/2 at count 1; redo 2/2 at count 7",
+    "real response 200; enabled mock 201; disabled mock 200"
+  ],
+  "crop": {
+    "x": 32,
+    "y": 32,
+    "width": 1150,
+    "height": 798
+  },
+  "authenticationExcluded": true
+}
