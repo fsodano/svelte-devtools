@@ -18,7 +18,7 @@
 
 **Svelte DevTools** is a Vite plugin that brings a standalone Svelte 5 DevTools panel directly into your browser during development. It hooks into the Vite dev server, injects `$inspect` calls at build time, and renders a live, interactive debugging panel — no browser extension required.
 
-**Status:** v0.1.0 — Early development. APIs may change. The [completion plan](docs/plans/pending/devtools-completion.md) records observed gaps and verification status.
+**Status:** v0.1.1 — Early development. APIs may change. The [completion plan](docs/plans/pending/devtools-completion.md) records observed gaps and verification status.
 
 ---
 
@@ -308,7 +308,7 @@ npm run build:mcp          # @fsodano/svelte-devtools-mcp
 
 ### Internal dependencies are plain semver
 
-This monorepo uses npm workspaces. Publishable packages reference sibling packages with **plain semver ranges** — e.g. `"@fsodano/svelte-devtools-types": "^0.1.0"` — never `file:` or `workspace:` specifiers. npm is the package manager: it does not support the `workspace:` protocol, and `file:` paths would be packed verbatim into published manifests, breaking consumer installs.
+This monorepo uses npm workspaces. Publishable packages reference sibling packages with **plain semver ranges** — e.g. `"@fsodano/svelte-devtools-types": "^0.1.1"` — never `file:` or `workspace:` specifiers. npm is the package manager: it does not support the `workspace:` protocol, and `file:` paths would be packed verbatim into published manifests, breaking consumer installs.
 
 During development, npm resolves those ranges against the local workspace copies (the workspace versions satisfy the ranges), so builds keep using freshly compiled siblings. Published tarballs carry the same registry-safe ranges with no rewrite step.
 

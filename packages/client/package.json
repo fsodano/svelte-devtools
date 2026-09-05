@@ -1,6 +1,6 @@
 {
   "name": "@fsodano/svelte-devtools-client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "private": false,
   "description": "Svelte DevTools client UI (iframe)",
@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@phosphor-icons/core": "^2.1.1",
-    "@fsodano/svelte-devtools-types": "^0.1.0",
+    "@fsodano/svelte-devtools-types": "^0.1.1",
     "@sveltejs/vite-plugin-svelte": "^7.0.0"
   },
   "publishConfig": {

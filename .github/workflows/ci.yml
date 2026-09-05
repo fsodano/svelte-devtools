@@ -28,7 +28,7 @@ jobs:
       - run: npm run build
       - run: npm run check
       # The build above is required. npm test would build all packages again.
-      - run: npx vitest run
+      - run: npx vitest run --maxWorkers=2
       # Checks all five publishable workspaces; never publishes a package.
       - run: npm run release:check
 

@@ -100,7 +100,7 @@ export function createPassiveRuntime(): GlobalRuntime {
     endInspectBatch: makePlaceholder('endInspectBatch') as GlobalRuntime['endInspectBatch'],
     flushAllEffects: makePlaceholder('flushAllEffects') as GlobalRuntime['flushAllEffects'],
 
-    version: '0.1.0',
+    version: '0.1.1',
     init: () => {},
     emit: () => {},
     getState: () => ({ registry: null, connected: false, components: new Map() }),
@@ -195,7 +195,7 @@ export function getInitScript(): string {
     setComponentState:_b('setComponentState'),
     reportError:_b('reportError'),
     refresh:_b('refresh'),
-    version:'0.1.0',
+    version:'0.1.1',
     init:function(){},
     emit:function(){},
     getState:function(){return{registry:null,connected:false,components:new Map()};},

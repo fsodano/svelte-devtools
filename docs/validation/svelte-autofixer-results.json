@@ -1,0 +1,260 @@
+{
+  "tool": "@sveltejs/mcp",
+  "version": "0.1.26",
+  "handler": "svelteAutofixer",
+  "desiredSvelteVersion": 5,
+  "date": "2026-09-05",
+  "reviewedRelease": "0.1.1",
+  "releaseBaseCommit": "803d98a8ff02e1683071e7e51fcc53b3dbe69a0b",
+  "execution": "local compiler and ESLint; network disabled; cached public documentation catalog only",
+  "files": [
+    {
+      "filename": "packages/client/src/App.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "0613dcd1c957193ef403883166f21c159fc8c51aed3671e4095626d873c2ba27"
+    },
+    {
+      "filename": "packages/client/src/components/Assets.svelte",
+      "issues": [
+        "Unexpected href link without resolve(). at line 186, column 19"
+      ],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": true,
+      "sha256": "6e476b0b830273428efc59f731f9cbb9595dca45dbff7522e3fd17d7338c4e09"
+    },
+    {
+      "filename": "packages/client/src/components/ComponentDetail.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "2def8df317b06a9c6500f554a75714dae22cdc4b81b7225e0c48e8cb50e21963"
+    },
+    {
+      "filename": "packages/client/src/components/ComponentGraph.svelte",
+      "issues": [],
+      "suggestions": [
+        "You are calling the function `untrack` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "The usage of `bind:this` can often be replaced with an easier to read `action` or even better an `attachment`. Consider using the latter if possible."
+      ],
+      "require_another_tool_call_after_fixing": true,
+      "sha256": "266c7c5a11f340a2ce5ebd129428d35b2c8d3c698021decf922079438eb58221"
+    },
+    {
+      "filename": "packages/client/src/components/ComponentTree.svelte",
+      "issues": [],
+      "suggestions": [
+        "You are calling the function `untrack` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling the function `updateVisibleRange` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "The stateful variable \"prevListLength\" is assigned inside an $effect which is generally consider a malpractice. Consider using $derived if possible.",
+        "You are calling the function `untrack` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling the function `updateVisibleRange` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "The usage of `bind:this` can often be replaced with an easier to read `action` or even better an `attachment`. Consider using the latter if possible."
+      ],
+      "require_another_tool_call_after_fixing": true,
+      "sha256": "0ea89c07faa87090b70d4ec85578124b5e4cff649949cde8c6ad78441a4e57aa"
+    },
+    {
+      "filename": "packages/client/src/components/Dashboard.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "c416d8c1d06ba77a515527e89d9e79235d817e99ad06a9ad8b8858a4ea1ffc7b"
+    },
+    {
+      "filename": "packages/client/src/components/JsonTree.svelte",
+      "issues": [],
+      "suggestions": [
+        "Unexpected mustache interpolation with a string literal value. at line 93, column 35",
+        "Unexpected mustache interpolation with a string literal value. at line 103, column 35",
+        "Unexpected mustache interpolation with a string literal value. at line 108, column 37",
+        "Unexpected mustache interpolation with a string literal value. at line 112, column 37"
+      ],
+      "require_another_tool_call_after_fixing": true,
+      "sha256": "b43ad3fdc462dac02d0e4ddb5b0217e4a8ad2bd8affe722b42475cd61c7925fd"
+    },
+    {
+      "filename": "packages/client/src/components/MigrationScore.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "fa89d7f6c71400988e79f9d04abfca09c579118e30a2995312d623902d5a5193"
+    },
+    {
+      "filename": "packages/client/src/components/NetworkDesk.svelte",
+      "issues": [],
+      "suggestions": [
+        "You are calling the function `fetchServerEvents` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling the function `setInterval` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling the function `clearInterval` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling the function `untrack` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "The stateful variable \"entries\" is assigned inside an $effect which is generally consider a malpractice. Consider using $derived if possible.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does."
+      ],
+      "require_another_tool_call_after_fixing": true,
+      "sha256": "c7b3fdfddd6246f453671efd90ef7dc7867522bef8827f8ef02b945c3161e41d"
+    },
+    {
+      "filename": "packages/client/src/components/RouterHub.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "a2a89adb1914b1315a15d1acdc5370f4f1f9faea01c27f0e3fb1b3f706b7fa6c"
+    },
+    {
+      "filename": "packages/client/src/components/ServerView.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "11138113c526a78839ba0d86be50de8410dbce3b872f55e9420b95b290c7d6d4"
+    },
+    {
+      "filename": "packages/client/src/components/Settings.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "873ff40ec126ccb71ae79a36cf1311877a334050c8a4bd5d61da24fdd5c2dd31"
+    },
+    {
+      "filename": "packages/client/src/components/Sidebar.svelte",
+      "issues": [
+        "`{@html}` can lead to XSS attack. at line 76, column 10"
+      ],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": true,
+      "sha256": "f4f64ee1362635c2502d5dbad7822c894cead9a9a7ddbb32bb1dea61499b252d"
+    },
+    {
+      "filename": "packages/client/src/components/SplitPane.svelte",
+      "issues": [],
+      "suggestions": [
+        "The usage of `bind:this` can often be replaced with an easier to read `action` or even better an `attachment`. Consider using the latter if possible."
+      ],
+      "require_another_tool_call_after_fixing": true,
+      "sha256": "a0d935cad80b29205c1ba5149841dae79514dcd13d33da2462fe31b07d3c6108"
+    },
+    {
+      "filename": "packages/client/src/components/TimeTravelConsole.svelte",
+      "issues": [],
+      "suggestions": [
+        "You are calling the function `setInterval` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "The stateful variable \"isPlaying\" is assigned inside an $effect which is generally consider a malpractice. Consider using $derived if possible.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling the function `clearInterval` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does."
+      ],
+      "require_another_tool_call_after_fixing": true,
+      "sha256": "305486a1785e21d5c273130cabd74402034710630a20f28e1e2d832d597cb6c2"
+    },
+    {
+      "filename": "packages/client/src/components/Timeline.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "7ec710a44da74dc474caa2294310c0aa0a183bedd51b78a0ed1c39a878c33218"
+    },
+    {
+      "filename": "packages/client/src/lib/components/ErrorBoundary.svelte",
+      "issues": [],
+      "suggestions": [
+        "The stateful variable \"error\" is assigned inside an $effect which is generally consider a malpractice. Consider using $derived if possible.",
+        "The stateful variable \"hasError\" is assigned inside an $effect which is generally consider a malpractice. Consider using $derived if possible.",
+        "The stateful variable \"error\" is assigned inside an $effect which is generally consider a malpractice. Consider using $derived if possible.",
+        "You are calling the function `String` inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "The stateful variable \"hasError\" is assigned inside an $effect which is generally consider a malpractice. Consider using $derived if possible.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does.",
+        "You are calling a function inside an $effect. Please check if the function is reassigning a stateful variable because that's considered malpractice and check if it could use  `$derived` instead. Ignore this suggestion if you are sure this function is not assigning any stateful variable or if you can't check if it does."
+      ],
+      "require_another_tool_call_after_fixing": true,
+      "sha256": "bf0b76a2003286cf81d7cf4310226ab36831102a43cfcbd9f12e67d6b1e2cb97"
+    },
+    {
+      "filename": "packages/client/src/lib/stores/devtools-store.svelte.ts",
+      "issues": [],
+      "suggestions": [
+        "Found a mutable instance of the built-in Set class. Use SvelteSet instead. at line 42, column 25",
+        "Found a mutable instance of the built-in Map class. Use SvelteMap instead. at line 43, column 20",
+        "Found a mutable instance of the built-in Map class. Use SvelteMap instead. at line 77, column 20"
+      ],
+      "require_another_tool_call_after_fixing": true,
+      "sha256": "34842db37a6cfd92fd2d741ab168f7203fb89185347806c915433bdcc4f9f0d9"
+    },
+    {
+      "filename": "packages/client/src/lib/stores/time-travel-store.svelte.ts",
+      "issues": [],
+      "suggestions": [
+        "Found a mutable instance of the built-in Set class. Use SvelteSet instead. at line 281, column 27",
+        "Found a mutable instance of the built-in Map class. Use SvelteMap instead. at line 378, column 25",
+        "Found a mutable instance of the built-in Map class. Use SvelteMap instead. at line 378, column 25"
+      ],
+      "require_another_tool_call_after_fixing": true,
+      "sha256": "b7d4d5cf519cc23ba7f989406716f1f09c7239a3c4809d52db0fe352ef5d2fc0"
+    },
+    {
+      "filename": "tests/apps/pokedex/src/routes/+layout.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "d57897bce79658b378f1fc0d8fea75bb3f47a64e34956f0c2d8dfd39143ff8da"
+    },
+    {
+      "filename": "tests/apps/svelte-kit/src/routes/navigation-test/+page.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "c4b147088933c7e83b5addf330dad7676c5e7da3e9b2b848b79f2546b5b84824"
+    },
+    {
+      "filename": "tests/apps/svelte/src/MotionUnmountFixture.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "06ccb4217781ed5102eb96ebfbb4370ae693ef339e93effae17d2344225b03d2"
+    },
+    {
+      "filename": "tests/apps/svelte/src/StateEditFixture.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "e1ef9a492440c9465d818e93aba984b07c332f9e2c9e268a27d1e349e4ffdac9"
+    },
+    {
+      "filename": "tests/apps/svelte/src/StateEditInstance.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "bb2801a46736a99faae44fc794fb3327f7eb0f355c0258dd2ce89f5ec5e2656a"
+    },
+    {
+      "filename": "tests/apps/svelte/src/StressFixture.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "5db4accbc4318e5db0d8482a8484601ff005b055f37150f3d126de1b35e72622"
+    },
+    {
+      "filename": "tests/apps/svelte/src/StressItem.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "f6028bb5290fb06e9072f02c9f3026b613be9659723549da3ea22f9ba1df01d3"
+    },
+    {
+      "filename": "tests/apps/todo-sqlite/src/routes/+layout.svelte",
+      "issues": [],
+      "suggestions": [],
+      "require_another_tool_call_after_fixing": false,
+      "sha256": "d57897bce79658b378f1fc0d8fea75bb3f47a64e34956f0c2d8dfd39143ff8da"
+    }
+  ]
+}

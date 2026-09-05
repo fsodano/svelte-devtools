@@ -3,6 +3,7 @@
   import SplitPane from './SplitPane.svelte';
   import { untrack } from 'svelte';
   import { apiFetch } from '../lib/api.js';
+  import { NetworkHistory } from '../lib/network-history.js';
 
   interface NetworkEntry {
     id: string;
@@ -47,7 +48,7 @@
   let editingRuleId = $state<string | null>(null);
   let ruleError = $state('');
   let draftHint = $state('');
-  const ignoredEntries = new Set<string>();
+  const history = new NetworkHistory<NetworkEntry>();
 
   const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
   const filters = [
@@ -58,6 +59,7 @@
 
   // Poll server events
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let pollInFlight = false;
 
   $effect(() => {
     fetchServerEvents();
@@ -67,14 +69,14 @@
   });
 
   async function fetchServerEvents() {
+    if (pollInFlight) return;
+    pollInFlight = true;
     try {
       const res = await apiFetch('/__svelte-devtools/server-events?last=50');
       if (!res.ok) return;
       const data = await res.json();
       if (!data?.events) return;
-      const existingIds = new Set(entries.map(e => e.id));
       const newEntries: NetworkEntry[] = (data.events as { id: string; type: string; timestamp: number; duration?: number; data?: Record<string, unknown> }[])
-        .filter(e => !existingIds.has(e.id) && !ignoredEntries.has(e.id))
         .map(e => ({
           id: e.id, type: e.type, url: e.data?.url as string | undefined, method: e.data?.method as string | undefined,
           statusCode: e.data?.statusCode as number | undefined, duration: e.duration,
@@ -87,10 +89,8 @@
           requestHeaders: e.data?.reqHeaders as Record<string, string> | undefined,
           responseHeaders: e.data?.resHeaders as Record<string, string> | undefined,
         }));
-      if (newEntries.length > 0) {
-        entries = [...entries, ...newEntries].slice(-500);
-      }
-    } catch {}
+      entries = history.ingest('server', newEntries);
+    } catch {} finally { pollInFlight = false; }
   }
 
   // Listen for client-side requests from the store
@@ -98,26 +98,24 @@
     const tl = devtoolsStore.timeline;
     const clientReqs = tl.filter(e => (e.type as string) === 'client:request').slice(-50);
     untrack(() => {
-    for (const req of clientReqs) {
-      const data = req.data as Record<string, unknown> || {};
-      if (!ignoredEntries.has(req.id) && !entries.find(e => e.id === req.id)) {
-        entries = [...entries, {
-          id: req.id, type: req.type, url: data.url as string,
-          method: data.method as string, statusCode: data.statusCode as number,
-          duration: req.duration, timestamp: req.timestamp,
-          requestHeaders: data.requestHeaders as Record<string, string> | undefined,
-          responseHeaders: data.responseHeaders as Record<string, string> | undefined,
-          requestBody: data.requestBody as string | undefined,
-          responseBody: data.responsePreview as string | undefined,
-          responseBodyTruncated: data.responseBodyTruncated === true,
-          contentType: data.contentType as string | undefined,
-          responseSize: data.responseSize as number | undefined,
-          mockResponse: data.mockResponse as boolean | undefined,
-          mockRuleId: data.mockRuleId as string | undefined,
-          mockRulePattern: data.mockRulePattern as string | undefined,
-        }];
-      }
-    }
+      entries = history.ingest('client', clientReqs.map(req => {
+        const data = req.data as Record<string, unknown> || {};
+        return {
+            id: req.id, type: req.type, url: data.url as string,
+            method: data.method as string, statusCode: data.statusCode as number,
+            duration: req.duration, timestamp: req.timestamp,
+            requestHeaders: data.requestHeaders as Record<string, string> | undefined,
+            responseHeaders: data.responseHeaders as Record<string, string> | undefined,
+            requestBody: data.requestBody as string | undefined,
+            responseBody: data.responsePreview as string | undefined,
+            responseBodyTruncated: data.responseBodyTruncated === true,
+            contentType: data.contentType as string | undefined,
+            responseSize: data.responseSize as number | undefined,
+            mockResponse: data.mockResponse as boolean | undefined,
+            mockRuleId: data.mockRuleId as string | undefined,
+            mockRulePattern: data.mockRulePattern as string | undefined,
+        };
+      }));
     });
   });
 
@@ -225,7 +223,7 @@
     syncMockRules();
   }
 
-  function clearEntries() { entries.forEach(entry => ignoredEntries.add(entry.id)); entries = []; selectedEntry = null; }
+  function clearEntries() { entries = history.clear(); selectedEntry = null; }
 
   function formatTime(ts: number): string {
     return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
