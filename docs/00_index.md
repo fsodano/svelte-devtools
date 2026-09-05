@@ -58,7 +58,7 @@ flowchart TB
 
 ### 1. Install the Plugin
 
-Follow the [source installation steps](02_vite-plugin.md#installation) for GitHub release 0.1.1. Build the checkout, then use the fixture or install the built local plugin directory into your project. The 0.1.x packages are not published to npm.
+Follow the [source installation steps](02_vite-plugin.md#installation) for GitHub release 0.2.0. Build the checkout, then use the fixture or install the built local plugin directory into your project. The 0.2.x packages are not published to npm.
 
 ### 2. Configure Vite
 

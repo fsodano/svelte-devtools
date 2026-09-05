@@ -1,6 +1,6 @@
 # Vue DevTools Feature Analysis — Adaptation for Svelte DevTools
 
-> This comparison contains design context as well as implemented features. For source release 0.1.1, use the [client guide](04_client.md), [server limitations](05_server.md#client-display), and [MCP contract](07_mcp.md). SQL query tracing is not implemented.
+> This comparison contains design context as well as implemented features. For source release 0.2.0, use the [client guide](04_client.md), [server tracing](05_server.md), and [MCP contract](07_mcp.md). Opt-in synchronous SQLite tracing is available; the server guide defines its scope.
 
 > Analysis date: 2026-07-23
 > Source: https://github.com/vuejs/devtools

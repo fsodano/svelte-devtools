@@ -69,6 +69,8 @@
 		<input
 			type="text"
 			name="title"
+			required
+			maxlength="200"
 			bind:value={newTitle}
 			bind:this={inputRef}
 			placeholder="What needs to be done?"
@@ -76,16 +78,16 @@
 			style="margin: 0; flex: 1;"
 			autocomplete="off"
 		/>
-		<button type="submit" disabled={!newTitle.trim()} style="width: auto; flex-shrink: 0;">
+		<button type="submit" style="width: auto; flex-shrink: 0;">
 			Add
 		</button>
 	</form>
 
 	<!-- validation errors -->
 	{#if form?.errors}
-		{@const errors = Object.values(form.errors)}
+		{@const errors = Object.entries(form.errors)}
 		<article style="background: var(--pico-ins-color); border-color: var(--pico-del-color); padding: var(--pico-spacing);">
-			{#each errors as error}
+			{#each errors as [field, error] (field)}
 				<small style="color: var(--pico-del-color);">{error}</small>
 			{/each}
 		</article>

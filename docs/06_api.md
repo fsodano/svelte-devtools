@@ -4,9 +4,9 @@ Public APIs and type definitions for Svelte DevTools.
 
 ## Scope and retention
 
-This reference describes source release 0.1.1. Runtime inspection comes from the selected browser session's periodic authenticated panel sync. It is cached data, not a direct query of an unopened application. Use status discovery and `sessionId` to select the intended session. State edits wait for that session's runtime acknowledgement.
+This reference describes source release 0.2.0. Runtime inspection comes from the selected browser session's periodic authenticated panel sync. It is cached data, not a direct query of an unopened application. Use status discovery and `sessionId` to select the intended session. State edits wait for that session's runtime acknowledgement.
 
-The Network panel retains 500 combined browser/server rows. The server trace buffer and runtime timeline each retain up to 1,000 entries. These storage limits are distinct from page sizes and MCP output limits. MCP has nine tools and bounded response parsing; see [MCP limits](07_mcp.md). SQL query spans are not implemented.
+The Network panel retains 500 combined browser/server rows. The server trace buffer and runtime timeline each retain up to 1,000 entries. These storage limits are distinct from page sizes and MCP output limits. MCP has nine tools and bounded response parsing; see [MCP limits](07_mcp.md). Explicit synchronous SQLite query spans use `server:sql`; see [server integration](05_server.md).
 
 ## Global APIs
 
@@ -233,7 +233,7 @@ interface SvelteDevToolsPluginOptions {
 ```typescript
 interface ServerEvent {
   id: string;
-  type: 'server:request' | 'server:ssr' | 'server:error' | 'server:trace';
+  type: 'server:request' | 'server:ssr' | 'server:error' | 'server:trace' | 'server:sql';
   timestamp: number;
   duration?: number;
   data: {
@@ -419,3 +419,11 @@ See [Agent access with MCP](07_mcp.md) for the stdio setup, eight read-only tool
 The API root reports `apiVersion`, `capabilities`, and `operations`. Check `capabilities.runtimeData.requiresOpenPanel`, `hasSynced`, `cachedAt`, and `ageMs` before interpreting component or snapshot data. Use `capabilities.sessions` to select the target panel for runtime reads and state edits. `operations.setState.supported` reports the command capability; an available session is still required. Server availability alone does not establish that runtime state is live.
 
 MCP runtime tools reject missing or stale cache data. Direct HTTP clients must inspect the cache metadata themselves. Route results use the resolved SvelteKit routes directory, with `src/routes` as the fallback when configuration is unavailable; migration results cover transformed files. Neither endpoint is a full-project semantic analysis.
+
+### SQLite adapter and correlated server events
+
+The server-only `@fsodano/vite-plugin-svelte-devtools/sqlite` export provides `traceSqliteQuery(options, callback)`. `enabled` is required; `database` is a logical label; `operation` is `get`, `all`, `run`, `exec`, or `pragma`. `statement` is optional and is collected only with `captureStatement: true`. The synchronous callback's native return/error passes through unchanged. Disabled calls and calls outside a request context emit no event.
+
+`server:sql` uses the existing event envelope, with measured `duration` in milliseconds. Its data contains `traceId`, `spanId`, `parentSpanId`, optional `routeId`, `database`, `operation`, optional `statement`, `statementTruncated`, optional `rowCount`, `status`, and optional safe `error` code. Statements are limited to 4,096 characters. Bindings and result rows are omitted. See [full semantics](05_server.md#observe-a-sqlite-query).
+
+The canonical server-events response is an object with `events` and `count`. The legacy endpoint returns an array. MCP `svelte_server_events` accepts `last` from 1 to 500 and optional `sinceId`; returned event IDs match the HTTP API.

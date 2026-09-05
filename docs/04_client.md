@@ -111,7 +111,7 @@ Key behaviors:
 - **Debounced batching** — `pendingStateChanges` queue flushed on a timer; collapses to latest value per `(componentId, key)` and applies in one immutable pass (`flushStateChanges`)
 - **Motion gate** — Spring/Tween frames dropped until `|current − target| < 0.0015` (SETTLE_TOLERANCE); duplicate settled frames skipped
 - **Timeline cap** — max 1000 entries
-- **Server events polling** — `/__svelte-devtools/server-events` every 1s
+- **Server events polling** — `/__svelte-devtools/api/server-events` every 1s
 - **Server sync** — authenticated `fetch('/__svelte-devtools/api/sync', ...)` every 2s, with at most one request in flight, mirrors components/timeline/snapshots so the HTTP API can serve them
 - **Bridge wiring** — `init()` registers handlers for `component:mount`, `component:unmount`, `state:change`, `trace:trigger`, `effect:run`, `client:request`, `inspect:toggle`, `inspect:select`
 
@@ -159,7 +159,7 @@ Filter chips (All / Components / State / Effects / Server / Client Requests), Cl
 
 ### NetworkDesk
 
-The history model combines server traces and browser requests, retaining at most 500 rows. In release 0.1.1, the Network poller expects an object with `events`, while its legacy endpoint returns an array. Server traces are available through HTTP/MCP but do not populate this panel through that poller. See [server display limitation](05_server.md#client-display). Clear dismisses the visible history. Polling does not overlap, and retained server events do not immediately repopulate cleared rows. The detail pane is resizable and scrolls independently.
+The history model combines browser requests, SSR requests, server fetches, and SQL spans, retaining at most 500 rows. It polls the authenticated canonical API and reads its `events` array. Use the SSR, SQL, and Errors filters, then select a row to inspect timing, statement or request details, and a correlated trace waterfall. Trace/span IDs establish relationships; retained parents may be outside the current window. Clear dismisses visible history without replaying retained rows. Polling does not overlap. The detail pane is resizable and scrolls independently. See [server tracing](05_server.md).
 
 Create a mock rule from a recorded browser request, edit its response, and enable it in Mock Rules. Interception applies to browser `fetch` only. Native XMLHttpRequest, server fetches, and DevTools infrastructure requests pass through. A truncated response preview is not a complete response body; review it before using it as a mock.
 

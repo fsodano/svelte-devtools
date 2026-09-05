@@ -12,7 +12,7 @@ Svelte DevTools runs beside your app in the Vite DevTools dock. It is a developm
 
 *Captured from the included plain Svelte app. The panel runs beside the application in the Vite DevTools dock.*
 
-**Early development · v0.1.1.** APIs may change. This is an independent community project, inspired by Vue DevTools. The current release is available in source; npm still contains the older 0.0.1 packages. Use the checkout below to try the features described here.
+**Early development · v0.2.0.** APIs may change. This is an independent community project, inspired by Vue DevTools. The current release is available in source; npm still contains the older 0.0.1 packages. Use the checkout below to try the features described here.
 
 [Try it locally](#try-it-locally) · [Connect your agent](#connect-your-agent) · [Explore the tools](#explore-the-tools) · [Sample apps](#sample-apps) · [Contribute](#develop-locally)
 

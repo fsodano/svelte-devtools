@@ -4,14 +4,14 @@ export class NetworkHistory<T extends { id: string }> {
   private buffers = new Map<'client' | 'server', Set<string>>();
   private dismissed = new Set<string>();
 
-  constructor(private readonly limit = 500) {}
+  constructor(private readonly limit = 500, private readonly bufferLimit = limit) {}
 
   get entries(): T[] { return this.rows; }
   get dismissedCount(): number { return this.dismissed.size; }
 
   ingest(source: 'client' | 'server', batch: T[]): T[] {
     // Each producer supplies a bounded current buffer, not an append-only log.
-    const current = batch.slice(-this.limit);
+    const current = batch.slice(-this.bufferLimit);
     const previous = this.buffers.get(source) ?? new Set<string>();
     this.buffers.set(source, new Set(current.map(entry => entry.id)));
     const retained = new Set([...this.buffers.values()].flatMap(ids => [...ids]));

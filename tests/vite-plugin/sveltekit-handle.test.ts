@@ -15,7 +15,7 @@ function createMockResolve(html: string) {
   return vi.fn().mockImplementation(async (_event: unknown, options: Record<string, unknown> | undefined) => {
     const transformPageChunk = options?.transformPageChunk as ((args: { html: string; done: boolean; originalHtml: string }) => string) | undefined;
     if (transformPageChunk) {
-      const result = transformPageChunk({ html, done: false, originalHtml: html });
+      const result = transformPageChunk({ html, done: true, originalHtml: html });
       return new Response(result || html);
     }
     return new Response(html);
@@ -201,7 +201,7 @@ describe('sveltekit', () => {
       expect(evt.data.error!.message).toBe('resolve failed');
     });
 
-    it('calls markSeen with request key', async () => {
+    it('does not use legacy URL-key deduplication', async () => {
       const handle = svelteDevToolsHandle();
       const seenKeys: string[] = [];
       (globalThis as Record<string, unknown>).__svelte_devtools_markSeen__ = (key: string) => {
@@ -214,7 +214,7 @@ describe('sveltekit', () => {
 
       await handle({ event, resolve });
 
-      expect(seenKeys).toContain('PUT:/api/data');
+      expect(seenKeys).toEqual([]);
     });
 
     it('devtoolsInject path is included when globalThis has it', async () => {
@@ -326,7 +326,7 @@ describe('sveltekit', () => {
       expect(scriptIdx).toBeLessThan(lastHtmlIdx);
     });
 
-    it('handles HEAD method correctly in markSeen', async () => {
+    it('does not use legacy URL-key deduplication for HEAD', async () => {
       const handle = svelteDevToolsHandle();
       const seenKeys: string[] = [];
       (globalThis as Record<string, unknown>).__svelte_devtools_markSeen__ = (key: string) => {
@@ -339,7 +339,7 @@ describe('sveltekit', () => {
 
       await handle({ event, resolve });
 
-      expect(seenKeys).toContain('HEAD:/health');
+      expect(seenKeys).toEqual([]);
     });
 
     it('includes routeId as null when not set', async () => {
@@ -524,5 +524,67 @@ describe('streaming and production isolation', () => {
     await vi.waitFor(() => expect(emit).toHaveBeenCalledOnce());
     expect(emit.mock.calls[0][0].data).toMatchObject({ method: 'POST', requestBody: 'hello', reqHeaders: { 'x-test': 'yes' }, responsePreview: 'z'.repeat(2000), responseBodyTruncated: true });
     expect(await request.text()).toBe('hello');
+  });
+});
+
+describe('request correlation and streamed HTML', () => {
+  it('injects once across partial head tags without buffering earlier chunks', async () => {
+    const handle = svelteDevToolsHandle();
+    let outputs: string[] = [];
+    await handle({ event: createMockEvent(), resolve: async (_event, options) => {
+      const chunks = ['<html><head><title>ok</title></he', 'ad><body>first', '<div>later</div>', '</body></html>'];
+      for (let i = 0; i < chunks.length; i++) outputs.push(await options!.transformPageChunk!({ html: chunks[i], done: i === chunks.length - 1 }) ?? '');
+      return new Response(outputs.join(''));
+    } });
+    expect(outputs[0]).toBe('<html><head><title>ok</title>');
+    expect(outputs.join('').split(RUNTIME_SCRIPT)).toHaveLength(2);
+    expect(outputs.join('').replace(RUNTIME_SCRIPT, '').replace(NAVIGATION_BRIDGE_SCRIPT, '')).toBe('<html><head><title>ok</title></head><body>first<div>later</div></body></html>');
+  });
+
+  it('isolates concurrent same-route requests and traces internal fetch errors without replacing them', async () => {
+    const { runWithTraceContext, getTraceContext } = await import('../../packages/vite-plugin/src/trace-context.js');
+    const events: any[] = [];
+    const handle = svelteDevToolsHandle();
+    const failure = new Error('network unavailable');
+    let release!: () => void;
+    const barrier = new Promise<void>(resolve => { release = resolve; });
+    const execute = (traceId: string, wait: boolean) => {
+      const event = createMockEvent('/same');
+      event.fetch = vi.fn(async () => { expect(getTraceContext()?.traceId).toBe(traceId); throw failure; });
+      return runWithTraceContext({ traceId, spanId: traceId + '-root', emit: e => events.push(e) }, () => handle({ event, resolve: async () => {
+        if (wait) await barrier; else release();
+        await expect(event.fetch('/internal')).rejects.toBe(failure);
+        expect(getTraceContext()?.spanId).toBe(traceId + '-root');
+        return new Response('ok');
+      } }));
+    };
+    await Promise.all([execute('a', true), execute('b', false)]);
+    await vi.waitFor(() => expect(events).toHaveLength(4));
+    for (const traceId of ['a', 'b']) {
+      const related = events.filter(e => e.data.traceId === traceId);
+      expect(related).toHaveLength(2);
+      expect(related.find(e => e.type === 'server:error').data.parentSpanId).toBe(traceId + '-root');
+      expect(related.find(e => e.type === 'server:ssr').data.spanId).toBe(traceId + '-root');
+    }
+  });
+
+  it('restores native fetch after the last server owner without overwriting a later wrapper', async () => {
+    const { acquireFetchTracing } = await import('../../packages/vite-plugin/src/sveltekit.js');
+    const native = vi.fn(async () => new Response('ok')) as typeof fetch;
+    vi.stubGlobal('fetch', native);
+    const closeA = acquireFetchTracing();
+    const wrapper = globalThis.fetch;
+    const closeB = acquireFetchTracing();
+    expect(globalThis.fetch).toBe(wrapper);
+    closeA();
+    expect(globalThis.fetch).toBe(wrapper);
+    closeB();
+    expect(globalThis.fetch).toBe(native);
+    const closeC = acquireFetchTracing();
+    const external = vi.fn(async () => new Response('external')) as typeof fetch;
+    globalThis.fetch = external;
+    closeC();
+    expect(globalThis.fetch).toBe(external);
+    vi.unstubAllGlobals();
   });
 });

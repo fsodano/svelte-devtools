@@ -5,7 +5,7 @@ description: Use when debugging Svelte 5 reactivity issues, inspecting component
 
 # Debugging with Svelte DevTools
 
-Reference for Svelte DevTools 0.1.1 on Svelte 5.20+ and Vite 8. Use MCP first for agent discovery and runtime inspection. See [MCP setup](../docs/07_mcp.md) for the local stdio server.
+Reference for the current Svelte DevTools source on Svelte 5.20+ and Vite 8. Use MCP first for agent discovery and runtime inspection. See [MCP setup](../docs/07_mcp.md) for the local stdio server.
 
 ## Agent API Overview
 
@@ -470,3 +470,9 @@ curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
 - Component, timeline, and snapshot data is cached separately by panel session via periodic authenticated fetch. If the DevTools panel has not been opened, the cache may be empty.
 - Server events require tracing integration and observed requests. Migration scores come from the live build-time registry: with no scored components, `overall` is `null` and `totalFiles` is `0`.
 - Port numbers (5173, 5174, etc.) vary by project.
+
+## Diagnose a database-backed request
+
+After an application action, call `svelte_server_events` with `{ "last": 100 }`. Find `server:sql` events, then match each `data.parentSpanId` to the parent's `data.spanId`. Use `data.traceId` to group the request. Compare the same IDs in Network's SQL filter and trace waterfall. `last` accepts at most 500; retained history can omit a parent.
+
+Inspect duration, operation, safe error code, optional row count, and statement truncation. Statement capture requires explicit opt-in and omits bindings and result rows. A query span proves that call ran, not that a surrounding transaction committed. Do not retry a database mutation from trace visibility alone or describe Time Travel as database rollback. Use [the isolated SSR/SQL verifier](../scripts/verify-ssr-sql.mjs) for regression checks.

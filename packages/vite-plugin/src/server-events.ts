@@ -6,32 +6,26 @@ interface ServerEvent {
     data: unknown;
 }
 
-const serverEvents: ServerEvent[] = [];
+const defaultEvents: ServerEvent[] = [];
+const stores = new WeakMap<object, ServerEvent[]>();
+function eventsFor(owner?: object): ServerEvent[] {
+    if (!owner) return defaultEvents;
+    let events = stores.get(owner);
+    if (!events) { events = []; stores.set(owner, events); }
+    return events;
+}
 
-// Dedup: track seen event IDs to prevent duplicate processing
-const seenIds = new Map<string, number>();
-const SEEN_CLEANUP_INTERVAL = 60_000; // 1 minute
-const SEEN_MAX_AGE = 300_000; // 5 minutes
-
-// Periodically clean old seen IDs to prevent memory leaks
-const seenCleanup = setInterval(() => {
-    const now = Date.now();
-    for (const [key, timestamp] of seenIds) {
-        if (now - timestamp > SEEN_MAX_AGE) {
-            seenIds.delete(key);
-        }
-    }
-}, SEEN_CLEANUP_INTERVAL);
-if (seenCleanup.unref) seenCleanup.unref();
 const MAX_EVENTS = 1000;
 
-export function addServerEvent(event: ServerEvent): void {
+export function addServerEvent(event: ServerEvent, owner?: object): void {
+    const serverEvents = eventsFor(owner);
     serverEvents.push(event);
     if (serverEvents.length < MAX_EVENTS) return;
     serverEvents.splice(0, serverEvents.length - MAX_EVENTS);
 }
 
-export function getServerEvents(opts?: { last?: number; sinceId?: string }): ServerEvent[] {
+export function getServerEvents(opts?: { last?: number; sinceId?: string }, owner?: object): ServerEvent[] {
+    const serverEvents = eventsFor(owner);
     if (opts?.sinceId) {
         const idx = serverEvents.findIndex(e => e.id === opts.sinceId);
         if (idx !== -1) return serverEvents.slice(idx + 1);
@@ -42,6 +36,6 @@ export function getServerEvents(opts?: { last?: number; sinceId?: string }): Ser
     return serverEvents.slice();
 }
 
-export function clearServerEvents(): void {
-    serverEvents.length = 0;
+export function clearServerEvents(owner?: object): void {
+    eventsFor(owner).length = 0;
 }

@@ -1,17 +1,7 @@
 import type { Handle } from '@sveltejs/kit';
-
+import { randomUUID } from 'node:crypto';
+import { getTraceContext, runWithTraceContext, type TraceContext, type ServerTraceEvent } from './trace-context.js';
 export type { Handle };
-
-const GLOBAL_KEY = '__svelte_devtools_addEvent__';
-const SEEN_KEY = '__svelte_devtools_markSeen__';
-
-interface ServerEvent {
-    id: string;
-    type: string;
-    timestamp: number;
-    duration?: number;
-    data: unknown;
-}
 
 interface BodyPreview { text: string; bytes: number; truncated: boolean }
 const emptyPreview = (): BodyPreview => ({ text: '', bytes: 0, truncated: false });
@@ -56,140 +46,159 @@ function capturePreview(source: Request | Response, limit = 2000): Promise<BodyP
     } catch { return Promise.resolve({ ...emptyPreview(), truncated: true }); }
 }
 
-/** Importing the production no-op must not change global fetch. */
-let fetchInterceptorInstalled = false;
-function installFetchInterceptor(): void {
-    if (fetchInterceptorInstalled) return;
-    fetchInterceptorInstalled = true;
-    const originalFetch = globalThis.fetch.bind(globalThis);
-    globalThis.fetch = ((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-        const addEvent = (globalThis as Record<string, unknown>)[GLOBAL_KEY] as ((e: ServerEvent) => void) | undefined;
-        if (!addEvent) return originalFetch(input, init);
-        const url = input instanceof Request ? input.url : String(input);
-        const startTime = Date.now();
-        const perfStart = performance.now();
-        const method = init?.method || (input instanceof Request ? input.method : 'GET');
-        // Do not construct a Request from an existing body: that can disturb the upload.
-        // Request objects can be cloned; init bodies are inspected only when already strings.
-        const requestPreview = init?.body != null
-            ? Promise.resolve({ text: typeof init.body === 'string' ? init.body.slice(0, 2000) : '(stream or binary body)', truncated: typeof init.body !== 'string' || init.body.length > 2000 })
-            : input instanceof Request ? capturePreview(input) : Promise.resolve(emptyPreview());
-        const promise = originalFetch(input, init);
-        void promise.then(async response => {
-            const duration = performance.now() - perfStart;
-            const [body, preview] = await Promise.all([requestPreview, capturePreview(response)]);
-            addEvent({
-                id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-                type: 'server:request', timestamp: startTime, duration,
-                data: {
-                    url, method, statusCode: response.status, _handler: 'fetch-interceptor',
-                    requestBody: body.text || undefined, requestBodyTruncated: body.truncated,
-                    responseSize: preview.truncated ? undefined : preview.bytes,
-                    responsePreview: preview.text, responseBodyTruncated: preview.truncated,
-                    contentType: response.headers.get('content-type') || '',
-                    reqHeaders: Object.fromEntries(new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))),
-                    resHeaders: Object.fromEntries(response.headers),
-                },
-            });
-        }).catch(() => { /* A trace must never alter the original fetch promise. */ });
-        return promise;
-    }) as typeof globalThis.fetch;
+
+const fetchKey = Symbol.for('svelte-devtools.fetch-tracing.v1');
+interface FetchInstallation { original: typeof fetch; wrapper: typeof fetch; owners: Set<object> }
+const fetchGlobals = globalThis as typeof globalThis & { [fetchKey]?: FetchInstallation };
+
+function errorMessage(error: unknown, fallback: string): string {
+    try {
+        const descriptor = error && typeof error === 'object' ? Object.getOwnPropertyDescriptor(error, 'message') : undefined;
+        return typeof descriptor?.value === 'string' ? descriptor.value.slice(0, 2000) : fallback;
+    } catch { return fallback; }
+}
+function safeEmit(context: TraceContext, event: ServerTraceEvent): void {
+    try { context.emit?.(event); } catch { /* Tracing never changes application results. */ }
+}
+function fallbackContext(): TraceContext {
+    const emit = (globalThis as Record<string, unknown>).__svelte_devtools_addEvent__ as TraceContext['emit'];
+    return { traceId: randomUUID(), spanId: randomUUID(), emit };
+}
+
+/** Preserve the native promise, response, thrown value, and upload body. */
+function traceFetch(original: typeof fetch, receiver: unknown, input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> {
+    const parent = getTraceContext() ?? fallbackContext();
+    if (!parent.emit || parent.fetchInProgress) return original.call(receiver, input, init);
+    const context = { ...parent, spanId: randomUUID(), fetchInProgress: true };
+    const timestamp = Date.now();
+    const start = performance.now();
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method || (input instanceof Request ? input.method : 'GET');
+    const requestPreview = init?.body != null
+        ? Promise.resolve({ text: typeof init.body === 'string' ? init.body.slice(0, 2000) : '(stream or binary body)', truncated: typeof init.body !== 'string' || init.body.length > 2000 })
+        : input instanceof Request ? capturePreview(input) : Promise.resolve(emptyPreview());
+    const base = { url, method, traceId: context.traceId, spanId: context.spanId, parentSpanId: parent.spanId, routeId: parent.routeId, _handler: 'fetch-interceptor' };
+    const failure = (error: unknown) => safeEmit(context, {
+        id: context.spanId, type: 'server:error', timestamp, duration: performance.now() - start,
+        data: { ...base, statusCode: 0, error: { message: errorMessage(error, 'Fetch failed') } },
+    });
+    let promise: Promise<Response>;
+    try { promise = runWithTraceContext(context, () => original.call(receiver, input, init)); }
+    catch (error) { failure(error); throw error; }
+    void promise.then(response => {
+        const duration = performance.now() - start;
+        void Promise.all([requestPreview, capturePreview(response)]).then(([body, preview]) => safeEmit(context, {
+            id: context.spanId, type: 'server:request', timestamp, duration,
+            data: { ...base, statusCode: response.status,
+                requestBody: body.text || undefined, requestBodyTruncated: body.truncated,
+                responseSize: preview.truncated ? undefined : preview.bytes,
+                responsePreview: preview.text, responseBodyTruncated: preview.truncated,
+                contentType: response.headers.get('content-type') || '',
+                reqHeaders: Object.fromEntries(new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))),
+                resHeaders: Object.fromEntries(response.headers),
+            },
+        })).catch(() => {});
+    }, failure).catch(() => {});
+    return promise;
+}
+
+function installFetchInterceptor(): FetchInstallation {
+    const installed = fetchGlobals[fetchKey];
+    if (installed && globalThis.fetch === installed.wrapper) return installed;
+    const original = globalThis.fetch;
+    const wrapper: typeof fetch = function(input, init) { return traceFetch(original, globalThis, input, init); };
+    const state = { original, wrapper, owners: installed?.owners ?? new Set<object>() };
+    fetchGlobals[fetchKey] = state;
+    globalThis.fetch = wrapper;
+    return state;
+}
+
+/** Called by a dev server, not at module import. Last owner restores only its own wrapper. */
+export function acquireFetchTracing(): () => void {
+    const state = installFetchInterceptor();
+    const owner = {};
+    state.owners.add(owner);
+    return () => {
+        state.owners.delete(owner);
+        if (!state.owners.size && fetchGlobals[fetchKey] === state) {
+            if (globalThis.fetch === state.wrapper) globalThis.fetch = state.original;
+            delete fetchGlobals[fetchKey];
+        }
+    };
 }
 
 export function svelteDevToolsHandle(): Handle {
     installFetchInterceptor();
     return async ({ event, resolve }) => {
-        const svelteRuntime =
-            `<script type="module" src="/__svelte-devtools/svelte-runtime.js"></script>`;
-
-        // ADR-0012 Phase 2: the navigation bridge is a Vite-transformed virtual
-        // module (packages/vite-plugin/src/index.ts) that assigns the real
-        // SvelteKit goto to window.__SVELTE_DEVTOOLS_REAL_GOTO__. Injected here
-        // because SvelteKit SSR bypasses Vite's transformIndexHtml.
-        const navigationBridge =
-            `<script type="module" src="/@svelte-devtools-navigation-bridge"></script>`;
-
-        // Inject @vitejs/devtools client for SvelteKit SSR (Vite's transformIndexHtml is bypassed by SSR)
-        const devtoolsInjectPath = (globalThis as Record<string, unknown>).__SVELTE_DEVTOOLS_INJECT_PATH__ as string | undefined;
-        const devtoolsInject = devtoolsInjectPath
-            ? `<script type="module" src="/@fs${devtoolsInjectPath}"></script>`
-            : '';
-
-        const reqKey = `${event.request.method}:${event.url.pathname}`;
-        const markSeen = (globalThis as Record<string, unknown>)[SEEN_KEY] as
-            | ((key: string) => void)
-            | undefined;
-        if (markSeen) markSeen(reqKey);
-
-        const addEvent = (globalThis as Record<string, unknown>)[GLOBAL_KEY] as ((e: ServerEvent) => void) | undefined;
-        const shouldTrace = !!addEvent && !/\.(svelte|js|ts|css|json|ico|svg|png|woff2?)$/.test(event.url.pathname);
-        const requestPreview = shouldTrace ? capturePreview(event.request) : Promise.resolve(emptyPreview());
-
-        const startTime = Date.now();
-        const perfStart = performance.now();
-        let response: Response | undefined;
-        let error: Error | undefined;
-
-        try {
-            response = await resolve(event, {
-            transformPageChunk: ({ html }) => {
-                try {
-                    const marker = `</head>`;
-                    let idx = html.indexOf(marker);
-                    if (idx === -1) {
-                        const bodyIdx = html.indexOf('</body>');
-                        if (bodyIdx === -1) {
-                            const htmlIdx = html.lastIndexOf('</html>');
-                            if (htmlIdx !== -1) {
-                                return html.slice(0, htmlIdx) + devtoolsInject + navigationBridge + svelteRuntime + html.slice(htmlIdx);
-                            }
-                            return html + devtoolsInject + navigationBridge + svelteRuntime;
-                        }
-                        return html.slice(0, bodyIdx) + devtoolsInject + navigationBridge + svelteRuntime + html.slice(bodyIdx);
-                    }
-                    return html.slice(0, idx) + devtoolsInject + navigationBridge + svelteRuntime + html.slice(idx);
-                } catch (err) {
-                    console.warn('[Svelte DevTools] transformPageChunk failed:', err);
-                    return html;
+        const inherited = getTraceContext();
+        // The outer HTTP context is a request identity, not a method/path cache.
+        if (inherited) inherited.handledByKit = true;
+        const context: TraceContext = {
+            ...(inherited ?? fallbackContext()),
+            routeId: event.route.id,
+            // Internal event.fetch can dispatch another Kit request in-process.
+            spanId: inherited?.fetchInProgress ? randomUUID() : inherited?.spanId ?? randomUUID(),
+            fetchInProgress: false,
+        };
+        return runWithTraceContext(context, async () => {
+            const injectPath = context.injectPath ?? (globalThis as Record<string, unknown>).__SVELTE_DEVTOOLS_INJECT_PATH__ as string | undefined;
+            const scripts = (injectPath ? `<script type="module" src="/@fs${injectPath}"></script>` : '') +
+                '<script type="module" src="/@svelte-devtools-navigation-bridge"></script>' +
+                '<script type="module" src="/__svelte-devtools/svelte-runtime.js"></script>';
+            let injected = false;
+            let tail = '';
+            // Keep at most a closing-tag prefix across chunks; never buffer an HTML response.
+            const transformPageChunk = ({ html, done }: { html: string; done: boolean }): string => {
+                if (injected) return html;
+                const chunk = tail + html;
+                tail = '';
+                const marker = chunk.indexOf('</head>');
+                if (marker !== -1) { injected = true; return chunk.slice(0, marker) + scripts + chunk.slice(marker); }
+                if (done) {
+                    injected = true;
+                    const end = chunk.indexOf('</body>') !== -1 ? chunk.indexOf('</body>') : chunk.lastIndexOf('</html>');
+                    return end === -1 ? chunk + scripts : chunk.slice(0, end) + scripts + chunk.slice(end);
+                }
+                // A closing head tag can straddle chunk boundaries.
+                for (let n = Math.min(6, chunk.length); n > 0; n--) {
+                    if ('</head>'.startsWith(chunk.slice(-n))) { tail = chunk.slice(-n); return chunk.slice(0, -n); }
+                }
+                return chunk;
+            };
+            const originalFetch = event.fetch;
+            if (originalFetch) event.fetch = ((input, init) => traceFetch(originalFetch, event, input, init)) as typeof event.fetch;
+            const shouldTrace = !!context.emit && !/^\/(?:__svelte-devtools|\.devtools)(?:\/|$)/.test(event.url.pathname) &&
+                !/\.(svelte|js|ts|css|ico|svg|png|woff2?)$/.test(event.url.pathname);
+            const requestPreview = shouldTrace ? capturePreview(event.request) : Promise.resolve(emptyPreview());
+            const timestamp = Date.now();
+            const start = performance.now();
+            let response: Response | undefined;
+            let failure: unknown;
+            try { response = await resolve(event, { transformPageChunk }); return response; }
+            catch (error) { failure = error; throw error; }
+            finally {
+                if (shouldTrace) {
+                    const duration = performance.now() - start;
+                    const contentType = response?.headers.get('content-type') || '';
+                    const preview = response ? capturePreview(response, contentType.includes('json') ? 2000 : 500) : Promise.resolve(emptyPreview());
+                    void Promise.all([requestPreview, preview]).then(([body, result]) => safeEmit(context, {
+                        id: context.spanId, type: failure || (response?.status ?? 0) >= 400 ? 'server:error' : 'server:ssr', timestamp, duration,
+                        data: {
+                            traceId: context.traceId, spanId: context.spanId,
+                            parentSpanId: inherited?.fetchInProgress ? inherited.spanId : undefined,
+                            routeId: event.route.id, url: event.url.pathname + event.url.search, method: event.request.method,
+                            _handler: 'sveltekit', statusCode: response?.status, contentType, duration,
+                            requestBody: body.text || undefined, requestBodyTruncated: body.truncated,
+                            responseSize: result.truncated ? undefined : result.bytes,
+                            responsePreview: result.text, responseBodyTruncated: result.truncated,
+                            reqHeaders: Object.fromEntries(event.request.headers), resHeaders: Object.fromEntries(response?.headers ?? []),
+                            error: failure === undefined ? undefined : { message: errorMessage(failure, 'Request failed') },
+                        },
+                    })).catch(() => {});
                 }
             }
-            });
-        } catch (e) {
-            error = e instanceof Error ? e : new Error(String(e));
-            throw e;
-        } finally {
-            if (shouldTrace && addEvent) {
-                const duration = performance.now() - perfStart;
-                const contentType = response?.headers.get('content-type') || '';
-                const responsePreview = response ? capturePreview(response, contentType.includes('json') ? 2000 : 500) : Promise.resolve(emptyPreview());
-                void Promise.all([requestPreview, responsePreview]).then(([body, preview]) => {
-                    addEvent({
-                        id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-                        type: error ? 'server:error' : 'server:ssr', timestamp: startTime, duration,
-                        data: {
-                            url: event.url.pathname + event.url.search,
-                            method: event.request.method,
-                            requestBody: body.text || undefined,
-                            requestBodyTruncated: body.truncated,
-                            _handler: 'sveltekit', statusCode: response?.status,
-                            routeId: event.route.id, contentType,
-                            responseSize: preview.truncated ? undefined : preview.bytes,
-                            responsePreview: preview.text,
-                            responseBodyTruncated: preview.truncated,
-                            reqHeaders: Object.fromEntries(event.request.headers || []),
-                            resHeaders: Object.fromEntries(response?.headers || []),
-                            duration,
-                            error: error ? { message: error.message, stack: error.stack } : undefined,
-                        },
-                    });
-                }).catch(() => { /* Tracing errors must not change resolve's result. */ });
-            }
-        }
-
-        return response!;
+        });
     };
 }
 
-export function noopHandle(): Handle {
-    return async ({ event, resolve }) => resolve(event);
-}
+export function noopHandle(): Handle { return async ({ event, resolve }) => resolve(event); }

@@ -54,3 +54,9 @@ The root `npm run test:e2e` starts its own servers on 5173 and 5174. Stop manual
 After extension source changes, rebuild with root `npm run build` and restart the fixture. The panel uses prebuilt `packages/client/dist` assets. Production build/preview does not expose DevTools.
 
 See the [developer guide](../../../docs/INDEX.md) for build order and verification details.
+
+## SSR and correlated traces
+
+The `/devtools-check` route exercises server-loaded values, an internal fetch, a streamed result, hydration, and navigation. Its response endpoint supplies redirect, error, upload, and SSE cases for validation. Open Network to inspect SSR and fetch spans sharing a trace ID. Internal calls have explicit parent span IDs.
+
+From the root, run `node scripts/verify-ssr-sql.mjs` after building packages and installing this app plus `tests/apps/todo-sqlite`. It owns ports 5183/5184 and an isolated Todo database. It checks initial HTML without JavaScript, hydration, streaming, concurrent request isolation, and HTTP/MCP/UI SQL traces. See [server integration](../../../docs/05_server.md).

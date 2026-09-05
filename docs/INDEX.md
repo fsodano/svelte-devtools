@@ -1,7 +1,7 @@
 # Svelte DevTools Developer Documentation
 
 ## Overview
-Svelte DevTools 0.1.1 is an early-development npm-workspaces monorepo with 5 packages. This documentation is for developers CONTRIBUTING to the devtools themselves.
+Svelte DevTools 0.2.0 is an early-development npm-workspaces monorepo with 5 packages. This documentation is for developers CONTRIBUTING to the devtools themselves.
 
 ## Getting Started
 
@@ -12,7 +12,7 @@ Svelte DevTools 0.1.1 is an early-development npm-workspaces monorepo with 5 pac
 
 ### Setup
 ```bash
-git clone --branch v0.1.1 https://github.com/fsodano/svelte-devtools.git
+git clone https://github.com/fsodano/svelte-devtools.git
 cd svelte-devtools
 npm ci
 npm run build
@@ -115,3 +115,7 @@ Build-time $inspect injection → Runtime state tracking → postMessage → Cli
 - **Client changes require a rebuild**: the panel is served from `packages/client/dist/` — run `npm run build:client` and restart the dev server
 - The runtime builds with `tsc && rolldown` (ESM), not tsc alone
 - Rebuild affected workspace packages before testing their distributed output; client source is not compiled on demand.
+
+## SSR and SQLite verification
+
+Build root packages, install the independent SvelteKit and Todo fixture dependencies, and run `node scripts/verify-ssr-sql.mjs`. The script owns ports 5183/5184 and a temporary SQLite database; it does not use the developer's Todo database. It checks SSR, hydration, streaming, request correlation, CRUD, and HTTP/MCP/UI SQL spans. See [server integration](05_server.md) and the script's evidence output.

@@ -9,6 +9,10 @@ import {fileURLToPath} from 'url';
 import {createRequire} from 'module';
 import sirv from 'sirv';
 import launchEditor from 'launch-editor';
+import { randomUUID } from 'node:crypto';
+import { runWithTraceContext, type TraceContext } from './trace-context.js';
+import { acquireFetchTracing } from './sveltekit.js';
+import { addServerEvent, clearServerEvents } from './server-events.js';
 import { resolveEditorLocation } from './editor.js';
 import {parse} from 'svelte/compiler';
 import type {StateDeclaration, SvelteDevToolsPluginOptions} from '@fsodano/svelte-devtools-types';
@@ -24,7 +28,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DEVTOOLS_PREFIX = '/__svelte-devtools';
-const GLOBAL_KEY = '__svelte_devtools_addEvent__';
 // ADR-0012 Phase 2: the navigation bridge is a Vite-transformed virtual module.
 // The injected page script loads it by URL; Vite's transform middleware maps
 // that URL to the `\0`-prefixed id and runs the module through the normal
@@ -57,11 +60,13 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
     // Vite 8: use createFilter for include/exclude matching
     const filter = createFilter(include, exclude);
 
+    const tracingDisposers = new Set<() => void>();
     const plugin: Plugin & { devtools: { setup: (ctx: ViteDevToolsNodeContext) => void } } = {
         name: 'svelte-devtools',
         // apply: 'serve' is the default for devtools plugins — no need to set explicitly
         apply: 'serve',
         enforce: 'pre',
+        closeBundle() { for (const dispose of tracingDisposers) dispose(); tracingDisposers.clear(); },
 
         resolveId(id: string) {
             // ADR-0012 Phase 2: $app/navigation is no longer intercepted. App
@@ -179,97 +184,78 @@ if (typeof window !== 'undefined') {
                 if (isDebug) console.log('[Svelte DevTools] @vitejs/devtools not found, skipping inject');
             }
 
-            (globalThis as Record<string, unknown>).__SVELTE_DEVTOOLS_INJECT_PATH__ = viteDevtoolsInjectPath;
-
-            (globalThis as Record<string, unknown>)[GLOBAL_KEY] = (event: unknown) => {
-                import('./server-events.js').then(({ addServerEvent }) => addServerEvent(event as Parameters<typeof addServerEvent>[0]));
+            const releaseFetch = acquireFetchTracing();
+            let tracingActive = true;
+            const emit = (event: Parameters<typeof addServerEvent>[0]) => { if (tracingActive) addServerEvent(event, server); };
+            const disposeTracing = () => {
+                if (!tracingActive) return;
+                tracingActive = false;
+                releaseFetch();
+                clearServerEvents(server);
+                tracingDisposers.delete(disposeTracing);
             };
-
-            const markSeenTimestamps = new Map<string, number>();
-            (globalThis as Record<string, unknown>)['__svelte_devtools_markSeen__'] = (key: string) => {
-                markSeenTimestamps.set(key, Date.now());
-            };
-            // Cleanup stale markSeen entries every 60s (evict > 5 min)
-            setInterval(() => {
-                const cutoff = Date.now() - 300_000;
-                for (const [k, ts] of markSeenTimestamps) {
-                    if (ts < cutoff) markSeenTimestamps.delete(k);
-                }
-            }, 60_000);
+            tracingDisposers.add(disposeTracing);
+            server.httpServer?.once('close', disposeTracing);
 
             server.middlewares.use((req, res, next) => {
                 const url = req.url?.split('?')[0] || '';
-                if (
-                    url.startsWith('/__svelte-devtools') ||
-                    url.startsWith('/@') ||
-                    url.startsWith('/node_modules') ||
-                    /\.(js|css|woff2?|map|ico|svg|png|jpg|webp|avif|ttf|eot)(\?|$)/.test(url)
-                ) {
-                    next();
-                    return;
-                }
-                const startTime = Date.now();
-                const reqKey = `${req.method}:${url}`;
-
-                // Capture request body via explicit read on finish.
-                // The req.on('data') approach doesn't work because Vite's
-                // middleware stack may consume the stream before our handler.
-                const reqBodyPreview = '';
-
-                // Intercept res.end to capture response body for server trace
-                const originalEnd = res.end.bind(res);
-                let bodyChunks: Buffer[] = [];
-                const perfStart = performance.now();
-                res.end = function (this: typeof res, ...args: unknown[]) {
-                    const chunk = args[0];
-                    if (chunk instanceof Buffer || typeof chunk === 'string') {
-                        bodyChunks.push(Buffer.from(chunk));
+                if (/^\/(?:__svelte-devtools|\.devtools|@|node_modules)/.test(url) ||
+                    /\.(svelte|js|ts|css|woff2?|map|ico|svg|png|jpg|webp|avif|ttf|eot)$/.test(url)) { next(); return; }
+                const context: TraceContext = { traceId: randomUUID(), spanId: randomUUID(), emit, injectPath: viteDevtoolsInjectPath };
+                const timestamp = Date.now();
+                const start = performance.now();
+                const originalWrite = res.write;
+                const originalEnd = res.end;
+                // Retain only the preview prefix; count every byte actually passed to write/end.
+                const chunks: Buffer[] = [];
+                let previewBytes = 0;
+                let responseBytes = 0;
+                const capture = (chunk: unknown, encoding: unknown) => {
+                    if (typeof chunk !== 'string' && !ArrayBuffer.isView(chunk)) return;
+                    const encodingName = typeof encoding === 'string' ? encoding as BufferEncoding : undefined;
+                    responseBytes += typeof chunk === 'string' ? Buffer.byteLength(chunk, encodingName) : chunk.byteLength;
+                    if (previewBytes < 2000) {
+                        const buffer = typeof chunk === 'string' ? Buffer.from(chunk.slice(0, 2000), encodingName)
+                            : Buffer.from(chunk.buffer, chunk.byteOffset, Math.min(chunk.byteLength, 2000));
+                        const prefix = buffer.subarray(0, 2000 - previewBytes);
+                        chunks.push(Buffer.from(prefix));
+                        previewBytes += prefix.length;
                     }
-                    return originalEnd(chunk as never, args[1] as never, args[2] as never);
+                };
+                const wrappedWrite = function(this: typeof res, ...args: unknown[]) {
+                    capture(args[0], args[1]);
+                    return Reflect.apply(originalWrite, this, args);
+                } as typeof res.write;
+                const wrappedEnd = function(this: typeof res, ...args: unknown[]) {
+                    capture(args[0], args[1]);
+                    return Reflect.apply(originalEnd, this, args);
                 } as typeof res.end;
-
-                res.on('finish', () => {
-                    const duration = performance.now() - perfStart;
-                    if (markSeenTimestamps.has(reqKey)) {
-                        markSeenTimestamps.delete(reqKey);
-                        return;
-                    }
-                    // Skip Vite dev module requests (individual .svelte/.js/.ts/.css files)
-                    if (/\.(svelte|js|ts|css|json|ico|svg|png|woff2?)$/.test(url)) return;
-                    const body = Buffer.concat(bodyChunks).toString('utf-8');
-                    const contentType = (res.getHeader('content-type') as string) || '';
-                    const isJson = contentType.includes('json');
-                    import('./server-events.js').then(({ addServerEvent }) => {
-                        addServerEvent({
-                            id: `srv-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-                            type: res.statusCode >= 400 ? 'server:error' : 'server:ssr',
-                            timestamp: startTime,
-                            duration,
-                            data: {
-                                url,
-                                method: req.method || 'GET',
-                                statusCode: res.statusCode,
-                                requestBody: reqBodyPreview || undefined,
-                                _handler: 'generic',
-                                contentType,
-                                responseSize: body.length,
-                                responsePreview: isJson ? body.slice(0, 2000) : body.slice(0, 500),
-                                reqHeaders: {
-                                    'content-type': req.headers['content-type'],
-                                    'user-agent': req.headers['user-agent'],
-                                    'accept': req.headers['accept'],
-                                    'referer': req.headers['referer'],
-                                    'content-length': req.headers['content-length'],
-                                    'cookie': req.headers['cookie'] ? '[present]' : undefined,
-                                },
-                                resHeaders: Object.fromEntries(
-                                    Object.entries(res.getHeaders()).map(([k, v]) => [k, String(v)])
-                                ),
-                            }
-                        });
+                res.write = wrappedWrite;
+                res.end = wrappedEnd;
+                let finished = false;
+                const complete = () => {
+                    if (finished) return;
+                    finished = true;
+                    if (res.write === wrappedWrite) res.write = originalWrite;
+                    if (res.end === wrappedEnd) res.end = originalEnd;
+                    if (context.handledByKit || !tracingActive) return;
+                    const contentType = String(res.getHeader('content-type') ?? '');
+                    const limit = contentType.includes('json') ? 2000 : 500;
+                    const preview = Buffer.concat(chunks).subarray(0, limit);
+                    emit({ id: context.spanId, type: res.statusCode >= 400 || !res.writableFinished ? 'server:error' : 'server:ssr', timestamp,
+                        duration: performance.now() - start,
+                        data: { traceId: context.traceId, spanId: context.spanId, url: req.url || '/', method: req.method || 'GET',
+                            statusCode: res.statusCode, _handler: 'generic', contentType,
+                            responseSize: responseBytes, responsePreview: preview.toString('utf8'), responseBodyTruncated: responseBytes > limit,
+                            reqHeaders: { 'content-type': req.headers['content-type'], 'accept': req.headers.accept,
+                                cookie: req.headers.cookie ? '[present]' : undefined },
+                            resHeaders: Object.fromEntries(Object.entries(res.getHeaders()).map(([key, value]) => [key, String(value)])),
+                        },
                     });
-                });
-                next();
+                };
+                res.once('finish', complete);
+                res.once('close', complete);
+                runWithTraceContext(context, next);
             });
 
             // ADR-0009: reject disallowed Host values on every protected route
@@ -303,10 +289,10 @@ if (typeof window !== 'undefined') {
                         const params = new URLSearchParams(qsIdx >= 0 ? rawUrl.slice(qsIdx) : '');
                         const last = parseInt(params.get('last') || '', 10) || undefined;
                         const sinceId = params.get('sinceId') || undefined;
-                        res.end(JSON.stringify(getServerEvents({last, sinceId})));
+                        res.end(JSON.stringify(getServerEvents({last, sinceId}, server)));
                     } else if (method === 'DELETE') {
                         const {clearServerEvents} = await import('./server-events.js');
-                        clearServerEvents();
+                        clearServerEvents(server);
                         res.setHeader('Content-Type', 'application/json');
                         res.end(JSON.stringify({ok: true}));
                     } else {

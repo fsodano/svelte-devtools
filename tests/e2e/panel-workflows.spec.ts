@@ -238,9 +238,21 @@ test('continues recording after a Spring component unmounts during motion', asyn
 
 test('bounds real network history at 500 and keeps cleared requests dismissed across polls', async ({ page, request }) => {
   const frame = await openPanel(page);
+  const nextServerPoll = () => page.waitForResponse(response => new URL(response.url()).pathname === '/__svelte-devtools/api/server-events');
+  const initialPoll = nextServerPoll();
   await frame.locator('.sidebar button[title="Network"]').click();
+  const initialResponse = await initialPoll;
+  expect(initialResponse.ok()).toBe(true);
+  const initialBuffer = await initialResponse.json();
   const rows = frame.locator('.entry-row');
+  const clientRows = rows.filter({ has: frame.locator('.type-icon').filter({ hasText: '🌐' }) });
+  const serverRows = rows.filter({ has: frame.locator('.type-icon').filter({ hasText: '🖥️' }) });
   const clear = frame.getByRole('button', { name: 'Clear', exact: true });
+  // Wait for the initial server buffer to render before clearing visible history.
+  // Clear does not discard requests that have not arrived yet.
+  if (initialBuffer.events.length > 0) {
+    await expect(frame.locator('.type-icon').filter({ hasText: /🖥️|❌|▤/ })).toHaveCount(Math.min(500, initialBuffer.events.length));
+  }
   if (await clear.isEnabled()) await clear.click();
   await expect(rows).toHaveCount(0);
 
@@ -253,7 +265,7 @@ test('bounds real network history at 500 and keeps cleared requests dismissed ac
       }),
     ), start);
     expect(responses.every(response => response.status === 200 && response.body === '{"mocked":false}')).toBe(true);
-    await expect(frame.locator(`.request-url[title$="?history=${start + 24}"]`)).toHaveCount(1);
+    await expect(clientRows.locator(`.request-url[title$="?history=${start + 24}"]`)).toHaveCount(1);
   }
   await expect(rows).toHaveCount(500);
   await expect(frame.locator('.request-url[title$="?history=0"]')).toHaveCount(0);
@@ -266,9 +278,19 @@ test('bounds real network history at 500 and keeps cleared requests dismissed ac
     return data.entries.some((entry: { data?: { url?: string } }) => entry.data?.url?.endsWith('?history=524'));
   }).toBe(true);
 
+  // Both browser and server capture these fetches. Wait for the server's
+  // final request before clearing, so later arrivals are not mistaken for replay.
+  await expect(serverRows.locator('.request-url[title$="?history=524"]')).toHaveCount(1);
+  const capturedServer = await request.get(`${BASE_URL}/__svelte-devtools/api/server-events`, {
+    headers: { Authorization: `Bearer ${API_TOKEN}` },
+  });
+  expect(capturedServer.ok()).toBe(true);
+  const serverBuffer = await capturedServer.json();
+  expect(new Set(serverBuffer.events.map((event: { id: string }) => event.id)).size).toBe(serverBuffer.events.length);
+  expect(serverBuffer.events.filter((event: { data?: { url?: string } }) => event.data?.url?.endsWith('?history=524'))).toHaveLength(1);
+
   await clear.click();
   await expect(rows).toHaveCount(0);
-  const nextServerPoll = () => page.waitForResponse(response => response.url().includes('/__svelte-devtools/server-events?last=50'));
   await nextServerPoll();
   await nextServerPoll();
   await expect(rows).toHaveCount(0);
@@ -276,9 +298,10 @@ test('bounds real network history at 500 and keeps cleared requests dismissed ac
     const response = await fetch('/test-mock-resource.json?after-clear=true', { cache: 'no-store' });
     await response.text();
   });
-  await expect(rows).toHaveCount(1);
-  await expect(frame.locator('.request-url[title$="?after-clear=true"]')).toHaveCount(1);
+  await expect(clientRows).toHaveCount(1);
+  await expect(clientRows.locator('.request-url[title$="?after-clear=true"]')).toHaveCount(1);
   await nextServerPoll();
-  await expect(rows).toHaveCount(1);
+  await expect(serverRows.locator('.request-url[title$="?after-clear=true"]')).toHaveCount(1);
+  await expect(rows).toHaveCount(2);
   await expect(frame.locator('.request-url[title*="?history="]')).toHaveCount(0);
 });
