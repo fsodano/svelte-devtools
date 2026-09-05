@@ -201,3 +201,16 @@ describe('server-events', () => {
         });
     });
 });
+
+describe('server ownership', () => {
+    it('keeps independent server buffers and clears only the closing owner', () => {
+        const a = {}, b = {};
+        addServerEvent(makeEvent('a'), a);
+        addServerEvent(makeEvent('b'), b);
+        expect(getServerEvents(undefined, a).map(e => e.id)).toEqual(['a']);
+        expect(getServerEvents(undefined, b).map(e => e.id)).toEqual(['b']);
+        clearServerEvents(a);
+        expect(getServerEvents(undefined, a)).toEqual([]);
+        expect(getServerEvents(undefined, b).map(e => e.id)).toEqual(['b']);
+    });
+});

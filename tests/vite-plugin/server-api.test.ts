@@ -390,7 +390,7 @@ describe('handleApiRequest', () => {
             const res = createMockRes();
             await handleApiRequest(req, res, mockServer, '/server-events');
 
-            expect(getServerEvents).toHaveBeenCalledWith({ last: 5, sinceId: 'evt-10' });
+            expect(getServerEvents).toHaveBeenCalledWith({ last: 5, sinceId: 'evt-10' }, expect.any(Object));
         });
 
         it('DELETE calls clearServerEvents and returns ok', async () => {

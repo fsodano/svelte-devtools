@@ -244,9 +244,9 @@ export async function handleApiRequest(
                     const params = new URLSearchParams(rawUrl.includes('?') ? rawUrl.split('?')[1] : '');
                     const last = parseInt(params.get('last') || '', 10) || undefined;
                     const sinceId = params.get('sinceId') || undefined;
-                    json(req, res, { ok: true, events: getServerEvents({ last, sinceId }) });
+                    json(req, res, { ok: true, events: getServerEvents({ last, sinceId }, server) });
                 } else if (req.method === 'DELETE') {
-                    clearServerEvents();
+                    clearServerEvents(server);
                     json(req, res, { ok: true });
                 } else {
                     json(req, res, { error: 'Method not allowed' }, 405);
