@@ -17,6 +17,7 @@
  */
 
 import type { ViteDevServer } from 'vite';
+import { DEVTOOLS_VERSION } from '@fsodano/svelte-devtools-types';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isAuthorized } from './token.js';
 import {
@@ -152,7 +153,7 @@ export async function handleApiRequest(
                 json(req, res, {
                     ok: true,
                     name: '@fsodano/vite-plugin-svelte-devtools',
-                    version: '0.1.1',
+                    version: DEVTOOLS_VERSION,
                     endpoints: [
                         '/__svelte-devtools/api/',
                         '/__svelte-devtools/api/components',

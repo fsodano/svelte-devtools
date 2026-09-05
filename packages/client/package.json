@@ -1,9 +1,9 @@
 {
   "name": "@fsodano/svelte-devtools-client",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "private": false,
-  "description": "Svelte DevTools client UI (iframe)",
+  "description": "Svelte DevTools panel for components, state replay, network requests, and server traces",
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch",
@@ -14,13 +14,34 @@
   },
   "devDependencies": {
     "@phosphor-icons/core": "^2.1.1",
-    "@fsodano/svelte-devtools-types": "^0.2.0",
+    "@fsodano/svelte-devtools-types": "^0.2.1",
     "@sveltejs/vite-plugin-svelte": "^7.0.0"
   },
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fsodano/svelte-devtools.git",
+    "directory": "packages/client"
+  },
+  "homepage": "https://github.com/fsodano/svelte-devtools#readme",
+  "bugs": {
+    "url": "https://github.com/fsodano/svelte-devtools/issues"
+  },
+  "keywords": [
+    "svelte",
+    "svelte5",
+    "sveltekit",
+    "vite",
+    "devtools",
+    "debugging",
+    "mcp"
   ]
 }

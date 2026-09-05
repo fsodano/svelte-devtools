@@ -76,4 +76,12 @@ Keep each change focused on a concrete problem. In the pull request, describe th
 
 If an API changes, update the API reference and affected examples. If agent access changes, update `docs/07_mcp.md` and relevant agent guides. Record a significant architecture choice using the [ADR process](docs/adr/README.md). Use short sentences and consistent terminology. Do not claim support that has not been tested.
 
-CI runs the build, type check, unit tests, package dry run, and Chromium suite. It does not publish packages. The package gate checks registry-safe dependencies and whether each workspace can be packed; it does not prove installation in a clean consumer or full version compatibility. Publishing requires a separate maintainer action and review of the release scripts.
+CI runs the build, type check, unit tests, Chromium regressions, real SSR/SQLite checks, production previews, and isolated tarball-consumer checks. It does not publish packages. The package gate checks matching release versions, registry-safe dependencies, public metadata, licenses, READMEs, and exported files. Consumer checks cover the documented fixture versions; they do not prove compatibility with every supported version. Publishing requires a separate maintainer action and review of the release scripts.
+
+### Release packages
+
+Install the independent Svelte, SvelteKit, and Todo fixture dependencies before running the release workflow. Install Playwright Chromium. Authenticate with `npm login` in your user configuration; do not commit npm authentication settings.
+
+Run `bash scripts/publish.sh --dry-run` to run all release gates without publishing. After the release PR passes CI and merges, tag the release and run `bash scripts/publish.sh --publish`. The script validates first, packs all five packages, and publishes their tarballs in dependency order. It accepts `--otp` when npm requires two-factor authentication. A failed publish stops the sequence; inspect registry versions before retrying.
+
+Work plans stay local in the ignored `docs/plans/` folder. Record lasting decisions as ADRs and retain release evidence in `docs/validation/`.

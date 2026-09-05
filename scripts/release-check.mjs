@@ -10,6 +10,8 @@
  *      packs cleanly. The dry run writes no tarball and touches no manifests,
  *      so no user file is created or deleted.
  *
+ * Metadata, licenses, READMEs, exported files, and release versions are also checked.
+ *
  * Publishable packages must carry registry-safe plain semver ranges in their
  * published manifests. `file:` paths resolve to nothing on a consumer machine,
  * and npm does not understand the `workspace:` protocol at all — a tarball with
@@ -55,9 +57,25 @@ if (process.argv.includes('--list')) {
 }
 
 let failed = false;
+const { DEVTOOLS_VERSION } = await import('../packages/types/dist/index.js');
+if (DEVTOOLS_VERSION !== JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version) {
+  console.error('Shared runtime version differs from release manifest; update constants.ts and rebuild.');
+  failed = true;
+}
 
 for (const name of PUBLISHABLE) {
-  const { manifest } = manifests.get(name);
+  const { manifest, dir } = manifests.get(name);
+  const metadata = ['description', 'license', 'homepage', 'bugs', 'repository'];
+  for (const field of metadata) {
+    if (!manifest[field]) { console.error(`✗ ${name}: missing ${field}`); failed = true; }
+  }
+  const releaseVersion = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
+  if (manifest.version !== releaseVersion) { console.error(`✗ ${name}: version differs from release ${releaseVersion}`); failed = true; }
+  for (const [dependency, spec] of Object.entries({ ...manifest.dependencies, ...manifest.devDependencies })) {
+    if (manifests.has(dependency) && spec !== `^${manifests.get(dependency).manifest.version}`) {
+      console.error(`✗ ${name}: internal dependency ${dependency} does not match this release`); failed = true;
+    }
+  }
 
   // Step 1 — manifest scan for file:/workspace: specifiers.
   const unsafe = [];
@@ -91,6 +109,11 @@ for (const name of PUBLISHABLE) {
       if (!files.has(entry.replace(/^\.\//, ''))) throw new Error(`Packed entry point is missing: ${entry}`);
     }
     if (!packed.files.some(file => file.path.startsWith('dist/'))) throw new Error('Package contains no built dist files');
+    for (const required of ['README.md', 'LICENSE']) {
+      if (!files.has(required)) throw new Error(`Package is missing ${required}`);
+      if (!readFileSync(join(packagesDir, dir, required), 'utf8').trim()) throw new Error(`${required} is empty`);
+    }
+    if (readFileSync(join(packagesDir, dir, 'LICENSE'), 'utf8') !== readFileSync(join(root, 'LICENSE'), 'utf8')) throw new Error('Package license differs from repository license');
     console.log(`✓ ${name}: npm pack --dry-run passed`);
   } catch (err) {
     console.error(`✗ ${name}: npm pack --dry-run failed`);
@@ -100,7 +123,7 @@ for (const name of PUBLISHABLE) {
 }
 
 if (failed) {
-  console.error('\nrelease:check FAILED — fix the unsafe specifiers before publishing.');
+  console.error('\nrelease:check FAILED — fix package metadata, contents, or dependency versions before publishing.');
   process.exit(1);
 }
 console.log('\nrelease:check passed — every publishable package is pack-safe.');

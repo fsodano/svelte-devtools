@@ -1,8 +1,8 @@
 {
   "name": "@fsodano/svelte-devtools-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
-  "description": "MCP tools for inspecting Svelte 5 applications through Svelte DevTools",
+  "description": "MCP tools for inspecting and editing live Svelte applications through Svelte DevTools",
   "bin": {
     "svelte-devtools-mcp": "dist/cli.js"
   },
@@ -14,7 +14,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20.19.0"
@@ -30,5 +31,24 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fsodano/svelte-devtools.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/fsodano/svelte-devtools#readme",
+  "bugs": {
+    "url": "https://github.com/fsodano/svelte-devtools/issues"
+  },
+  "keywords": [
+    "svelte",
+    "svelte5",
+    "sveltekit",
+    "vite",
+    "devtools",
+    "debugging",
+    "mcp"
+  ]
 }

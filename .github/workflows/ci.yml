@@ -70,6 +70,8 @@ jobs:
           npm run build --prefix tests/apps/svelte-kit
           TODO_SQLITE_DB_PATH="$RUNNER_TEMP/svelte-production-todos.db" npm run build --prefix tests/apps/todo-sqlite
           node scripts/verify-production.mjs
+      - name: Verify packed packages in isolated consumer projects
+        run: node scripts/verify-package-consumer.mjs
       - name: Retain browser failure traces
         if: failure()
         uses: actions/upload-artifact@v4

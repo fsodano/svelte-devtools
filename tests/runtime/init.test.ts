@@ -99,8 +99,8 @@ describe('createPassiveRuntime', () => {
       expect(runtime._queue).toEqual([]);
     });
 
-    it('has version "0.1.1"', () => {
-      expect(runtime.version).toBe('0.1.1');
+    it('has version "0.2.1"', () => {
+      expect(runtime.version).toBe('0.2.1');
     });
 
     it('getAllComponents() returns []', () => {
@@ -383,7 +383,7 @@ describe('init script runtime behavior', () => {
     expect(rt._active).toBe(false);
     expect(Array.isArray(rt._queue)).toBe(true);
     expect(rt._queue).toHaveLength(0);
-    expect(rt.version).toBe('0.1.1');
+    expect(rt.version).toBe('0.2.1');
   });
 
   it('before activation, method calls queue up', () => {

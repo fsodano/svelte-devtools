@@ -51,6 +51,7 @@ const consumer = process.cwd();
 const token = randomUUID(); process.env.SVELTE_DEVTOOLS_TOKEN = token;
 const results = [];
 const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+const installedVersion = JSON.parse(readFileSync(join(consumer, 'node_modules/@fsodano/vite-plugin-svelte-devtools/package.json'), 'utf8')).version;
 for (const name of Object.keys(manifest.dependencies).filter(name => name.startsWith('@fsodano/'))) assert.equal(lstatSync(join('node_modules', name)).isSymbolicLink(), false, name + ' must be a tarball install');
 const marker = {}; assert.equal(traceSqliteQuery({ enabled: false, database: 'consumer', operation: 'get' }, () => marker), marker);
 for (const app of ['plain', 'kit']) {
@@ -69,13 +70,13 @@ for (const app of ['plain', 'kit']) {
     const bundle = await fetch(new URL(asset[1], 'http://127.0.0.1:5190')); assert.equal(bundle.status, 200); assert.match(bundle.headers.get('content-type'), /javascript/);
    }
    if (path === '/' && app === 'kit') assert.match(body, /Consumer count 0/);
-   if (path === '/__svelte-devtools/api/') assert.equal(JSON.parse(body).ok, true);
+   if (path === '/__svelte-devtools/api/') { assert.equal(JSON.parse(body).ok, true); assert.equal(JSON.parse(body).version, installedVersion); }
    results.push({ app, path, status: response.status, bytes: body.length });
   }
   const client = new Client({ name: 'packed-consumer', version: '1.0.0' });
   const transport = new StdioClientTransport({ command: join(consumer, 'node_modules/.bin/svelte-devtools-mcp'), env: { ...process.env, SVELTE_DEVTOOLS_URL: 'http://127.0.0.1:5190', SVELTE_DEVTOOLS_TOKEN: token } });
   try {
-   await client.connect(transport); const tools = await client.listTools(); assert.equal(tools.tools.length, 9);
+   await client.connect(transport); assert.equal(client.getServerVersion().version, installedVersion); const tools = await client.listTools(); assert.equal(tools.tools.length, 9);
    const status = await client.callTool({ name: 'svelte_status', arguments: {} }); assert.notEqual(status.isError, true);
    results.push({ app, mcpTools: tools.tools.length, sqliteExport: true });
   } finally { await client.close(); }
