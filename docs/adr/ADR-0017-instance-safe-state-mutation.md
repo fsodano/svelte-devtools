@@ -2,9 +2,9 @@
 
 ## Status
 
-Proposed (2026-09-05)
+Accepted (2026-09-05)
 
-> Implementation note (2026-09-05): Instance identity and snapshot matching changes are implemented. The user explicitly authorized the identity fix and time-travel regression checks. Production compiler and store regressions pass. Browser checks have exercised repeated-instance editing and undo/redo. Track the final integrated run and remaining cases in D01, D03, and D11.
+> Acceptance note (2026-09-05): Implemented and verified in the completed DevTools work. See the [completion audit](../validation/devtools-completion-audit.md) for browser, runtime, API, and MCP evidence and remaining boundaries.
 
 ## Context
 

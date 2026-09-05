@@ -53,7 +53,7 @@ npm run test:e2e           # Playwright; starts plain and SvelteKit fixtures
 | 06_api.md | Full API reference for all packages |
 | [Agent MCP](./07_mcp.md) | Setup, tools, freshness, and current limits |
 | [Design guidelines](./design-guidelines.md) | Visual system, resizing, settings, mutation, and agent contracts |
-| [Completion plan](./plans/pending/devtools-completion.md) | Active discrepancy register and validation status |
+| [Completion audit](./validation/devtools-completion-audit.md) | Historical audit and verified release evidence |
 | VITE.md | Vite 8 / Rolldown internals and compatibility audit |
 
 ## Architecture Decision Records
@@ -74,9 +74,12 @@ npm run test:e2e           # Playwright; starts plain and SvelteKit fixtures
 | 0012 | Stop Stubbing SvelteKit App Navigation | ✅ Implemented (2026-08-12) |
 | 0013 | Restore E2E Testing Integrity (real Playwright suite) | ✅ Implemented (2026-08-12) |
 | 0014 | Publish-safe workspace dependencies (plain semver, release gate) | ✅ Implemented |
-| [0015](./adr/proposed/ADR-0015-shared-resizable-inspection-layouts.md) | Shared resizable inspection layouts | Proposed; integrated verification pending |
-| [0016](./adr/proposed/ADR-0016-mcp-adapter-over-authenticated-http.md) | MCP adapter over authenticated HTTP | Proposed; adapter and acknowledged edits implemented; final regression tracked in plan |
-| [0017](./adr/proposed/ADR-0017-instance-safe-state-mutation.md) | Instance-safe state mutation | Proposed; implementation and production regressions complete; final browser run tracked in plan |
+| [0015](./adr/ADR-0015-shared-resizable-inspection-layouts.md) | Shared resizable inspection layouts | Accepted; see the completion audit |
+| [0016](./adr/ADR-0016-mcp-adapter-over-authenticated-http.md) | MCP adapter over authenticated HTTP | Accepted; see the completion audit |
+| [0017](./adr/ADR-0017-instance-safe-state-mutation.md) | Instance-safe state mutation | Accepted; see the completion audit |
+| [0018](./adr/ADR-0018-request-scoped-server-traces.md) | Request-scoped server traces | Accepted; see release validation |
+| [0019](./adr/ADR-0019-explicit-synchronous-sqlite-observation.md) | Explicit synchronous SQLite observation | Accepted; see release validation |
+| [0020](./adr/ADR-0020-bounded-observation-and-live-value-separation.md) | Bounded observation and live-value separation | Accepted; see release validation |
 
 ## Package Architecture
 

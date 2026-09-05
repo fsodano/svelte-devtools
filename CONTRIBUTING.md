@@ -1,6 +1,6 @@
 # Contributing to Svelte DevTools
 
-Start with [AGENTS.md](AGENTS.md), the [developer documentation](docs/INDEX.md), and the [completion plan](docs/plans/pending/devtools-completion.md). The plan records observed gaps and their verification status. Add evidence there when working on an existing gap.
+Start with [AGENTS.md](AGENTS.md), the [developer documentation](docs/INDEX.md), and the [completion audit](docs/validation/devtools-completion-audit.md). Preserve durable verification evidence in `docs/validation/` and record lasting design decisions in [ADRs](docs/adr/README.md).
 
 Svelte DevTools is an independent project. The [Svelte contribution guide](https://github.com/sveltejs/svelte/blob/main/CONTRIBUTING.md) informs our emphasis on reproducible reports, focused changes, test commands and results, and UI evidence. The commands below are specific to this repository.
 

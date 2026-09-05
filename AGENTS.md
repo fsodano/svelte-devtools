@@ -15,7 +15,7 @@
 | Unit tests | `svelte-dev-extension/tests/` |
 | E2E tests | `svelte-dev-extension/tests/e2e/` |
 | Existing docs | `svelte-dev-extension/docs/` (architecture, API, Vite 8) |
-| Release plan | `svelte-dev-extension/.sisyphus/plans/v0.0.1.md` |
+| Design decisions and verification | [ADRs](docs/adr/README.md) and [release validation](docs/validation/ssr-sql-observability-validation.md) |
 
 ## ⚠️ Critical: DevTools Client Served from dist/
 

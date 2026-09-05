@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-> **Current implementation:** These records retain decisions and constraints from their original dates. For release 0.1.1 behavior, use the [API reference](../06_api.md), [MCP guide](../07_mcp.md), and [client guide](../04_client.md). Browser fetch mocks and acknowledged session-targeted state edits are implemented; historical proposals can describe earlier gaps.
+> **Current implementation:** These records retain decisions and constraints from their original dates. For current behavior, use the [API reference](../06_api.md), [MCP guide](../07_mcp.md), and [client guide](../04_client.md). Browser fetch mocks and acknowledged session-targeted state edits are implemented; historical proposals can describe earlier gaps.
 
 This directory records the significant architectural decisions behind Svelte DevTools: why the plugin transforms `.svelte` files the way it does, why the runtime talks to the panel over `postMessage`, why state restore uses surgical diffs. Each record answers one question: given the constraints at the time, why did we build it this way?
 
@@ -24,9 +24,12 @@ ADRs are for developers contributing to this repo. They are the history of the d
 | [ADR-0012](./ADR-0012-stop-stubbing-app-navigation.md) | Stop Stubbing SvelteKit App Navigation | Accepted (2026-08-12) |
 | [ADR-0013](./ADR-0013-restore-e2e-testing-integrity.md) | Restore E2E Testing Integrity | Accepted (2026-08-12) |
 | [ADR-0014](./ADR-0014-publish-safe-workspace-dependencies.md) | Publish-Safe Workspace Dependencies | Accepted (2026-08-12) |
-| [ADR-0015](./proposed/ADR-0015-shared-resizable-inspection-layouts.md) | Shared resizable inspection layouts | Proposed (2026-09-05) |
-| [ADR-0016](./proposed/ADR-0016-mcp-adapter-over-authenticated-http.md) | MCP adapter over authenticated HTTP | Proposed (2026-09-05) |
-| [ADR-0017](./proposed/ADR-0017-instance-safe-state-mutation.md) | Instance-safe state mutation | Proposed (2026-09-05) |
+| [ADR-0015](./ADR-0015-shared-resizable-inspection-layouts.md) | Shared resizable inspection layouts | Accepted (2026-09-05) |
+| [ADR-0016](./ADR-0016-mcp-adapter-over-authenticated-http.md) | MCP adapter over authenticated HTTP | Accepted (2026-09-05) |
+| [ADR-0017](./ADR-0017-instance-safe-state-mutation.md) | Instance-safe state mutation | Accepted (2026-09-05) |
+| [ADR-0018](./ADR-0018-request-scoped-server-traces.md) | Request-scoped server traces | Accepted (2026-09-05) |
+| [ADR-0019](./ADR-0019-explicit-synchronous-sqlite-observation.md) | Explicit synchronous SQLite observation | Accepted (2026-09-05) |
+| [ADR-0020](./ADR-0020-bounded-observation-and-live-value-separation.md) | Bounded observation and live-value separation | Accepted (2026-09-05) |
 
 ## Lifecycle
 
@@ -42,7 +45,7 @@ Proposed → Accepted
 
 A new ADR starts as a proposal in `docs/adr/proposed/`. It stays there until it is accepted. The `proposed/` directory is created on demand when the first proposal is added.
 
-- Proposal filename: `ADR-000N-<slug>.md`, where `N` is the next free number (see [Numbering](#numbering)) and `<slug>` is a kebab-case summary of the title. Proposals are numbered up front so they can be referenced during discussion. The next available number is `ADR-0018`; proposed records also reserve numbers.
+- Proposal filename: `ADR-000N-<slug>.md`, where `N` is the next free number (see [Numbering](#numbering)) and `<slug>` is a kebab-case summary of the title. Proposals are numbered up front so they can be referenced during discussion. The next available number is `ADR-0021`; proposed records also reserve numbers.
 - A proposal is a living document. Edit it freely while it is under discussion. Keep the discussion outcome in the record: add a short note about what changed and why, or fold it into the Context.
 - Acceptance is not a vote count. A proposal is accepted when it describes the decision the team is actually going to implement, and the implementation owner signs off.
 - A proposal can be rejected without ever being accepted; see [Rejected](#rejected).

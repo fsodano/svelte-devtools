@@ -1,6 +1,6 @@
 # Svelte DevTools design guidelines
 
-Use these guidelines when changing the developer panel or agent interface. They define the intended experience. They do not certify that every existing panel meets it. Track failures and validation in the [completion plan](plans/pending/devtools-completion.md).
+Use these guidelines when changing the developer panel or agent interface. They define the intended experience. They do not certify that every existing panel meets it. Track failures and validation in the [completion audit](validation/devtools-completion-audit.md).
 
 ## Product principles
 
