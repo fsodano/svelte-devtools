@@ -1,11 +1,10 @@
 <script lang="ts">
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
   import { Network } from 'vis-network';
-  import type { DataSet } from 'vis-data';
+  import { untrack } from 'svelte';
 
-  let container: HTMLDivElement;
+  let container = $state<HTMLDivElement>();
   let network: Network | null = null;
-  let isStabilizing = $state(false);
   let selectedNodeId: string | null = null;
 
   const components = $derived(devtoolsStore.components);
@@ -30,7 +29,7 @@
   }
 
   function buildGraph(): void {
-    if (!container || components.length === 0 || isStabilizing) return;
+    if (!container || components.length === 0) return;
 
     const nodes: VisNode[] = [];
     const edges: VisEdge[] = [];
@@ -61,7 +60,7 @@
 
     const options = {
       nodes: {
-        font: { color: '#ddd', size: 12, face: 'monospace' },
+        font: { color: getComputedStyle(container).getPropertyValue('--text-primary').trim() || '#1c1c1e', size: 12, face: 'monospace' },
         borderWidth: 2,
         shadow: true,
       },
@@ -89,7 +88,6 @@
       layout: { improvedLayout: true },
     };
 
-    isStabilizing = true;
     try {
       network = new Network(container, { nodes, edges }, options);
     } catch (err) {
@@ -97,13 +95,11 @@
       // Don't latch isStabilizing — allow future rebuilds.
       console.error('[svelte-devtools] Failed to create component graph:', err);
       network = null;
-      isStabilizing = false;
       return;
     }
 
     network.once('stabilizationIterationsDone', () => {
       network?.setOptions({ physics: false });
-      isStabilizing = false;
     });
 
     network.on('click', (params) => {
@@ -123,24 +119,17 @@
     });
   }
 
-  function initOrRebuild(): void {
-    if (network) {
-      network.destroy();
-      network = null;
-    }
-    buildGraph();
-  }
-
-  // Reactively rebuild when component structure changes.
-  // This $effect also handles the initial mount: it runs after the DOM
-  // (including `bind:this={container}`) is available, so no onMount is needed.
-  let prevKey = '';
+  // Rebuild only for topology or container changes. Dispose listeners and canvas on tab exit.
   $effect(() => {
     const key = graphKey;
-    if (key !== prevKey && key.length > 0) {
-      prevKey = key;
-      initOrRebuild();
-    }
+    const element = container;
+    if (!element || !key) return;
+    untrack(buildGraph);
+    const current = network;
+    return () => {
+      current?.destroy();
+      if (network === current) network = null;
+    };
   });
 
   function zoomIn(): void { network?.moveTo({ scale: (network.getScale() || 1) * 1.3 }); }

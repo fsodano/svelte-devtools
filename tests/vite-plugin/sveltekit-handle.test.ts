@@ -5,7 +5,7 @@ import { svelteDevToolsHandle, noopHandle } from '../../packages/vite-plugin/src
 
 function createMockEvent(url = '/test', method = 'GET', routeId: string | null = null) {
   return {
-    request: { method, url: new URL(url, 'http://localhost:5173') },
+    request: new Request(new URL(url, 'http://localhost:5173'), { method }),
     url: new URL(url, 'http://localhost:5173'),
     route: { id: routeId },
   } as unknown as import('@sveltejs/kit').RequestEvent;
@@ -173,7 +173,7 @@ describe('sveltekit', () => {
 
       await handle({ event, resolve });
 
-      expect(events).toHaveLength(1);
+      await vi.waitFor(() => expect(events).toHaveLength(1));
       const evt = events[0] as { type: string; data: { url: string; method: string; routeId: string | null; duration: number } };
       expect(evt.type).toBe('server:ssr');
       expect(evt.data.url).toBe('/mypath?foo=bar');
@@ -194,7 +194,7 @@ describe('sveltekit', () => {
 
       await expect(handle({ event, resolve })).rejects.toThrow('resolve failed');
 
-      expect(events).toHaveLength(1);
+      await vi.waitFor(() => expect(events).toHaveLength(1));
       const evt = events[0] as { type: string; data: { error?: { message: string } } };
       expect(evt.type).toBe('server:error');
       expect(evt.data.error).toBeDefined();
@@ -355,6 +355,7 @@ describe('sveltekit', () => {
 
       await handle({ event, resolve });
 
+      await vi.waitFor(() => expect(events).toHaveLength(1));
       const evt = events[0] as { data: { routeId: null } };
       expect(evt.data.routeId).toBeNull();
     });
@@ -425,5 +426,103 @@ describe('sveltekit', () => {
       expect(seenKeys).toHaveLength(0);
       expect(events).toHaveLength(0);
     });
+  });
+});
+
+describe('streaming and production isolation', () => {
+  let savedFetch: typeof globalThis.fetch;
+  beforeEach(() => {
+    savedFetch = globalThis.fetch;
+    vi.resetModules();
+  });
+  afterEach(() => {
+    globalThis.fetch = savedFetch;
+    delete (globalThis as Record<string, unknown>).__svelte_devtools_addEvent__;
+  });
+
+  it('import and noop handler leave global fetch unchanged', async () => {
+    const before = globalThis.fetch;
+    const module = await import('../../packages/vite-plugin/src/sveltekit.js');
+    expect(globalThis.fetch).toBe(before);
+    const response = new Response('production');
+    expect(await module.noopHandle()({ event: createMockEvent(), resolve: createMockResolveWithResponse(response) })).toBe(response);
+    expect(globalThis.fetch).toBe(before);
+  });
+
+  it('returns an SSR stream before it closes and bounds the trace without cancelling later chunks', async () => {
+    const { svelteDevToolsHandle } = await import('../../packages/vite-plugin/src/sveltekit.js');
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const response = new Response(new ReadableStream<Uint8Array>({ start(value) { controller = value; } }), { headers: { 'content-type': 'text/event-stream' } });
+    const emit = vi.fn();
+    (globalThis as Record<string, unknown>).__svelte_devtools_addEvent__ = emit;
+    let returned: Response | undefined;
+    void svelteDevToolsHandle()({ event: createMockEvent('/events'), resolve: createMockResolveWithResponse(response) }).then(value => { returned = value; });
+    await vi.waitFor(() => expect(returned).toBe(response), { timeout: 100 });
+    controller.enqueue(new TextEncoder().encode('data: first\n\n'));
+    const reader = returned!.body!.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('data: first\n\n');
+    await vi.waitFor(() => expect(emit).toHaveBeenCalledOnce());
+    expect(emit.mock.calls[0][0].data).toMatchObject({ responsePreview: 'data: first\n\n', responseBodyTruncated: true });
+    controller.enqueue(new TextEncoder().encode('data: next\n\n'));
+    controller.close();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('data: next\n\n');
+    expect((await reader.read()).done).toBe(true);
+  });
+
+  it('starts resolve without waiting for an upload and records a bounded request preview', async () => {
+    const { svelteDevToolsHandle } = await import('../../packages/vite-plugin/src/sveltekit.js');
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const event = createMockEvent('/upload', 'POST');
+    event.request = new Request('http://localhost/upload', { method: 'POST', body: new ReadableStream<Uint8Array>({ start(value) { controller = value; } }), duplex: 'half' } as RequestInit);
+    const emit = vi.fn();
+    (globalThis as Record<string, unknown>).__svelte_devtools_addEvent__ = emit;
+    const resolve = vi.fn(async () => new Response('accepted'));
+    const pending = svelteDevToolsHandle()({ event, resolve });
+    expect(resolve).toHaveBeenCalledOnce();
+    const response = await pending;
+    expect(await response.text()).toBe('accepted');
+    controller.enqueue(new TextEncoder().encode('x'.repeat(3000)));
+    controller.close();
+    expect(await event.request.text()).toBe('x'.repeat(3000));
+    await vi.waitFor(() => expect(emit).toHaveBeenCalledOnce());
+    expect(emit.mock.calls[0][0].data).toMatchObject({ requestBody: 'x'.repeat(2000), requestBodyTruncated: true });
+  });
+
+  it('preserves resolve errors on filtered static paths', async () => {
+    const { svelteDevToolsHandle } = await import('../../packages/vite-plugin/src/sveltekit.js');
+    const emit = vi.fn();
+    (globalThis as Record<string, unknown>).__svelte_devtools_addEvent__ = emit;
+    const error = new Error('module failed');
+    await expect(svelteDevToolsHandle()({ event: createMockEvent('/broken.js'), resolve: vi.fn().mockRejectedValue(error) })).rejects.toBe(error);
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('returns successful responses even when the trace receiver throws', async () => {
+    const { svelteDevToolsHandle } = await import('../../packages/vite-plugin/src/sveltekit.js');
+    const emit = vi.fn(() => { throw new Error('trace failed'); });
+    (globalThis as Record<string, unknown>).__svelte_devtools_addEvent__ = emit;
+    const response = new Response('ok');
+    expect(await svelteDevToolsHandle()({ event: createMockEvent(), resolve: createMockResolveWithResponse(response) })).toBe(response);
+    await vi.waitFor(() => expect(emit).toHaveBeenCalledOnce());
+    expect(await response.text()).toBe('ok');
+  });
+
+  it('does not consume or await a server fetch stream and retains Request method and headers', async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const response = new Response(new ReadableStream<Uint8Array>({ start(value) { controller = value; } }));
+    const native = vi.fn().mockResolvedValue(response);
+    globalThis.fetch = native;
+    const { svelteDevToolsHandle } = await import('../../packages/vite-plugin/src/sveltekit.js');
+    const emit = vi.fn();
+    (globalThis as Record<string, unknown>).__svelte_devtools_addEvent__ = emit;
+    svelteDevToolsHandle();
+    const request = new Request('http://example.com/events', { method: 'POST', body: 'hello', headers: { 'x-test': 'yes' } });
+    expect(await fetch(request)).toBe(response);
+    controller.enqueue(new TextEncoder().encode('z'.repeat(3000)));
+    controller.close();
+    expect(await response.text()).toBe('z'.repeat(3000));
+    await vi.waitFor(() => expect(emit).toHaveBeenCalledOnce());
+    expect(emit.mock.calls[0][0].data).toMatchObject({ method: 'POST', requestBody: 'hello', reqHeaders: { 'x-test': 'yes' }, responsePreview: 'z'.repeat(2000), responseBodyTruncated: true });
+    expect(await request.text()).toBe('hello');
   });
 });

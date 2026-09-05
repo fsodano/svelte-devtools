@@ -1,0 +1,13 @@
+{
+  "name": "@fsodano/svelte-devtools-mcp",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "MCP tools for inspecting Svelte 5 applications through Svelte DevTools",
+  "bin": { "svelte-devtools-mcp": "dist/cli.js" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "README.md"],
+  "engines": { "node": ">=20.19.0" },
+  "scripts": { "build": "tsc", "dev": "tsc --watch", "prepublishOnly": "npm run build" },
+  "dependencies": { "@modelcontextprotocol/sdk": "^1.30.0", "zod": "^4.0.0" },
+  "publishConfig": { "access": "public" }
+}

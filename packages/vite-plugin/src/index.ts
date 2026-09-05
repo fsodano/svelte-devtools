@@ -9,6 +9,7 @@ import {fileURLToPath} from 'url';
 import {createRequire} from 'module';
 import sirv from 'sirv';
 import launchEditor from 'launch-editor';
+import { resolveEditorLocation } from './editor.js';
 import {parse} from 'svelte/compiler';
 import type {StateDeclaration, SvelteDevToolsPluginOptions} from '@fsodano/svelte-devtools-types';
 import {DOCK_CONFIG, RPC_METHODS, RPC_TYPES} from '@fsodano/svelte-devtools-types';
@@ -340,14 +341,25 @@ if (typeof window !== 'undefined') {
                             res.end(JSON.stringify({error: 'Missing file parameter'}));
                             return;
                         }
-                        const filePath = path.resolve(root, file);
-                        launchEditor(`${filePath}:${line || 1}:${column || 0}`);
-                        res.statusCode = 200;
+                        const location = resolveEditorLocation(root, file, line ?? 1, column ?? 1);
                         res.setHeader('Content-Type', 'application/json');
-                        res.end(JSON.stringify({ok: true}));
+                        launchEditor(location, (_file, message) => {
+                            if (!res.writableEnded) {
+                                res.statusCode = 500;
+                                res.end(JSON.stringify({error: message || 'The editor could not be launched.'}));
+                            } else server.config.logger.error(`[Svelte DevTools] Editor launch failed: ${message}`);
+                        });
+                        // launch-editor reports failures, but has no success callback.
+                        // Acknowledge the request, not proof that an editor window opened.
+                        setImmediate(() => {
+                            if (!res.writableEnded) {
+                                res.statusCode = 200;
+                                res.end(JSON.stringify({ok: true, status: 'requested'}));
+                            }
+                        });
                     } catch (e) {
                         res.statusCode = 400;
-                        res.end(JSON.stringify({error: 'Invalid JSON body'}));
+                        res.end(JSON.stringify({error: e instanceof Error ? e.message : 'Invalid editor request'}));
                     }
                 });
             });
@@ -422,7 +434,8 @@ if (typeof window !== 'undefined') {
             });
 
             server.ws.on('svelte-devtools:open-in-editor', (data: { file: string; line?: number }) => {
-                launchEditor(`${path.resolve(root, data.file)}:${data.line || 1}`);
+                try { launchEditor(resolveEditorLocation(root, data.file, data.line ?? 1, 1)); }
+                catch (error) { server.config.logger.error(`[Svelte DevTools] ${error instanceof Error ? error.message : 'Invalid editor location'}`); }
             });
         },
 
@@ -560,7 +573,7 @@ if (typeof window !== 'undefined') {
             const propKeys: string[] = [];
 
             try {
-                injectStateInspection(s, code, id, componentId, runeCounts, propKeys);
+                if (enableStateInspection) injectStateInspection(s, code, id, componentId, runeCounts, propKeys);
                 injectComponentMetadata(s, code, componentId, componentName, id, propKeys);
                 injectEffectTracking(s, code, id, componentId, runeCounts);
             } catch (e) {
@@ -621,26 +634,65 @@ interface DockEntry {
     url: string;
 }
 
+function instanceRef(componentId: string): string {
+    return `__svt_${componentId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+}
+
 function injectComponentMetadata(s: MagicString, code: string, componentId: string, componentName: string, filename: string, propKeys?: string[]): void {
-    const propKeysJson = JSON.stringify(propKeys || []);
-    const registryInj = `if(typeof window!=='undefined'){window.__SVELTE_DEVTOOLS_REGISTRY__||=new Map();window.__SVELTE_DEVTOOLS_REGISTRY__.set('${componentId}',{id:'${componentId}',name:'${componentName}',filename:'${filename}',propKeys:${propKeysJson}})}`;
-    const runtimeInj = `if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__){window.__SVELTE_DEVTOOLS_RUNTIME__.registerComponent('${componentId}','${componentName}','${filename}');}`;
-
-    const combinedInj = registryInj + runtimeInj;
-
-    const match = /<script[^>]*>([\s\S]*?)<\/script>/i.exec(code);
-    if (match) s.appendLeft(match.index + match[0].indexOf('>') + 1, combinedInj);
-    else s.prepend(`<script>${combinedInj}</script>`);
-
-    const search = code.replace(/<(script|style)[^>]*>([\s\S]*?)<\/\1>/gi, (m, _, c) => m.replace(c, ' '.repeat(c.length)));
-    const tagRegex = /<([a-zA-Z0-9-:]+)/g;
-    let m: RegExpExecArray | null;
-    while ((m = tagRegex.exec(search)) !== null) {
-        const tn = m[1].toLowerCase();
-        if (['script', 'style', 'title', 'meta', 'link', 'base'].includes(tn) || tn.startsWith('svelte:')) continue;
-        s.appendLeft(m.index + m[0].length, ` data-svelte-devtools-id="${componentId}" data-svelte-component="${componentName}"`);
-        break;
+    const ref = instanceRef(componentId);
+    const ast = parseSvelte(code, filename);
+    const script = ast?.instance;
+    // Reuse an existing $props.id declaration; Svelte permits only one per component.
+    const js = script ? parseJavaScript(code.slice(script.content.start, script.content.end)) : null;
+    let existingId: string | undefined;
+    for (const statement of js?.program.body ?? []) {
+        if (!t.isVariableDeclaration(statement)) continue;
+        for (const declaration of statement.declarations) {
+            const init = declaration.init;
+            if (t.isIdentifier(declaration.id) && t.isCallExpression(init) && t.isMemberExpression(init.callee)
+                && t.isIdentifier(init.callee.object, { name: '$props' }) && t.isIdentifier(init.callee.property, { name: 'id' })) {
+                existingId = declaration.id.name;
+            }
+        }
     }
+    // Define our ID before user code. If the app already declares $props.id, move only that
+    // pure compiler-rune declaration here so all inspection hooks can use it immediately.
+    let idDeclaration = `const ${ref}_uid=$props.id();const ${ref}=${JSON.stringify(componentId + ':')}+${ref}_uid;`;
+    if (existingId && js && script) {
+        for (const statement of js.program.body) {
+            if (!t.isVariableDeclaration(statement)) continue;
+            for (const declaration of statement.declarations) {
+                if (t.isIdentifier(declaration.id, { name: existingId }) && declaration.init) {
+                    s.overwrite(script.content.start + declaration.init.start!, script.content.start + declaration.init.end!, `${ref}_uid`);
+                }
+            }
+        }
+        idDeclaration = `const ${ref}_uid=$props.id();const ${ref}=${JSON.stringify(componentId + ':')}+${ref}_uid;`;
+    }
+    const metadata = `{id:${ref},parentId:${ref}_parent,name:${JSON.stringify(componentName)},filename:${JSON.stringify(filename)},propKeys:${JSON.stringify(propKeys || [])}}`;
+    const combined = `import {onDestroy as ${ref}_destroy,getContext as ${ref}_getContext,setContext as ${ref}_setContext} from 'svelte';${idDeclaration}` +
+        `const ${ref}_context=Symbol.for('svelte-devtools.component-parent');const ${ref}_parent=${ref}_getContext(${ref}_context);${ref}_setContext(${ref}_context,${ref});let ${ref}_alive=true;` +
+        `if(typeof window!=='undefined'){window.__SVELTE_DEVTOOLS_REGISTRY__||=new Map();window.__SVELTE_DEVTOOLS_REGISTRY__.set(${ref},${metadata});` +
+        `const register=(r)=>{if(${ref}_alive)r.registerComponent(${ref},${JSON.stringify(componentName)},${JSON.stringify(filename)})};` +
+        `if(window.__SVELTE_DEVTOOLS_RUNTIME__)register(window.__SVELTE_DEVTOOLS_RUNTIME__);else(window.__SVELTE_DEVTOOLS_QUEUE__||=[]).push(register);}` +
+        `${ref}_destroy(()=>{${ref}_alive=false;if(typeof window!=='undefined'){window.__SVELTE_DEVTOOLS_RUNTIME__?.unregisterComponent(${ref});window.__SVELTE_DEVTOOLS_REGISTRY__?.delete(${ref})}});`;
+    if (script) s.appendLeft(script.content.start, combined);
+    else s.prepend(`<script>${combined}</script>`);
+
+    // Tag owned DOM nodes, including alternate branches and multiple roots. Use the
+    // compiler AST so markup-like strings, comments and child component props stay intact.
+    function tagElements(node: unknown): void {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) { node.forEach(tagElements); return; }
+        const element = node as Record<string, unknown>;
+        if ((element.type === 'RegularElement' || element.type === 'SvelteElement') && typeof element.name === 'string' &&
+            !['title', 'meta', 'link', 'base', 'script', 'style'].includes(element.name)) {
+            s.appendLeft(Number(element.start) + 1 + element.name.length,
+                ` data-svelte-devtools-id={${ref}} data-svelte-component=${JSON.stringify(componentName)}`);
+        }
+        for (const value of Object.values(element)) if (value && typeof value === 'object') tagElements(value);
+    }
+    tagElements(ast?.fragment);
 }
 
 function injectStateInspection(s: MagicString, code: string, filename: string, componentId: string, runeCounts: Record<string, number>, propKeys?: string[]): void {
@@ -664,6 +716,7 @@ function injectStateInspection(s: MagicString, code: string, filename: string, c
 }
 
 interface SvelteAst {
+    fragment?: unknown;
     instance?: {
         content: {
             start: number;
@@ -690,12 +743,9 @@ function extractScript(code: string, ast: { instance?: { content: { start: numbe
             scriptContent: code.slice(ast.instance.content.start, ast.instance.content.end)
         };
     }
-    const match = /<script[^>]*>([\s\S]*?)<\/script>/i.exec(code);
-    if (!match) return {scriptContent: '', scriptStart: 0};
-    return {
-        scriptStart: match.index + match[0].indexOf(match[1]),
-        scriptContent: match[1]
-    };
+    // A parsed component without an instance script may still have a module
+    // script. Module code cannot refer to the per-instance instrumentation ID.
+    return {scriptContent: '', scriptStart: 0};
 }
 
 function parseJavaScript(code: string): t.File | null {
@@ -708,15 +758,17 @@ function parseJavaScript(code: string): t.File | null {
 
 function createInjectCode(d: StateDeclaration, componentId: string): string {
     if (d.isClassInstance) {
-        return `;if(typeof window!=='undefined'){var _q=window.__SVELTE_DEVTOOLS_QUEUE__=window.__SVELTE_DEVTOOLS_QUEUE__||[];var _fn=function(r){r._registerState('${componentId}','${d.key}',function(v){var s=${d.key};if(s&&v&&typeof v==='object'){var _val=v.current!==void 0?v.current:(v.target!==void 0?v.target:v);if(typeof s.set==='function'){s.set(_val,{hard:true})}else{if(v.target!==void 0)s.target=v.target;if(v.current!==void 0)s.current=v.current}}})};if(window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__._registerState){_fn(window.__SVELTE_DEVTOOLS_RUNTIME__)}else{_q.push(_fn)}};{$effect(()=>{const s=${d.key};if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleState){window.__SVELTE_DEVTOOLS_RUNTIME__.handleState('${componentId}','${d.key}','update',{current:s?.current,target:s?.target,stiffness:s?.stiffness,damping:s?.damping})}})}`;
+        return `;if(typeof window!=='undefined'){var _q=window.__SVELTE_DEVTOOLS_QUEUE__=window.__SVELTE_DEVTOOLS_QUEUE__||[];var _fn=function(r){r._registerState(${instanceRef(componentId)},'${d.key}',function(v){var s=${d.key};if(s&&v&&typeof v==='object'){var _val=v.current!==void 0?v.current:(v.target!==void 0?v.target:v);if(typeof s.set==='function'){s.set(_val,{hard:true})}else{if(v.target!==void 0)s.target=v.target;if(v.current!==void 0)s.current=v.current}}})};if(window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__._registerState){_fn(window.__SVELTE_DEVTOOLS_RUNTIME__)}else{_q.push(_fn)}};{$effect(()=>{const s=${d.key};if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleState){window.__SVELTE_DEVTOOLS_RUNTIME__.handleState(${instanceRef(componentId)},'${d.key}','update',{current:s?.current,target:s?.target,stiffness:s?.stiffness,damping:s?.damping})}})}`;
     }
     // Skip setter for $derived — assigning to a const throws in Svelte 5 SSR.
     // Skip setter for const $derived — assigning to a const throws.
-    const skipSetter = d.callee === '$derived' && d.isConst;
-    const setterReg = skipSetter
-        ? ''
-        : `;if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__._registerState){window.__SVELTE_DEVTOOLS_RUNTIME__._registerState('${componentId}','${d.key}',(v)=>{${d.key}=v})}`;
-    return `${setterReg};$inspect(${d.key}).with((t,...v)=>{if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleState){window.__SVELTE_DEVTOOLS_RUNTIME__.handleState('${componentId}','${d.key}',t,v[0])}})`;
+    const skipSetter = d.callee === '$derived' || d.callee === '$derived.by';
+    const ref = instanceRef(componentId);
+    const assignment = d.isConst
+        ? `if(Array.isArray(${d.key})&&Array.isArray(v)){${d.key}.splice(0,${d.key}.length,...v)}else if(${d.key}&&v&&typeof ${d.key}==='object'&&typeof v==='object'&&!Array.isArray(${d.key})&&!Array.isArray(v)){for(const k of Object.keys(${d.key}))if(!Object.prototype.hasOwnProperty.call(v,k))delete ${d.key}[k];Object.assign(${d.key},v)}else{throw new Error('A const state value can only be edited in place with the same object or array type')}`
+        : `${d.key}=v`;
+    const setterReg = skipSetter ? '' : `;if(typeof window!=='undefined'){const register=(r)=>{${d.isConst ? `if(${d.key}===null||typeof ${d.key}!=='object')return;` : ''}if(window.__SVELTE_DEVTOOLS_REGISTRY__?.has(${ref}))r._registerState(${ref},'${d.key}',(v)=>{${assignment}})};if(window.__SVELTE_DEVTOOLS_RUNTIME__)register(window.__SVELTE_DEVTOOLS_RUNTIME__);else(window.__SVELTE_DEVTOOLS_QUEUE__||=[]).push(register)}`;
+    return `${setterReg};$inspect(${d.key}).with((t,...v)=>{if(typeof window!=='undefined'){const inspect=(r)=>{if(window.__SVELTE_DEVTOOLS_REGISTRY__?.has(${ref}))r.handleState(${ref},'${d.key}',t,v[0])};if(window.__SVELTE_DEVTOOLS_RUNTIME__)inspect(window.__SVELTE_DEVTOOLS_RUNTIME__);else(window.__SVELTE_DEVTOOLS_QUEUE__||=[]).push(inspect)}})`;
 }
 
 function findStateDeclarations(ast: t.File, offset: number, runeCounts: Record<string, number>, propKeys?: string[]): StateDeclaration[] {
@@ -772,54 +824,21 @@ function extractRuneDeclarations(decl: t.VariableDeclarator, offset: number, res
     const pos = decl.init.end;
     if (pos == null) return;
 
-    if (t.isIdentifier(decl.id)) {
-        result.push({ key: decl.id.name, injectPos: offset + pos, isClassInstance: false, callee, isConst });
-        return;
+    // Babel resolves binding names through aliases, defaults, nested patterns,
+    // array holes, and rest elements. Property names are not local bindings.
+    const bindings = t.getBindingIdentifiers(decl.id);
+    for (const key of Object.keys(bindings)) {
+        result.push({ key, injectPos: offset + pos, isClassInstance: false, callee, isConst });
     }
 
-    if (t.isObjectPattern(decl.id)) {
+    if (callee === '$props' && t.isObjectPattern(decl.id)) {
         for (const prop of decl.id.properties) {
-            if (t.isObjectProperty(prop)) {
-                if (t.isIdentifier(prop.key)) {
-                    const actualName = t.isIdentifier(prop.value) ? prop.value.name : prop.key.name;
-                    result.push({ key: actualName, injectPos: offset + pos, isClassInstance: false, callee, isConst });
-                    if (callee === '$props' && propKeys) {
-                        propKeys.push(actualName);
-                    }
-                }
-            } else if (t.isRestElement(prop)) {
-                if (t.isIdentifier(prop.argument)) {
-                    result.push({ key: prop.argument.name, injectPos: offset + pos, isClassInstance: false });
-                }
-            }
-        }
-
-        // Detect $bindable() in default values for $props() destructuring
-        if (callee === '$props') {
-            for (const prop of decl.id.properties) {
-                if (t.isObjectProperty(prop) && t.isAssignmentPattern(prop.value)) {
-                    const right = prop.value.right;
-                    if (t.isCallExpression(right) && t.isIdentifier(right.callee) && right.callee.name === '$bindable') {
-                        runeCounts['$bindable'] = (runeCounts['$bindable'] || 0) + 1;
-                    }
-                }
-            }
-        }
-
-        return;
-    }
-
-    if (t.isArrayPattern(decl.id)) {
-        for (const element of decl.id.elements) {
-            if (t.isIdentifier(element)) {
-                result.push({ key: element.name, injectPos: offset + pos, isClassInstance: false });
-            } else if (t.isRestElement(element)) {
-                if (t.isIdentifier(element.argument)) {
-                    result.push({ key: element.argument.name, injectPos: offset + pos, isClassInstance: false });
-                }
-            } else if (t.isAssignmentPattern(element)) {
-                if (t.isIdentifier(element.left)) {
-                    result.push({ key: element.left.name, injectPos: offset + pos, isClassInstance: false });
+            if (!t.isObjectProperty(prop)) continue;
+            if (propKeys) propKeys.push(...Object.keys(t.getBindingIdentifiers(prop.value)));
+            if (t.isAssignmentPattern(prop.value)) {
+                const right = prop.value.right;
+                if (t.isCallExpression(right) && t.isIdentifier(right.callee, { name: '$bindable' })) {
+                    runeCounts['$bindable'] = (runeCounts['$bindable'] || 0) + 1;
                 }
             }
         }
@@ -904,7 +923,7 @@ function injectEffectTracking(s: MagicString, code: string, filename: string, co
         // Track effect execution at runtime with a snapshot of current state.
         // The runtime uses componentId to look up the component and capture
         // its state values at the moment the effect runs.
-        const injectCode = `if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleEffect){window.__SVELTE_DEVTOOLS_RUNTIME__.handleEffect('${componentId}','${effectKey}','${name}','${filename.replace(/'/g, "\\'")}')};`;
+        const injectCode = `if(typeof window!=='undefined'&&window.__SVELTE_DEVTOOLS_RUNTIME__&&window.__SVELTE_DEVTOOLS_RUNTIME__.handleEffect){window.__SVELTE_DEVTOOLS_RUNTIME__.handleEffect(${instanceRef(componentId)},'${effectKey}','${name}','${filename.replace(/'/g, "\\'")}')};`;
 
         s.appendLeft(bodyOffset, injectCode);
     }

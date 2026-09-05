@@ -1,4 +1,6 @@
+import { installNetworkTools } from './network-bridge.js';
 import {ComponentRegistry} from './instrumentation/registry.js';
+import { LIMITS, isJsonEditable, type TimelineEntry } from '@fsodano/svelte-devtools-types';
 import type {ComponentInstance, SvelteDevToolsAPI} from '@fsodano/svelte-devtools-types';
 export { getInitScript } from './init.js';
 
@@ -14,7 +16,7 @@ import type { GlobalRuntime } from './init.js';
 
 interface SvelteDevToolsRuntimeWindow extends Window {
     __SVELTE_DEVTOOLS_RUNTIME__: GlobalRuntime;
-    __SVELTE_DEVTOOLS_REGISTRY__?: Map<string, { id: string; name: string; filename: string }>;
+    __SVELTE_DEVTOOLS_REGISTRY__?: Map<string, { id: string; name: string; filename: string; parentId?: string }>;
     __SVELTE_DEVTOOLS__?: SvelteDevToolsAPI;
     __SVELTE_DEVTOOLS_DEBUG__?: boolean;
     __SVELTE_DEVTOOLS_TICK__?: () => Promise<void>;
@@ -29,6 +31,31 @@ const state: DevToolsState = {
     components: new Map()
 };
 
+const eventHistory: TimelineEntry[] = [];
+const eventSubscribers = new Set<(event: unknown) => void>();
+let nextEventId = 0;
+
+function recordEvent(event: { type: string; timestamp: number; duration?: number; [key: string]: unknown }): void {
+    const types: Record<string, string> = { state: 'state:change', effect: 'effect:run', 'component-register': 'component:mount' };
+    eventHistory.push({
+        id: `runtime-${++nextEventId}`,
+        type: types[event.type] ?? event.type,
+        timestamp: event.timestamp,
+        data: structuredClone(event),
+        ...(event.duration !== undefined ? { duration: event.duration } : {}),
+    });
+    if (eventHistory.length > LIMITS.MAX_TIMELINE_EVENTS) eventHistory.splice(0, eventHistory.length - LIMITS.MAX_TIMELINE_EVENTS);
+    for (const callback of [...eventSubscribers]) {
+        try { callback(structuredClone(event)); }
+        catch (error) { if (isDebug) console.warn('[Svelte DevTools] Event subscriber failed:', error); }
+    }
+}
+
+function clearEventObservers(): void {
+    eventHistory.length = 0;
+    eventSubscribers.clear();
+}
+
 export const runtime = {
     version: '0.0.1',
     init(): void {
@@ -42,56 +69,22 @@ export const runtime = {
             timestamp: performance.now()
         });
 
-        // Intercept client-side fetch calls and emit client:request events
+        // Share the same interceptor for request inspection and panel mock rules.
         if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
-            const origFetch = window.fetch.bind(window);
-            const self = this;
-            window.fetch = ((input, init) => {
-                const urlStr = typeof input === 'string' ? input
-                    : input instanceof URL ? input.href
-                    : input instanceof Request ? input.url
-                    : String(input);
-                const method = init?.method || 'GET';
-                const startTime = performance.now();
-                    const promise = origFetch(input, init);
-                    promise.then(async (res) => {
-                    const duration = performance.now() - startTime;
-                    let respBody = '';
-                    try { respBody = await res.clone().text(); } catch {/* ignore */}
-                    const reqHeaders: Record<string, string> = {};
-                    if (init?.headers) {
-                        const h = init.headers;
-                        if (h instanceof Headers) h.forEach((v, k) => { reqHeaders[k] = v; });
-                        else if (Array.isArray(h)) h.forEach(([k, v]) => { reqHeaders[k] = v; });
-                        else Object.assign(reqHeaders, h as Record<string, string>);
-                    }
-                    self.emit({
-                        type: 'client:request',
-                        componentId: '',
-                        componentName: '',
-                        timestamp: Date.now(),
-                        data: {
-                            url: urlStr,
-                            method,
-                            statusCode: res.status,
-                            statusText: res.statusText,
-                            duration,
-                            responseSize: respBody.length,
-                            responseHeaders: Object.fromEntries([...res.headers.entries()]),
-                            requestHeaders: reqHeaders,
-                            responsePreview: respBody.slice(0, 500),
-                        }
-                    });
-                }).catch(() => {});
-                return promise;
-            }) as typeof window.fetch;
+            installNetworkTools(request => this.emit({
+                type: 'client:request', componentId: '', componentName: '',
+                timestamp: request.timestamp,
+                data: { ...request, responsePreview: request.responseBody,
+                    contentType: request.responseHeaders?.['content-type'],
+                    responseSize: request.responseBody?.length },
+            }));
         }
 
         // Watch for DOM mutations to detect component mounts and unmounts.
         // Watches both childList (for new elements) and attributes (for
         // `data-svelte-devtools-id` which Svelte 5 sets after appending).
         if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
-            const tryRegister = (el: Element, registry: Map<string, { id: string; name: string; filename: string }> | undefined) => {
+            const tryRegister = (el: Element, registry: Map<string, { id: string; name: string; filename: string; parentId?: string }> | undefined) => {
                 const id = el.getAttribute('data-svelte-devtools-id');
                 if (id && !state.components.has(id) && registry?.has(id)) {
                     const meta = registry.get(id)!;
@@ -107,28 +100,14 @@ export const runtime = {
                 }
             };
             const tryUnregister = (el: Element) => {
-                const removedId = el.getAttribute('data-svelte-devtools-id');
-                if (removedId && state.components.has(removedId)) {
-                    this.emit({
-                        type: 'component:unmount',
-                        componentId: removedId,
-                        componentName: state.components.get(removedId)!.name,
-                        timestamp: performance.now()
-                    });
-                    state.components.delete(removedId);
-                }
-                const descendants = el.querySelectorAll('[data-svelte-devtools-id]');
-                for (const desc of descendants) {
-                    const descId = desc.getAttribute('data-svelte-devtools-id');
-                    if (descId && state.components.has(descId)) {
-                        this.emit({
-                            type: 'component:unmount',
-                            componentId: descId,
-                            componentName: state.components.get(descId)!.name,
-                            timestamp: performance.now()
-                        });
-                        state.components.delete(descId);
-                    }
+                // A keyed each block can move a node without destroying its component.
+                if (el.isConnected) return;
+                const ids = [el, ...el.querySelectorAll('[data-svelte-devtools-id]')];
+                for (const node of ids) {
+                    const id = node.getAttribute('data-svelte-devtools-id');
+                    // Injected components own their lifetime through onDestroy, even if
+                    // a conditional removes their first DOM element.
+                    if (id && !(window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_REGISTRY__?.has(id)) this.unregisterComponent(id);
                 }
             };
 
@@ -179,6 +158,14 @@ export const runtime = {
         }
     },
 
+    unregisterComponent(id: string): void {
+        const component = state.components.get(id);
+        if (!component) return;
+        this.emit({ type: 'component:unmount', componentId: id, componentName: component.name, timestamp: performance.now() });
+        state.components.delete(id);
+        this._registerStateStore.delete(id);
+    },
+
     registerComponent(id: string, name: string, filename: string, sourceLocation?: string): void {
         if (state.components.has(id)) return;
 
@@ -197,7 +184,10 @@ export const runtime = {
         state.components.set(id, componentState);
 
         setTimeout(() => {
-            let parentId: string | undefined;
+            if (!state.components.has(id)) return;
+            // Context ancestry survives fragments, layouts and DOM portals. DOM ancestry
+            // is only a fallback for components registered by older instrumentation.
+            let parentId = (window as SvelteDevToolsRuntimeWindow).__SVELTE_DEVTOOLS_REGISTRY__?.get(id)?.parentId;
             if (typeof document !== 'undefined') {
                 const el = document.querySelector(`[data-svelte-devtools-id="${id}"]`);
                 if (el) {
@@ -205,7 +195,7 @@ export const runtime = {
                     let parent = el.parentElement;
                     while (parent) {
                         const parentIdAttr = parent.getAttribute('data-svelte-devtools-id');
-                        if (parentIdAttr && state.components.has(parentIdAttr)) {
+                        if (!parentId && parentIdAttr && parentIdAttr !== id && state.components.has(parentIdAttr)) {
                             parentId = parentIdAttr;
                             break;
                         }
@@ -226,6 +216,7 @@ export const runtime = {
                 sourceLocation: sourceLocation ? {filename: sourceLocation, line: 0, column: 0} : undefined
             });
 
+            recordEvent({ type: 'component-register', componentId: id, componentName: name, filename, parentId, timestamp: performance.now() });
             window.postMessage({
                 source: 'svelte-devtools',
                 type: 'component-register',
@@ -359,8 +350,10 @@ export const runtime = {
 
             const sanitizedEvent = {
                 ...event,
-                value: sanitizeForPostMessage(event.value)
+                value: sanitizeForPostMessage(event.value),
+                data: sanitizeForPostMessage(event.data)
             };
+            recordEvent(sanitizedEvent);
             if (isDebug) console.log('[Runtime:emit] Sending event:', sanitizedEvent.type, 'payload:', sanitizedEvent);
             window.postMessage({source: 'svelte-devtools', type: sanitizedEvent.type, payload: sanitizedEvent}, '*');
         }
@@ -386,13 +379,17 @@ export const runtime = {
     },
 
     setComponentState(componentId: string, key: string, value: unknown): void {
+        // Snapshots cannot reconstruct functions, collections, or class instances.
+        // Preserve those live values instead of replacing them with serialized previews.
+        const current = state.components.get(componentId)?.state;
+        if (current?.has(key) && !isJsonEditable(current.get(key))) return;
         const compSetters = this._registerStateStore.get(componentId);
         if (compSetters) {
             const setter = compSetters.get(key);
             if (setter) setter(value);
         }
         const comp = state.components.get(componentId);
-        if (comp) comp.state.set(key, value);
+        if (comp && compSetters?.has(key)) comp.state.set(key, value);
     },
 
     startInspectBatch(): void {
@@ -417,53 +414,57 @@ export const runtime = {
     }
 };
 
-function sanitizeForPostMessage(value: unknown): unknown {
+function sanitizeForPostMessage(value: unknown, ancestors = new WeakSet<object>()): unknown {
     if (typeof value === 'function') {
         return '[Function]';
     }
-    if (value instanceof Element || value instanceof Node) {
+    if ((typeof Element !== 'undefined' && value instanceof Element) || (typeof Node !== 'undefined' && value instanceof Node)) {
         return '[DOM Node]';
     }
     if (value === null || typeof value !== 'object') {
         return value;
     }
-    if (Array.isArray(value)) {
-        return value.map(sanitizeForPostMessage);
-    }
-    if (value instanceof Map) {
-        const obj: Record<string, unknown> = {};
-        value.forEach((v, k) => {
-            obj[String(k)] = sanitizeForPostMessage(v);
-        });
-        return obj;
-    }
-    if (value instanceof Set) {
-        return Array.from(value).map(sanitizeForPostMessage);
-    }
-
-    const obj: Record<string, unknown> = {};
-    const seen = new Set<string>();
-    let proto: unknown = value;
-
-    while (proto && proto !== Object.prototype) {
-        const descriptors = Object.getOwnPropertyDescriptors(proto);
-        for (const [key, desc] of Object.entries(descriptors)) {
-            if (seen.has(key)) continue;
-            seen.add(key);
-            if (typeof desc.get === 'function') {
-                try {
-                    obj[key] = sanitizeForPostMessage(desc.get.call(value));
-                } catch (e) {
-                    obj[key] = '[Error]';
-                }
-            } else if (typeof desc.value !== 'function') {
-                obj[key] = sanitizeForPostMessage(desc.value);
-            }
+    if (ancestors.has(value)) return '[Circular]';
+    ancestors.add(value);
+    try {
+        if (Array.isArray(value)) {
+            return value.map(item => sanitizeForPostMessage(item, ancestors));
         }
-        proto = Object.getPrototypeOf(proto);
-    }
+        if (value instanceof Map) {
+            const obj: Record<string, unknown> = {};
+            value.forEach((v, k) => {
+                obj[String(k)] = sanitizeForPostMessage(v, ancestors);
+            });
+            return obj;
+        }
+        if (value instanceof Set) {
+            return Array.from(value).map(item => sanitizeForPostMessage(item, ancestors));
+        }
 
-    return Object.keys(obj).length > 0 ? obj : String(value);
+        const obj: Record<string, unknown> = {};
+        const seen = new Set<string>();
+        let proto: unknown = value;
+
+        while (proto && proto !== Object.prototype) {
+            const descriptors = Object.getOwnPropertyDescriptors(proto);
+            for (const [key, desc] of Object.entries(descriptors)) {
+                if (seen.has(key)) continue;
+                seen.add(key);
+                if (typeof desc.get === 'function') {
+                    try {
+                        obj[key] = sanitizeForPostMessage(desc.get.call(value), ancestors);
+                    } catch (e) {
+                        obj[key] = '[Error]';
+                    }
+                } else if (typeof desc.value !== 'function') {
+                    obj[key] = sanitizeForPostMessage(desc.value, ancestors);
+                }
+            }
+            proto = Object.getPrototypeOf(proto);
+        }
+
+        return Object.keys(obj).length > 0 || Object.getPrototypeOf(value) === Object.prototype ? obj : String(value);
+    } finally { ancestors.delete(value); }
 }
 
 // ============================================================================
@@ -592,6 +593,7 @@ if (typeof window !== 'undefined') {
     svelteDevToolsRuntime.version = runtime.version;
     svelteDevToolsRuntime.init = runtime.init.bind(runtime);
     svelteDevToolsRuntime.registerComponent = runtime.registerComponent.bind(runtime);
+    svelteDevToolsRuntime.unregisterComponent = runtime.unregisterComponent.bind(runtime);
     svelteDevToolsRuntime.emit = runtime.emit.bind(runtime);
     svelteDevToolsRuntime.getState = runtime.getState.bind(runtime);
     svelteDevToolsRuntime.handleEffect = runtime.handleEffect.bind(runtime);
@@ -690,7 +692,19 @@ if (typeof window !== 'undefined') {
                 mountTime: 0
             };
         },
-        getTimeline: () => [],
+        getWritableStateKeys: (id: string) => Array.from(runtime._registerStateStore.get(id)?.keys() ?? []).filter(key => {
+            const state = runtime.getState().components.get(id)?.state;
+            return !!state?.has(key) && isJsonEditable(state.get(key));
+        }),
+        editComponentState: (id: string, key: string, value: unknown) => {
+            if (!runtime.getState().components.has(id)) throw new Error('Component is no longer mounted.');
+            if (!runtime._registerStateStore.get(id)?.has(key)) throw new Error('This value is read-only.');
+            if (!isJsonEditable(runtime.getState().components.get(id)!.state.get(key)) || !isJsonEditable(value)) {
+                throw new Error('This value cannot be edited safely as JSON. Functions and other non-JSON values are read-only.');
+            }
+            runtime.setComponentState(id, key, value);
+        },
+        getTimeline: () => structuredClone(eventHistory),
         setComponentState: (id: string, key: string, value: unknown) => {
             svelteDevToolsRuntime.setComponentState(id, key, value);
         },
@@ -712,11 +726,20 @@ if (typeof window !== 'undefined') {
         disableInspector: () => {
             inspectorDisable();
         },
-        subscribe: () => () => {
+        subscribe: (callback) => {
+            // Each subscription owns its registration, even for the same callback.
+            const listener = (event: unknown) => callback(event);
+            eventSubscribers.add(listener);
+            return () => { eventSubscribers.delete(listener); };
         },
-        trace: () => {
+        trace: (name, dependencies) => {
+            runtime.emit({ type: 'trace:trigger', componentId: '', componentName: name,
+                key: name, value: { name, dependencies: [...dependencies] }, timestamp: Date.now() });
         }
     };
 
+    window.addEventListener('pagehide', (event) => {
+        if (!event.persisted) clearEventObservers();
+    });
     runtime.init();
 }

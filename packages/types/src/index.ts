@@ -247,6 +247,8 @@ export interface SvelteDevToolsAPI {
   getTimeline(): TimelineEntry[];
   subscribe(callback: (event: unknown) => void): () => void;
   trace(name: string, dependencies: string[]): void;
+  getWritableStateKeys?(componentId: string): string[];
+  editComponentState?(componentId: string, key: string, value: unknown): void;
   setComponentState?(componentId: string, key: string, value: unknown): void;
   refresh?(): void;
   startInspectBatch?(): void;
@@ -357,3 +359,4 @@ export interface ComponentInfo {
 // ============================================================================
 
 export * from './constants.js';
+export { isJsonEditable } from './json-state.js';

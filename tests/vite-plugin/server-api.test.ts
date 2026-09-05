@@ -28,7 +28,8 @@ vi.mock('../../packages/vite-plugin/src/migration-analyzer.js', () => ({
     })),
 }));
 
-vi.mock('node:fs', () => ({
+vi.mock('node:fs', async (importOriginal) => ({
+    ...await importOriginal<typeof import('node:fs')>(),
     readFileSync: vi.fn(() => `// line 1\nconst a = 1;\n`) as unknown,
     existsSync: vi.fn(() => true) as unknown,
     readdirSync: vi.fn(() => ['+page.svelte', '+layout.svelte', '+page.ts', 'api', 'about']) as unknown,
@@ -44,7 +45,8 @@ vi.mock('node:fs', () => ({
     }) as unknown,
 }));
 
-vi.mock('node:path', () => ({
+vi.mock('node:path', async (importOriginal) => ({
+    ...await importOriginal<typeof import('node:path')>(),
     resolve: vi.fn((...args: string[]) => args.filter(Boolean).join('/').replace(/\/+/g, '/')) as unknown,
     isAbsolute: vi.fn((p: string) => p.startsWith('/')) as unknown,
     join: vi.fn((...args: string[]) => args.filter(Boolean).join('/').replace(/\/+/g, '/')) as unknown,
@@ -158,6 +160,21 @@ describe('handleApiRequest', () => {
 
     afterEach(() => {
         delete (globalThis as Record<string, unknown>)['__SVELTE_DEVTOOLS_REGISTRY__'];
+    });
+
+    it('discovers supported operations and explains cached runtime data', async () => {
+        const res = createMockRes();
+        await handleApiRequest(authReq('/'), res, mockServer, '/');
+        const body = JSON.parse(res.body);
+        expect(body.apiVersion).toBe(1);
+        expect(body.capabilities.liveStateEditing).toBe(true);
+        expect(body.capabilities.runtimeData).toMatchObject({
+            requiresOpenPanel: true, transport: 'panel-sync',
+        });
+        expect(body.operations.setState).toMatchObject({ supported: true, acknowledgement: 'live-panel' });
+        expect(body.operations.sync.internal).toBe(true);
+        expect(body.operations.source.requiredQuery).toEqual(['file']);
+        expect(res.headers['Cache-Control']).toBe('no-store');
     });
 
     // ── Authentication (ADR-0009) ──
@@ -489,7 +506,7 @@ describe('handleApiRequest', () => {
             const res1 = createMockRes();
             await handleApiRequest(req1, res1, mockServer, '/set-state');
             expect(res1.statusCode).toBe(400);
-            expect(parseRes(res1)).toMatchObject({ error: 'Missing componentId or key' });
+            expect(parseRes(res1)).toMatchObject({ error: 'Missing sessionId, componentId, key, or value' });
 
             // Missing componentId
             const req2 = authReq('/', 'POST', JSON.stringify({ key: 'count' }));
@@ -498,7 +515,7 @@ describe('handleApiRequest', () => {
             expect(res2.statusCode).toBe(400);
         });
 
-        it('returns 501 and never mutates the sync cache', async () => {
+        it('rejects an unavailable session and never mutates the sync cache', async () => {
             // Sync a component with initial state
             const syncReq = authReq('/', 'POST', JSON.stringify({
                 components: [{ id: 'comp-1', name: 'Counter', state: { count: 0 } }],
@@ -509,6 +526,7 @@ describe('handleApiRequest', () => {
 
             // Attempt to edit live state
             const setReq = authReq('/', 'POST', JSON.stringify({
+                sessionId: 'missing-panel',
                 componentId: 'comp-1',
                 key: 'count',
                 value: 42,
@@ -516,8 +534,8 @@ describe('handleApiRequest', () => {
             const setRes = createMockRes();
             await handleApiRequest(setReq, setRes, mockServer, '/set-state');
 
-            expect(setRes.statusCode).toBe(501);
-            expect(parseRes(setRes)).toMatchObject({ error: 'NOT_IMPLEMENTED' });
+            expect(setRes.statusCode).toBe(409);
+            expect(parseRes(setRes)).toMatchObject({ ok: false, error: expect.stringContaining('SESSION_UNAVAILABLE') });
 
             // The cache is untouched: count is still 0
             const getReq = authReq();
@@ -674,12 +692,44 @@ describe('handleApiRequest', () => {
         });
     });
 
+    describe('session-scoped inspection and pagination', () => {
+        it('keeps two panel caches separate and returns metadata without large state', async () => {
+            for (const [sessionId, value] of [['panel-one', 1], ['panel-two', 2]] as const) {
+                const req = authReq('/', 'POST', JSON.stringify({ sessionId,
+                    components: Array.from({ length: 1000 }, (_, index) => ({ id: `c${index}`, name: 'Counter', state: { count: value, large: 'x'.repeat(1000) }, props: { value } })),
+                }));
+                await handleApiRequest(req, createMockRes(), mockServer, '/sync');
+            }
+            const res = createMockRes();
+            await handleApiRequest(authReq('/?sessionId=panel-one&offset=10&limit=2&includeState=false'), res, mockServer, '/components');
+            expect(res.statusCode).toBe(200);
+            expect(parseRes(res)).toMatchObject({ count: 2, total: 1000, offset: 10, sessionId: 'panel-one', components: [{ id: 'c10' }, { id: 'c11' }] });
+            expect(res.body).not.toContain('large');
+            expect(res.body).not.toContain('props');
+            expect(res.body.length).toBeLessThan(1000);
+            const one = createMockRes();
+            await handleApiRequest(authReq('/?sessionId=panel-one&id=c0'), one, mockServer, '/components');
+            expect((parseRes(one) as any).components[0].state.count).toBe(1);
+            const two = createMockRes();
+            await handleApiRequest(authReq('/?sessionId=panel-two&id=c0'), two, mockServer, '/components');
+            expect((parseRes(two) as any).components[0].state.count).toBe(2);
+        });
+        it('rejects unknown sessions and invalid pagination', async () => {
+            const missing = createMockRes();
+            await handleApiRequest(authReq('/?sessionId=never-synced'), missing, mockServer, '/components');
+            expect(missing.statusCode).toBe(409);
+            const invalid = createMockRes();
+            await handleApiRequest(authReq('/?limit=10000'), invalid, mockServer, '/components');
+            expect(invalid.statusCode).toBe(400);
+        });
+    });
+
     // ── Routes ──
 
     describe('routes endpoint', () => {
         it('returns SvelteKit routes when routes directory exists', async () => {
             (existsSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(true);
-            (readdirSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(['+page.svelte', '+layout.svelte', '+page.ts']);
+            (readdirSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(['+page.svelte', '+layout.svelte', '+page.ts'].map(name => ({ name, isFile: () => true, isDirectory: () => false })));
             (statSync as ReturnType<typeof vi.fn>).mockImplementation((path: string) => ({
                 isDirectory: () => !path.includes('.'),
             }));
@@ -688,7 +738,7 @@ describe('handleApiRequest', () => {
             const res = createMockRes();
             await handleApiRequest(req, res, mockServer, '/routes');
 
-            expect(res.statusCode).toBe(200);
+            expect(res.statusCode, res.body).toBe(200);
             const body = parseRes(res) as Record<string, unknown>;
             expect(body).toMatchObject({ ok: true });
             expect(body.routes).toBeInstanceOf(Array);
@@ -703,7 +753,7 @@ describe('handleApiRequest', () => {
 
             expect(res.statusCode).toBe(200);
             const body = parseRes(res) as Record<string, unknown>;
-            expect(body).toEqual({ ok: true, routes: [] });
+            expect(body).toMatchObject({ ok: true, count: 0, routes: [], configurationSource: 'default' });
         });
     });
 

@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
 	BASE_URL,
+	API_TOKEN,
 	LOG_FILE,
 	MANUAL_AUTH_TOKEN_RE,
 	PORT,
@@ -72,7 +73,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 		['--port', String(PORT), '--strictPort', '--clearScreen', 'false'],
 		{
 			cwd: TEST_APP_DIR,
-			env: { ...process.env },
+			env: { ...process.env, SVELTE_DEVTOOLS_TOKEN: API_TOKEN },
 			stdio: ['ignore', 'pipe', 'pipe'],
 		},
 	);
@@ -87,7 +88,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 		appendLog(chunk);
 		// The token may arrive across multiple writes — re-scan the whole buffer.
 		stdoutBuffer += stripAnsi(chunk.toString());
-		const match = stdoutBuffer.match(MANUAL_AUTH_TOKEN_RE);
+		const match = Array.from(stdoutBuffer.matchAll(new RegExp(MANUAL_AUTH_TOKEN_RE.source, 'g'))).at(-1);
 		if (match) fs.writeFileSync(TOKEN_FILE, match[1]);
 	});
 	child.stderr?.on('data', (chunk: Buffer) => appendLog(chunk));

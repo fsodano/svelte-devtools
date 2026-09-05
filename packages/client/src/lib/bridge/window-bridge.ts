@@ -103,7 +103,7 @@ const payload: ComponentMountPayload = {
                 if (!isValidBridgeMessage(event, targetWindow)) return;
 
                 const data = event.data;
-                if (data?.source === 'svelte-devtools' && data?.type === 'component-unmount') {
+                if (data?.source === 'svelte-devtools' && (data?.type === 'component-unmount' || data?.type === 'component:unmount')) {
                     const payload = data.payload as { componentId?: string; id?: string };
                     const id = payload?.componentId || payload?.id;
                     if (id) mountedComponents.delete(id);
@@ -150,6 +150,10 @@ function mapPostMessagePayload(payload: unknown, eventType: string): unknown {
     const _payload = payload as Record<string, unknown>;
 
     switch (eventType) {
+        case 'component:unmount':
+        case 'component-unmount':
+            return { id: _payload.componentId || _payload.id, name: _payload.componentName || _payload.name };
+
         case RUNE_TYPES.STATE:
         case RUNE_TYPES.DERIVED:
         case RUNE_TYPES.INSPECT:

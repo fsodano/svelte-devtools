@@ -1,6 +1,11 @@
+import { openDevToolsPanel } from './panel-helpers.mjs';
 import { expect, test, type Page } from '@playwright/test';
 import * as fs from 'node:fs';
-import { BASE_URL, TOKEN_FILE } from './constants';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { BASE_URL, TOKEN_FILE, API_TOKEN } from './constants';
 
 /**
  * Browser smoke test for the Svelte DevTools panel (ADR-0013).
@@ -18,131 +23,14 @@ import { BASE_URL, TOKEN_FILE } from './constants';
  * is unavailable), so the panel is a plain iframe reachable via page.frames().
  */
 
-const DOCK_SELECTOR = 'vite-devtools-dock-embedded';
-
-function readCapturedToken(): string | null {
-	try {
-		const token = fs.readFileSync(TOKEN_FILE, 'utf8').trim();
-		return token || null;
-	} catch {
-		return null;
-	}
-}
-
-async function waitForAuthToken(timeoutMs = 20_000): Promise<string> {
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
-		const token = readCapturedToken();
-		if (token) return token;
-		await new Promise((resolve) => setTimeout(resolve, 250));
-	}
-	throw new Error(
-		`Manual Auth Token was not captured within ${timeoutMs}ms. ` +
-			`Expected the global setup to write ${TOKEN_FILE} once the browser ` +
-			`requested authorization. Check the server log and that the test app ` +
-			`is wired with DevTools() in vite.config.ts.`,
-	);
-}
-
-/**
- * Click a dock button whose text or `title` matches `label`, inside the dock
- * shadow root. Entry buttons render their icons as SVGs (no text), so the
- * title attribute is the reliable handle (e.g. title="Svelte").
- */
-async function clickDockButton(page: Page, label: string): Promise<boolean> {
-	return page.evaluate((text) => {
-		const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-		const button = Array.from(dock?.querySelectorAll('button') ?? []).find(
-			(b) =>
-				(b.textContent ?? '').includes(text) ||
-				b.getAttribute('title') === text,
-		);
-		if (!button) return false;
-		button.click();
-		return true;
-	}, label);
-}
-
 test('authenticates the dock and renders the Svelte panel with real components', async ({
 	page,
-}) => {
+}, testInfo) => {
 	test.setTimeout(180_000);
 
-	// 1. Load the app. This triggers the devtools client's auth request, which
-	//    makes the global setup capture the Manual Auth Token.
-	await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
-	// The dock host element is always layout-hidden (its shadow content is
-	// position:fixed), so wait for attachment, not visibility.
-	await page.waitForSelector(DOCK_SELECTOR, { state: 'attached', timeout: 20_000 });
-	// The dock shows "Unauthorized" only after the auth request has been made —
-	// wait for that state before reading the token so we do not race the print.
-	await page.waitForFunction(() => {
-		const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-		return Array.from(dock?.querySelectorAll('button') ?? []).some((b) =>
-			(b.textContent ?? '').includes('Unauthorized'),
-		);
-	}, { timeout: 20_000 });
-
-	const token = await waitForAuthToken();
-
-	// 2. Open the auth dialog from the dock.
-	const openedDialog = await clickDockButton(page, 'Unauthorized');
-	expect(openedDialog, 'dock "Unauthorized" button should be clickable').toBe(true);
-
-	// 3. Type the token and submit it. The auth panel lives inside the dock's
-	//    shadow root, which Playwright reports as hidden — force the fill and
-	//    click through the DOM directly.
-	const tokenInput = page.locator(
-		`${DOCK_SELECTOR} input[placeholder="Enter auth token"]`,
-	);
-	await tokenInput.waitFor({ state: 'attached', timeout: 10_000 });
-	await tokenInput.fill(token, { force: true });
-
-	const authorized = await clickDockButton(page, 'Authorize');
-	expect(authorized, 'dock "Authorize" button should be clickable').toBe(true);
-
-	// 4. Wait for trust: the "Unauthorized" button must disappear.
-	await page.waitForFunction(
-		() => {
-			const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-			return !Array.from(dock?.querySelectorAll('button') ?? []).some((b) =>
-				(b.textContent ?? '').includes('Unauthorized'),
-			);
-		},
-		{ timeout: 20_000 },
-	);
-
-	// 5. Open the Svelte DevTools panel via the dock entry. The entries load
-	//    over RPC after trust, so wait for the button to exist before clicking.
-	await page.waitForFunction(
-		() => {
-			const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-			return Array.from(dock?.querySelectorAll('button') ?? []).some(
-				(b) => b.getAttribute('title') === 'Svelte',
-			);
-		},
-		{ timeout: 20_000 },
-	);
-	const openedPanel = await clickDockButton(page, 'Svelte');
-	expect(openedPanel, 'dock "Svelte" entry should be clickable').toBe(true);
-
-	// 6. Wait for the DevTools iframe (rendered inside the dock shadow root).
-	await page.waitForFunction(
-		() => {
-			const dock = document.querySelector('vite-devtools-dock-embedded');
-			const iframe = dock?.shadowRoot?.querySelector('iframe');
-			return (
-				iframe !== null &&
-				iframe !== undefined &&
-				(iframe.src || '').includes('__svelte-devtools')
-			);
-		},
-		{ timeout: 30_000 },
-	);
-
-	const devtoolsFrame = page.frames().find((f) => f.url().includes('__svelte-devtools'));
-	expect(devtoolsFrame, 'DevTools panel frame should exist').toBeTruthy();
-	const frame = devtoolsFrame!;
+	const frame = await openDevToolsPanel(page, BASE_URL, () => {
+    try { return fs.readFileSync(TOKEN_FILE, 'utf8').trim(); } catch { return ''; }
+  });
 
 	// 7. The panel defaults to the Dashboard tab — open the component tree.
 	const componentsTab = frame.locator('.sidebar button[title="Components"]');
@@ -161,4 +49,33 @@ test('authenticates the dock and renders the Svelte panel with real components',
 	await expect(
 		frame.locator('.component-row[aria-label="Select ChildComponent component"]'),
 	).toBeVisible({ timeout: 15_000 });
+
+  // Verify the same live registration through HTTP and a real MCP stdio process.
+  const api = () => JSON.parse(execFileSync('curl', ['--silent', '--show-error', '--fail',
+    '-H', `Authorization: Bearer ${API_TOKEN}`, `${BASE_URL}/__svelte-devtools/api/components`], { encoding: 'utf8' }));
+  await expect.poll(() => api().count).toBeGreaterThan(0);
+  expect(api().components.some((c: { name: string }) => c.name === 'ChildComponent')).toBe(true);
+  const client = new Client({ name: 'devtools-e2e', version: '1.0.0' });
+  const transport = new StdioClientTransport({
+    command: process.execPath, args: [resolve('packages/mcp/dist/cli.js')],
+    env: { ...Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === 'string')),
+      SVELTE_DEVTOOLS_URL: BASE_URL, SVELTE_DEVTOOLS_TOKEN: API_TOKEN },
+  });
+  try {
+    await client.connect(transport);
+    expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(expect.arrayContaining(['svelte_status', 'svelte_components', 'svelte_set_state', 'svelte_snapshots', 'svelte_source']));
+    const inspected = await client.callTool({ name: 'svelte_components', arguments: { name: 'ChildComponent' } });
+    expect(inspected.isError).not.toBe(true);
+    expect(inspected.structuredContent).toMatchObject({ total: 1 });
+  } finally { await client.close(); }
+
+  await frame.locator('.sidebar button[title="Info"]').click();
+  await page.screenshot({ path: testInfo.outputPath('dashboard.png') });
+  await frame.locator('.sidebar button[title="Graph"]').click();
+  await expect(frame.locator('canvas')).toBeVisible();
+  await frame.locator('.sidebar button[title="Info"]').click();
+  await frame.locator('.sidebar button[title="Graph"]').click();
+  await expect(frame.locator('canvas')).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath('graph.png') });
+
 });

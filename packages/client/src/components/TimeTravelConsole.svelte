@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SplitPane from "./SplitPane.svelte";
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte.js';
 
   let snapshots: any[] = $derived(devtoolsStore.timeTravel.snapshots);
@@ -60,6 +61,10 @@
     </div>
   </div>
 
+  {#if devtoolsStore.timeTravel.error}
+    <p class="restore-error" role="alert">{devtoolsStore.timeTravel.error}</p>
+  {/if}
+
   {#if snapshots.length > 0}
     <div class="toolbar">
       <button class="tb-btn" onclick={() => devtoolsStore.timeTravel.undo()} disabled={!canUndo} title="Undo">
@@ -87,6 +92,8 @@
   {/if}
 
   <div class="body">
+    <SplitPane label="Resize snapshots and details" secondVisible={!!selectedSnapshot}>
+    {#snippet first()}
     <div class="list">
       {#if snapshots.length === 0}
         <div class="empty">
@@ -94,9 +101,9 @@
           <span class="hint">Click Record and interact with your app</span>
         </div>
       {:else}
-        {#each snapshots as snap, idx}
-          <div class="row" class:active={currentSnapshotIndex === idx} class:selected={selectedSnapshotIndex === idx} onclick={() => selectSnapshot(idx)}>
-            <button class="dot" class:active={currentSnapshotIndex === idx}>
+        {#each snapshots as snap, idx (snap.id)}
+          <div class="row" role="button" tabindex="0" onkeydown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); selectSnapshot(idx); } }} class:active={currentSnapshotIndex === idx} class:selected={selectedSnapshotIndex === idx} onclick={() => selectSnapshot(idx)}>
+            <button aria-label={`Select snapshot ${idx + 1}`} class="dot" class:active={currentSnapshotIndex === idx}>
               <span class="fill"></span>
             </button>
             <div class="info">
@@ -111,6 +118,8 @@
       {/if}
     </div>
 
+    {/snippet}
+    {#snippet second()}
     {#if selectedSnapshot}
       <div class="detail" role="region" aria-label="Snapshot details">
         <div class="detail-header">
@@ -154,7 +163,7 @@
             {#if !hasChanges}
               <div class="no-state">No state changes — initial mount snapshot</div>
             {:else}
-              {#each selectedSnapshot.components as comp}
+              {#each selectedSnapshot.components as comp (comp.id)}
                 {@const prevComp = selectedSnapshotIndex! > 0 ? snapshots[selectedSnapshotIndex! - 1].components.find((c: any) => c.id === comp.id) : null}
                 {@const stateEntries = Object.entries(comp.state || {})}
                 {@const changedKeys = prevComp ? stateEntries.filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(prevComp.state[k])) : stateEntries}
@@ -165,7 +174,7 @@
                       <span class="changed-count">{changedKeys.length} changed</span>
                     </summary>
                     <div class="comp-state">
-                      {#each changedKeys as [key, value]}
+                      {#each changedKeys as [key, value] (key)}
                         {@const prevVal = prevComp ? prevComp.state[key] : undefined}
                         <div class="state-row">
                           <span class="state-key">{key}</span>
@@ -185,10 +194,13 @@
         </div>
       </div>
     {/if}
+    {/snippet}
+    </SplitPane>
   </div>
 </div>
 
 <style>
+  .restore-error { margin: 0; padding: 8px 12px; color: var(--status-error); overflow-wrap: anywhere; }
   .tt-panel { display: flex; flex-direction: column; height: 100%; }
   .tt-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border-default); flex-shrink: 0; }
   .tt-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
@@ -205,7 +217,7 @@
   .banner-text { font-size: 10px; flex: 1; color: var(--warning); }
   .banner.current .banner-text { color: var(--success); }
 
-  .body { display: flex; flex: 1; overflow: hidden; }
+  .body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
   .list { flex: 1; overflow-y: auto; padding: 4px 0; min-width: 0; }
   .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 150px; color: var(--text-muted); font-size: 12px; }
   .hint { font-size: 10px; opacity: 0.7; }
@@ -225,15 +237,15 @@
   .restore-btn:hover { color: var(--accent-primary); background: var(--bg-hover); }
 
   /* Detail panel */
-  .detail { width: 280px; border-left: 1px solid var(--border-default); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
+  .detail { height: 100%; min-width: 0; border-left: 1px solid var(--border-default); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
   .detail-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border-default); }
   .detail-title { font-size: 11px; font-weight: 600; color: var(--text-primary); }
   .close-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; border-radius: 4px; }
   .close-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
   .detail-body { flex: 1; overflow-y: auto; padding: 8px 0; }
-  .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; }
+  .detail-row { gap: 12px; display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; }
   .detail-label { font-size: 10px; color: var(--text-muted); }
-  .detail-value { font-size: 10px; color: var(--text-primary); }
+  .detail-value { overflow-wrap: anywhere; text-align: right; min-width: 0; font-size: 10px; color: var(--text-primary); }
   .mono { font-family: monospace; font-size: 9px; }
   .detail-section { font-size: 10px; font-weight: 600; color: var(--text-secondary); padding: 8px 12px 4px; border-top: 1px solid var(--border-default); margin-top: 4px; }
   .restore-now { display: flex; align-items: center; gap: 4px; margin: 4px 12px; padding: 6px 10px; border: 1px solid var(--accent-primary); background: transparent; color: var(--accent-primary); border-radius: var(--radius-sm); font-size: 10px; cursor: pointer; }
@@ -244,7 +256,6 @@
   .comp-summary { display: flex; align-items: center; gap: 6px; padding: 6px 12px; cursor: pointer; font-size: 10px; color: var(--text-primary); }
   .comp-summary:hover { background: var(--bg-hover); }
   .comp-name { font-weight: 500; }
-  .comp-id { color: var(--text-muted); font-size: 9px; }
   .changed-count { font-size: 9px; color: var(--status-error); margin-left: auto; }
   .comp-state { padding: 4px 12px 8px 20px; }
   .state-row { display: flex; flex-direction: column; padding: 3px 0; border-bottom: 1px solid var(--border-default); }

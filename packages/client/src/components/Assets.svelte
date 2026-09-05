@@ -1,9 +1,10 @@
 <script lang="ts">
+  import SplitPane from "./SplitPane.svelte";
   import { onMount } from 'svelte';
 
   let search = $state('');
   let view = $state<'grid' | 'list'>('list');
-  let selectedAsset: AssetEntry | null = null;
+  let selectedAsset = $state<AssetEntry | null>(null);
   let filterType = $state('all');
 
   interface AssetEntry {
@@ -21,7 +22,7 @@
 
   function addEntry(entry: PerformanceResourceTiming): void {
     const url = entry.name;
-    const name = url.split('/').pop() || url;
+    const name = new URL(url).pathname.split('/').pop() || url;
     const ext = (name.split('.').pop() || '').toLowerCase();
     const isAsset = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico',
       'woff', 'woff2', 'ttf', 'otf', 'eot', 'mp4', 'webm', 'mp3', 'wav',
@@ -49,19 +50,21 @@
   }
 
   onMount(() => {
-    // Capture already-loaded resources
-    const entries = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
+    // Read resources from the inspected app, whose performance timeline is separate from the panel.
+    const appWindow = window.parent as Window & typeof globalThis;
+    const entries = appWindow.performance.getEntriesByType('resource') as PerformanceResourceTiming[];
     for (const e of entries) addEntry(e);
 
     // Watch for new loads
-    if (typeof PerformanceObserver !== 'undefined') {
+    if (typeof appWindow.PerformanceObserver !== 'undefined') {
       try {
-        const observer = new PerformanceObserver((list) => {
+        const observer = new appWindow.PerformanceObserver((list) => {
           for (const e of list.getEntries()) {
             addEntry(e as PerformanceResourceTiming);
           }
         });
         observer.observe({ entryTypes: ['resource'] });
+        return () => observer.disconnect();
       } catch { /* observer not supported */ }
     }
   });
@@ -109,7 +112,7 @@
     <input type="text" bind:value={search} placeholder="Search by name or URL..." class="search-input" />
     <select bind:value={filterType} class="type-filter">
       <option value="all">All types</option>
-      {#each assetTypes as t}
+      {#each assetTypes as t (t)}
         <option value={t}>{t}</option>
       {/each}
     </select>
@@ -119,6 +122,8 @@
     </div>
   </div>
 
+  <SplitPane label="Resize assets and details" secondVisible={!!selectedAsset}>
+  {#snippet first()}
   <div class="assets-body" class:grid={view === 'grid'}>
     {#if filtered.length === 0}
       <div class="empty-state">
@@ -136,7 +141,7 @@
         <span class="col-time">Time</span>
       </div>
       {#each filtered as asset (asset.url)}
-        <div class="asset-row" onclick={() => selectedAsset = asset} title={asset.url}>
+        <div class="asset-row" role="button" tabindex="0" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectedAsset = asset; } }} onclick={() => selectedAsset = asset} title={asset.url}>
           <span class="col-name">
             {#if ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(asset.type)}
               <img src={asset.url} alt="" class="thumb" loading="lazy" onerror={(e) => (e.target as HTMLElement).style.display = 'none'} />
@@ -150,7 +155,7 @@
       {/each}
     {:else}
       {#each filtered as asset (asset.url)}
-        <div class="asset-card" onclick={() => selectedAsset = asset} title={asset.url}>
+        <div class="asset-card" role="button" tabindex="0" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectedAsset = asset; } }} onclick={() => selectedAsset = asset} title={asset.url}>
           {#if ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(asset.type)}
             <div class="card-thumb-wrap">
               <img src={asset.url} alt="" class="card-thumb" loading="lazy" onerror={(e) => (e.target as HTMLElement).style.display = 'none'} />
@@ -163,6 +168,8 @@
     {/if}
   </div>
 
+  {/snippet}
+  {#snippet second()}
   {#if selectedAsset}
     <div class="detail-panel">
       <div class="detail-header">
@@ -202,6 +209,8 @@
       </div>
     </div>
   {/if}
+  {/snippet}
+  </SplitPane>
 </div>
 
 <style>
@@ -209,8 +218,8 @@
   .assets-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-default); flex-shrink: 0; }
   .panel-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
   .asset-count { font-size: 11px; color: var(--text-muted); }
-  .toolbar { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-default); }
-  .search-input { flex: 1; padding: var(--space-1) var(--space-2); font-size: 11px; background: var(--bg-inset); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-default); }
+  .search-input { flex: 1; min-width: 100px; padding: var(--space-1) var(--space-2); font-size: 11px; background: var(--bg-inset); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
   .type-filter { padding: var(--space-1) var(--space-2); font-size: 11px; background: var(--bg-inset); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); cursor: pointer; }
   .view-toggle { display: flex; gap: 2px; }
   .view-btn { width: 28px; height: 28px; border: 1px solid var(--border-default); background: var(--bg-surface); border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; }
@@ -221,8 +230,8 @@
   .empty-state { display: flex; align-items: center; justify-content: center; height: 150px; color: var(--text-muted); font-size: 12px; padding: var(--space-4); text-align: center; }
 
   /* List view */
-  .list-header { display: grid; grid-template-columns: 1fr 70px 70px 70px; gap: var(--space-2); padding: var(--space-1) var(--space-3); font-size: 10px; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border-default); }
-  .asset-row { display: grid; grid-template-columns: 1fr 70px 70px 70px; gap: var(--space-2); padding: var(--space-1) var(--space-3); align-items: center; cursor: pointer; font-size: 11px; border-bottom: 1px solid var(--border-subtle); }
+  .list-header { display: grid; grid-template-columns: minmax(120px, 1fr) 70px 70px 70px; gap: var(--space-2); padding: var(--space-1) var(--space-3); font-size: 10px; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border-default); }
+  .asset-row { display: grid; grid-template-columns: minmax(120px, 1fr) 70px 70px 70px; gap: var(--space-2); padding: var(--space-1) var(--space-3); align-items: center; cursor: pointer; font-size: 11px; border-bottom: 1px solid var(--border-subtle); }
   .asset-row:hover { background: var(--bg-hover); }
   .col-name { display: flex; align-items: center; gap: var(--space-2); overflow: hidden; }
   .thumb { width: 24px; height: 24px; object-fit: cover; border-radius: 3px; background: var(--bg-inset); flex-shrink: 0; }
@@ -248,7 +257,7 @@
   .card-meta { font-size: 10px; color: var(--text-muted); }
 
   /* Detail panel */
-  .detail-panel { position: absolute; inset: 0; background: var(--bg-surface); display: flex; flex-direction: column; z-index: 10; border-left: 1px solid var(--border-default); }
+  .detail-panel { height: 100%; min-width: 0; min-height: 0; background: var(--bg-surface); display: flex; flex-direction: column; z-index: 10; border-left: 1px solid var(--border-default); }
   .detail-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-default); }
   .detail-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
   .detail-close { width: 24px; height: 24px; border: none; background: transparent; cursor: pointer; font-size: 14px; color: var(--text-secondary); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; }

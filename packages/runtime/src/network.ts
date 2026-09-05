@@ -25,9 +25,12 @@ export interface NetworkRequest {
   responseHeaders?: Record<string, string>;
   requestBody?: string;
   responseBody?: string;
+  responseBodyTruncated?: boolean;
   duration?: number;
   timestamp: number;
   mockResponse?: boolean;
+  mockRuleId?: string;
+  mockRulePattern?: string;
 }
 
 export type NetworkRequestCallback = (request: NetworkRequest) => void;
@@ -40,6 +43,8 @@ export class NetworkInterceptor {
   private originalFetch: typeof globalThis.fetch | null = null;
   private originalXHR: typeof XMLHttpRequest | null = null;
   private installed = false;
+  private generation = 0;
+  private previewCleanups = new Set<() => void>();
 
   constructor(private onRequest?: NetworkRequestCallback) {}
 
@@ -49,6 +54,7 @@ export class NetworkInterceptor {
   install(): boolean {
     if (this.installed) return false;
     this.installed = true;
+    this.generation++;
 
     try {
       // Override fetch
@@ -74,6 +80,24 @@ export class NetworkInterceptor {
           this.xhr = new origXHR();
         }
 
+        get onload() { return this.xhr.onload; }
+        set onload(value) { this.xhr.onload = value; }
+        get onerror() { return this.xhr.onerror; }
+        set onerror(value) { this.xhr.onerror = value; }
+        get onreadystatechange() { return this.xhr.onreadystatechange; }
+        set onreadystatechange(value) { this.xhr.onreadystatechange = value; }
+        get onloadend() { return this.xhr.onloadend; }
+        set onloadend(value) { this.xhr.onloadend = value; }
+        get onabort() { return this.xhr.onabort; }
+        set onabort(value) { this.xhr.onabort = value; }
+        get ontimeout() { return this.xhr.ontimeout; }
+        set ontimeout(value) { this.xhr.ontimeout = value; }
+        get timeout() { return this.xhr.timeout; }
+        set timeout(value) { this.xhr.timeout = value; }
+        get withCredentials() { return this.xhr.withCredentials; }
+        set withCredentials(value) { this.xhr.withCredentials = value; }
+        get upload() { return this.xhr.upload; }
+
         // Delegate all XMLHttpRequest properties/methods
         get readyState() { return this.xhr.readyState; }
         get status() { return this.xhr.status; }
@@ -86,7 +110,7 @@ export class NetworkInterceptor {
 
         open(method: string, url: string | URL, async = true, user?: string, password?: string) {
           this.method = method.toUpperCase();
-          this.url = typeof url === 'string' ? url : url.toString();
+          this.url = new URL(url, globalThis.location?.href).href;
           this.startTime = performance.now();
           this.xhr.open(method, url, async, user, password);
         }
@@ -112,11 +136,15 @@ export class NetworkInterceptor {
               Object.defineProperty(this.xhr, 'status', { value: rule.statusCode });
               Object.defineProperty(this.xhr, 'statusText', { value: '' });
               Object.defineProperty(this.xhr, 'responseText', { value: rule.body || '' });
-              Object.defineProperty(this.xhr, 'response', { value: rule.body || '' });
+              Object.defineProperty(this.xhr, 'response', { value: this.xhr.responseType === 'json' ? (() => { try { return JSON.parse(rule.body || ''); } catch { return null; } })() : rule.body || '' });
+              Object.defineProperty(this.xhr, 'readyState', { value: 4 });
+              Object.defineProperty(this.xhr, 'getResponseHeader', { value: (name: string) => new Headers(mockResponse.headers).get(name) });
+              Object.defineProperty(this.xhr, 'getAllResponseHeaders', { value: () => Object.entries(mockResponse.headers).map(([key, value]) => `${key}: ${value}`).join('\r\n') });
               
               // Dispatch events
               this.xhr.dispatchEvent(new ProgressEvent('load'));
               this.xhr.dispatchEvent(new ProgressEvent('readystatechange'));
+              this.xhr.dispatchEvent(new ProgressEvent('loadend'));
             }, 0);
 
             self.emitRequest({
@@ -130,6 +158,8 @@ export class NetworkInterceptor {
               duration: Math.round(duration),
               timestamp: Date.now(),
               mockResponse: true,
+              mockRuleId: rule.id,
+              mockRulePattern: rule.pattern,
             });
             return;
           }
@@ -146,7 +176,8 @@ export class NetworkInterceptor {
               requestHeaders: this.requestHeaders,
               responseHeaders: self.parseHeaders(this.xhr.getAllResponseHeaders()),
               requestBody: this.requestBody,
-              responseBody: this.xhr.responseText?.slice(0, 500),
+              responseBody: this.xhr.responseType === 'json' ? JSON.stringify(this.xhr.response)?.slice(0, 500)
+                : !this.xhr.responseType || this.xhr.responseType === 'text' ? this.xhr.responseText?.slice(0, 500) : undefined,
               duration: Math.round(duration),
               timestamp: Date.now(),
               mockResponse: false,
@@ -189,6 +220,8 @@ export class NetworkInterceptor {
       globalThis.XMLHttpRequest = this.originalXHR;
     }
     this.installed = false;
+    this.generation++;
+    for (const cleanup of this.previewCleanups) cleanup();
     return true;
   }
 
@@ -217,9 +250,12 @@ export class NetworkInterceptor {
    * Handle a fetch request.
    */
   private async handleFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const request = input instanceof Request ? input : new Request(input, init);
+    const resolvedInput = typeof input === 'string' ? new URL(input, globalThis.location?.href).href : input;
+    const request = new Request(resolvedInput instanceof Request ? resolvedInput.clone() : resolvedInput, init);
     const url = request.url;
     const method = request.method.toUpperCase();
+    const generation = this.generation;
+    const requestBody = this.capturePreview(request);
 
     // Check mock rules
     const rule = this.matchRequest(url, method);
@@ -230,11 +266,14 @@ export class NetworkInterceptor {
         method,
         statusCode: rule.statusCode,
         requestHeaders: Object.fromEntries(request.headers.entries()),
-        requestBody: await request.clone().text().catch(() => ''),
+        requestBody: (await requestBody).text,
         responseBody: rule.body,
+        responseHeaders: rule.headers,
         duration: 0,
         timestamp: Date.now(),
         mockResponse: true,
+        mockRuleId: rule.id,
+        mockRulePattern: rule.pattern,
       });
       return this.createFetchResponse(rule, url);
     }
@@ -244,22 +283,32 @@ export class NetworkInterceptor {
     try {
       const response = await (this.originalFetch!(input, init));
       const duration = performance.now() - startTime;
-      const clonedResponse = response.clone();
-      
-      this.emitRequest({
-        id: `net-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        url,
-        method,
-        statusCode: response.status,
-        statusText: response.statusText,
-        requestHeaders: Object.fromEntries(request.headers.entries()),
-        responseHeaders: Object.fromEntries(response.headers.entries()),
-        requestBody: await request.clone().text().catch(() => ''),
-        responseBody: (await clonedResponse.text().catch(() => '')).slice(0, 500),
-        duration: Math.round(duration),
-        timestamp: Date.now(),
-        mockResponse: false,
-      });
+      // Preview collection must never delay headers or consume the application's body.
+      // In particular, event streams may never close.
+      let preview: Promise<{ text: string; truncated: boolean }>;
+      try {
+        preview = this.capturePreview(response.clone());
+      } catch {
+        preview = Promise.resolve({ text: '', truncated: true });
+      }
+      void Promise.all([requestBody, preview]).then(([body, responsePreview]) => {
+        if (!this.installed || generation !== this.generation) return;
+        this.emitRequest({
+          id: `net-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          url,
+          method,
+          statusCode: response.status,
+          statusText: response.statusText,
+          requestHeaders: Object.fromEntries(request.headers.entries()),
+          responseHeaders: Object.fromEntries(response.headers.entries()),
+          requestBody: body.text,
+          responseBody: responsePreview.text,
+          responseBodyTruncated: responsePreview.truncated,
+          duration: Math.round(duration),
+          timestamp: Date.now(),
+          mockResponse: false,
+        });
+      }).catch(() => { /* Instrumentation must not break the application request. */ });
 
       return response;
     } catch (error) {
@@ -276,6 +325,49 @@ export class NetworkInterceptor {
       });
       throw error;
     }
+  }
+
+  /** Read a bounded preview and cancel only the inspection branch when done. */
+  private capturePreview(body: Response | Request): Promise<{ text: string; truncated: boolean }> {
+    if (!body.body) return Promise.resolve({ text: '', truncated: false });
+    return new Promise(resolve => {
+      const reader = body.body!.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
+      let bytes = 0;
+      let finished = false;
+      const finish = (truncated: boolean) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        this.previewCleanups.delete(cancel);
+        text += decoder.decode();
+        resolve({ text, truncated });
+        // A tee branch's cancel promise can wait for the application's branch.
+        // Do not await it, and do not cancel the original response.
+        void reader.cancel().catch(() => {});
+      };
+      const cancel = () => finish(true);
+      const timer = setTimeout(cancel, 250);
+      this.previewCleanups.add(cancel);
+      void (async () => {
+        try {
+          while (!finished) {
+            const { value, done } = await reader.read();
+            if (finished) break;
+            if (done) { finish(false); break; }
+            const remaining = 500 - bytes;
+            text += decoder.decode(value.subarray(0, remaining), { stream: true });
+            bytes += value.byteLength;
+            if (bytes >= 500) finish(true);
+          }
+        } catch {
+          finish(true);
+        } finally {
+          reader.releaseLock();
+        }
+      })();
+    });
   }
 
   /**
@@ -310,7 +402,7 @@ export class NetworkInterceptor {
    */
   private createFetchResponse(rule: NetworkMockRule, url: string): Response {
     const headers = new Headers(rule.headers || {});
-    return new Response(rule.body || '', {
+    return new Response([204, 205, 304].includes(rule.statusCode) ? null : (rule.body || ''), {
       status: rule.statusCode,
       statusText: rule.statusCode === 200 ? 'OK' : 'Mocked',
       headers,

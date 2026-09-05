@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SplitPane from "./SplitPane.svelte";
   interface TimelineEntry {
     id: string; type: string; timestamp: number;
     duration?: number; data: unknown;
@@ -25,29 +26,6 @@
   let entries = $derived(devtoolsStore.timeline);
   let filter = $state<string>('all');
   let selectedEntry = $state<TimelineEntry | null>(null);
-  let detailWidth = $state(280);
-  let isResizing = $state(false);
-
-  function startResize(e: MouseEvent) {
-    e.preventDefault();
-    isResizing = true;
-    const startX = e.clientX;
-    const startW = detailWidth;
-    function onMove(ev: MouseEvent) {
-      if (!isResizing) return;
-      detailWidth = Math.max(160, startW + (ev.clientX - startX));
-    }
-    function onUp() {
-      isResizing = false;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }
-
-
-
   const filters = [
     { id: 'all', label: 'All' }, { id: 'component', label: 'Components' },
     { id: 'state', label: 'State' }, { id: 'effect', label: 'Effects' },
@@ -105,7 +83,8 @@
       <button class="clear-btn" onclick={clearTimeline}>Clear events</button>
     </header>
 
-    <div class="entries-split">
+    <SplitPane label="Resize timeline events and details" secondVisible={!!selectedEntry}>
+      {#snippet first()}
       <div class="entries-list">
         {#if getFilteredEntries().length > 0}
           {#each getFilteredEntries() as entry (entry.id)}
@@ -131,13 +110,10 @@
         {/if}
       </div>
 
+      {/snippet}
+      {#snippet second()}
     {#if selectedEntry}
-      <div class="tl-divider"
-        role="separator" tabindex="0"
-        class:resizing={isResizing}
-        onmousedown={startResize}
-      ></div>
-      <div class="detail-panel" style="width: {detailWidth}px">
+      <div class="detail-panel">
         <header class="detail-header">
           <span class="detail-title">{selectedEntry.type}</span>
           <button class="detail-close" onclick={() => selectedEntry = null}>✕</button>
@@ -149,20 +125,14 @@
         <div class="detail-data"><h4 class="data-heading">Data</h4><JsonTree value={selectedEntry.data} /></div>
       </div>
     {/if}
-    </div><!-- /entries-split -->
+      {/snippet}
+    </SplitPane>
   </div>
 
 </div>
 
 <style>
   .timeline-layout { display: flex; height: 100%; background: var(--bg-surface); }
-
-  /* ─── Split: events list + detail panel side by side ─── */
-  .entries-split { display: flex; flex: 1; min-height: 0; overflow: hidden; }
-
-  /* ─── Resize divider ─── */
-  .tl-divider { width: 4px; flex-shrink: 0; cursor: col-resize; background: transparent; transition: background 0.15s; position: relative; z-index: 1; }
-  .tl-divider:hover, .tl-divider.resizing { background: var(--accent-primary, #ff3e00); }
 
   /* ─── Left side: events ─── */
   .tl-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
@@ -183,10 +153,6 @@
   .tb-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
   .tb-btn:disabled { opacity: 0.35; cursor: default; }
   .tb-btn:disabled:hover { background: transparent; }
-  .record-btn { color: var(--text-secondary); }
-  .record-btn.recording { color: var(--error); }
-  .record-btn.recording :global(svg) { animation: pulse 1.5s ease-in-out infinite; }
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
   .header {
     display: flex; justify-content: space-between; align-items: center;
@@ -207,7 +173,7 @@
   }
   .clear-btn:hover { filter: brightness(1.3); }
 
-  .entries-list { flex: 1; overflow-y: auto; padding: var(--space-2); }
+  .entries-list { height: 100%; flex: 1; overflow-y: auto; padding: var(--space-2); }
   .entry-row {
     display: grid; grid-template-columns: 24px 1fr auto auto;
     gap: var(--space-2); align-items: center; width: 100%;
@@ -221,6 +187,7 @@
   .entry-summary { padding: 2px var(--space-2) 6px 32px; font-size: 10px; color: var(--text-secondary); border-bottom: 1px solid var(--border-default); }
 
   .detail-panel {
+    height: 100%; min-width: 0;
     flex-shrink: 0; display: flex; flex-direction: column;
     border-left: 1px solid var(--border-default); background: var(--bg-surface);
     overflow-y: auto;

@@ -29,6 +29,7 @@ export interface GlobalRuntime {
   _active: boolean;
 
   // Phase 1-2 placeholders (queue if !_active, pass-through if _active)
+  unregisterComponent(id: string): void;
   registerComponent(id: string, name: string, filename: string, sourceLocation?: string): void;
   handleState(
     componentId: string,
@@ -55,7 +56,7 @@ export interface GlobalRuntime {
   flushAllEffects(): void;
 
   // Phase 3: called by the full runtime to drain buffered calls
-  _activate(realRuntime: Pick<GlobalRuntime, 'registerComponent' | 'handleState' | 'handleEffect' | '_registerState' | 'setComponentState' | 'reportError' | 'refresh' | 'startInspectBatch' | 'endInspectBatch' | 'flushAllEffects'>): void;
+  _activate(realRuntime: Pick<GlobalRuntime, 'unregisterComponent' | 'registerComponent' | 'handleState' | 'handleEffect' | '_registerState' | 'setComponentState' | 'reportError' | 'refresh' | 'startInspectBatch' | 'endInspectBatch' | 'flushAllEffects'>): void;
 
   version: string;
   init(): void;
@@ -87,6 +88,7 @@ export function createPassiveRuntime(): GlobalRuntime {
     _active: false,
 
     // Placeholder methods — buffer all calls until _activate
+    unregisterComponent: makePlaceholder('unregisterComponent') as GlobalRuntime['unregisterComponent'],
     registerComponent: makePlaceholder('registerComponent') as GlobalRuntime['registerComponent'],
     handleState: makePlaceholder('handleState') as GlobalRuntime['handleState'],
     handleEffect: makePlaceholder('handleEffect') as GlobalRuntime['handleEffect'],
@@ -111,6 +113,7 @@ export function createPassiveRuntime(): GlobalRuntime {
 
       // Override placeholder methods with real implementations
       this.registerComponent = realRuntime.registerComponent.bind(realRuntime);
+      this.unregisterComponent = realRuntime.unregisterComponent?.bind(realRuntime) ?? (() => {});
       this.handleState = realRuntime.handleState.bind(realRuntime);
       this.handleEffect = realRuntime.handleEffect.bind(realRuntime);
       this._registerState = realRuntime._registerState.bind(realRuntime);
@@ -128,6 +131,9 @@ export function createPassiveRuntime(): GlobalRuntime {
       for (const call of queue) {
         try {
           switch (call.method) {
+            case 'unregisterComponent':
+              this.unregisterComponent(call.args[0] as string);
+              break;
             case 'registerComponent':
               this.registerComponent(...call.args as [string, string, string, string?]);
               break;

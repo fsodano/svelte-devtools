@@ -26,4 +26,7 @@ export const TOKEN_FILE = path.join(
 export const LOG_FILE = path.join(os.tmpdir(), 'svelte-devtools-e2e-server.log');
 
 /** Line the Vite DevTools server prints when a browser requests authorization. */
-export const MANUAL_AUTH_TOKEN_RE = /Manual Auth Token\s*:\s*([A-Za-z0-9-]+)/;
+export const MANUAL_AUTH_TOKEN_RE = /(?:Manual Auth Token\s*:|devframe auth code)\s*([A-Za-z0-9-]+)/;
+
+/** Local test-only token shared by the spawned server and API checks. */
+export const API_TOKEN = 'svelte-devtools-local-e2e-token';

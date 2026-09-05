@@ -26,6 +26,7 @@ import {
     sendUnauthorized,
 } from './http-guard.js';
 import { computeMigrationScores } from './registry.js';
+import { getCommandBroker } from './command-broker.js';
 
 // ============================================================================
 // In-memory cache populated by the DevTools client via POST /api/sync
@@ -39,6 +40,7 @@ interface BranchInfo {
     id: string; name: string; snapshotIds: string[]; color: string;
 }
 interface CachedState {
+    sessionId: string | null;
     components: unknown[];
     timeline: unknown[];
     remote: Record<string, unknown>;
@@ -47,14 +49,15 @@ interface CachedState {
     updatedAt: number;
 }
 
-let cachedState: CachedState = {
-    components: [],
-    timeline: [],
-    remote: {},
-    snapshots: [],
-    branches: [],
-    updatedAt: 0,
-};
+function emptyCache(sessionId: string | null = null): CachedState {
+    return { sessionId, components: [], timeline: [], remote: {}, snapshots: [], branches: [], updatedAt: 0 };
+}
+const serverCaches = new WeakMap<object, { latest: CachedState; sessions: Map<string, CachedState> }>();
+function getCaches(server: object) {
+    let caches = serverCaches.get(server);
+    if (!caches) { caches = { latest: emptyCache(), sessions: new Map() }; serverCaches.set(server, caches); }
+    return caches;
+}
 
 // ============================================================================
 // Helpers
@@ -63,6 +66,7 @@ let cachedState: CachedState = {
 function json(req: IncomingMessage, res: ServerResponse, data: unknown, status = 200): void {
     res.statusCode = status;
     res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
     // CORS: reflect an allow-listed Origin; never emit a wildcard (ADR-0009).
     res.setHeader('Vary', 'Origin');
     const origin = req.headers.origin;
@@ -127,6 +131,19 @@ export async function handleApiRequest(
             return;
         }
 
+        const caches = getCaches(server);
+        const query = new URLSearchParams((req.url || '').split('?')[1]);
+        const sessionQuery = query.get('sessionId');
+        const runtimePaths = ['/components', '/timeline', '/snapshots', '/remote'];
+        if (sessionQuery && runtimePaths.includes(pathname) && !caches.sessions.has(sessionQuery)) {
+            json(req, res, { ok: false, error: 'NO_SESSION_DATA: this panel has not synced yet.' }, 409); return;
+        }
+        const offset = Number(query.get('offset') ?? 0);
+        const limit = query.has('limit') ? Number(query.get('limit')) : undefined;
+        if (runtimePaths.includes(pathname) && (!Number.isInteger(offset) || offset < 0 || (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 500)))) {
+            json(req, res, { error: 'offset must be a nonnegative integer; limit must be 1–500.' }, 400); return;
+        }
+        let cachedState = sessionQuery && runtimePaths.includes(pathname) ? caches.sessions.get(sessionQuery)! : caches.latest;
         switch (pathname) {
             // ── Status ──
             case '/status':
@@ -151,29 +168,60 @@ export async function handleApiRequest(
                     ],
                     legacyEndpoints: '/__svelte-devtools/server-events, /__svelte-devtools/migration-score',
                     auth: 'Bearer token (header) or ?token= (query)',
+                    apiVersion: 1,
+                    capabilities: {
+                        componentInspection: true,
+                        sourceLookup: true,
+                        serverTracing: true,
+                        liveStateEditing: true,
+                        sessions: getCommandBroker(server).listSessions(),
+                        runtimeData: {
+                            transport: 'panel-sync',
+                            requiresOpenPanel: true,
+                            cachedAt: cachedState.updatedAt,
+                    sessionId: cachedState.sessionId,
+                            ageMs: cachedState.updatedAt === 0 ? null : Math.max(0, Date.now() - cachedState.updatedAt),
+                            hasSynced: cachedState.updatedAt !== 0,
+                            note: 'Open the app and authorize and open the Svelte panel. Runtime endpoints return the last panel sync, not a live runtime query. An old cache does not prove the app is still connected.',
+                        },
+                    },
+                    operations: {
+                        status: { method: 'GET', path: '/__svelte-devtools/api/' },
+                        components: { method: 'GET', path: '/__svelte-devtools/api/components', source: 'panel-cache' },
+                        timeline: { method: 'GET', path: '/__svelte-devtools/api/timeline', source: 'panel-cache' },
+                        snapshots: { method: 'GET', path: '/__svelte-devtools/api/snapshots', source: 'panel-cache' },
+                        remote: { method: 'GET', path: '/__svelte-devtools/api/remote', source: 'panel-cache' },
+                        routes: { method: 'GET', path: '/__svelte-devtools/api/routes', source: 'filesystem' },
+                        source: { method: 'GET', path: '/__svelte-devtools/api/source', requiredQuery: ['file'] },
+                        migration: { method: 'GET', path: '/__svelte-devtools/api/migration', source: 'transform-registry' },
+                        serverEvents: { method: 'GET', path: '/__svelte-devtools/api/server-events', optionalQuery: ['last', 'sinceId'] },
+                        clearServerEvents: { method: 'DELETE', path: '/__svelte-devtools/api/server-events' },
+                        setState: { method: 'POST', path: '/__svelte-devtools/api/set-state', supported: true, requiredFields: ['sessionId', 'componentId', 'key', 'value'], acknowledgement: 'live-panel' },
+                        sync: { method: 'POST', path: '/__svelte-devtools/api/sync', internal: true },
+                    },
                 });
                 return;
             }
 
             // ── Components (from cached sync) ──
             case '/components': {
-                json(req, res, {
-                    ok: true,
-                    count: cachedState.components.length,
-                    components: cachedState.components,
-                    cachedAt: cachedState.updatedAt,
-                });
+                const matched = (cachedState.components as Array<Record<string, unknown>>).filter(c =>
+                    (!query.has('id') || c.id === query.get('id')) &&
+                    (!query.has('name') || String(c.name).toLowerCase().includes(query.get('name')!.toLowerCase())));
+                const page = matched.slice(offset, limit === undefined ? undefined : offset + limit);
+                const components = query.get('includeState') === 'false'
+                    ? page.map(({ id, name, filename, parentId }) => ({ id, name, filename, parentId })) : page;
+                json(req, res, { ok: true, count: components.length, total: matched.length, offset,
+                    components, cachedAt: cachedState.updatedAt, sessionId: cachedState.sessionId });
                 return;
             }
 
             // ── Timeline (from cached sync) ──
             case '/timeline': {
-                json(req, res, {
-                    ok: true,
-                    count: cachedState.timeline.length,
-                    entries: cachedState.timeline,
-                    cachedAt: cachedState.updatedAt,
-                });
+                const matched = (cachedState.timeline as Array<Record<string, unknown>>).filter(e => !query.has('type') || e.type === query.get('type'));
+                const entries = matched.slice(offset, limit === undefined ? undefined : offset + limit);
+                json(req, res, { ok: true, count: entries.length, total: matched.length, offset,
+                    entries, cachedAt: cachedState.updatedAt, sessionId: cachedState.sessionId });
                 return;
             }
 
@@ -183,6 +231,7 @@ export async function handleApiRequest(
                     ok: true,
                     ...cachedState.remote,
                     cachedAt: cachedState.updatedAt,
+                    sessionId: cachedState.sessionId,
                 });
                 return;
             }
@@ -213,37 +262,47 @@ export async function handleApiRequest(
 
             // ── Snapshot tree (branch visualization) ──
             case '/snapshots': {
-                json(req, res, {
-                    ok: true,
-                    snapshots: cachedState.snapshots,
-                    branches: cachedState.branches,
-                    count: cachedState.snapshots.length,
-                    cachedAt: cachedState.updatedAt,
-                });
+                const snapshots = cachedState.snapshots.slice(offset, limit === undefined ? undefined : offset + limit);
+                json(req, res, { ok: true, count: snapshots.length, total: cachedState.snapshots.length, offset,
+                    snapshots, branches: cachedState.branches, cachedAt: cachedState.updatedAt, sessionId: cachedState.sessionId });
                 return;
             }
 
-            // ── Set component state ──
-            // Option B (ADR-0010): live state editing requires a runtime
-            // channel that does not exist. Return 501 instead of mutating the
-            // sync cache, so an agent can never mistake a cache write for a
-            // live edit.
+            // Commands require an explicit live panel session. The cache is never mutated here.
             case '/set-state': {
-                if (!isMethod(req, 'POST')) {
-                    json(req, res, { error: 'Method not allowed, use POST' }, 405);
-                    return;
+                if (!isMethod(req, 'POST')) { json(req, res, { error: 'Method not allowed, use POST' }, 405); return; }
+                let data;
+                try { data = JSON.parse(await readBody(req)); }
+                catch { json(req, res, { error: 'Invalid JSON' }, 400); return; }
+                if (!data || typeof data.sessionId !== 'string' || !data.sessionId ||
+                    typeof data.componentId !== 'string' || !data.componentId ||
+                    typeof data.key !== 'string' || !data.key || !Object.prototype.hasOwnProperty.call(data, 'value')) {
+                    json(req, res, { error: 'Missing sessionId, componentId, key, or value' }, 400); return;
                 }
-                const body = await readBody(req);
-                const data = JSON.parse(body);
-                const { componentId, key } = data;
-                if (!componentId || !key) {
-                    json(req, res, { error: 'Missing componentId or key' }, 400);
-                    return;
-                }
-                json(req, res, {
-                    error: 'NOT_IMPLEMENTED',
-                    message: 'Live state editing is not implemented. POST /api/set-state cannot write to the running app; refusing to report a cache-only write as a live edit.',
-                }, 501);
+                const result = await getCommandBroker(server).submit({
+                    sessionId: data.sessionId, componentId: data.componentId, key: data.key, value: data.value,
+                });
+                json(req, res, result, result.ok ? 200 : 409);
+                return;
+            }
+            case '/commands': {
+                if (!isMethod(req, 'GET')) { json(req, res, { error: 'Method not allowed, use GET' }, 405); return; }
+                const query = new URLSearchParams((req.url || '').split('?')[1]);
+                const sessionId = query.get('sessionId');
+                if (!sessionId || sessionId.length > 128) { json(req, res, { error: 'Invalid sessionId' }, 400); return; }
+                const commands = getCommandBroker(server).poll(sessionId, (query.get('url') || '').slice(0, 2048));
+                json(req, res, { ok: true, commands });
+                return;
+            }
+            case '/commands/result': {
+                if (!isMethod(req, 'POST')) { json(req, res, { error: 'Method not allowed, use POST' }, 405); return; }
+                let data;
+                try { data = JSON.parse(await readBody(req)); }
+                catch { json(req, res, { error: 'Invalid JSON' }, 400); return; }
+                if (!data || typeof data.sessionId !== 'string' || typeof data.id !== 'string' ||
+                    typeof data.result?.ok !== 'boolean') { json(req, res, { error: 'Invalid acknowledgement' }, 400); return; }
+                const accepted = getCommandBroker(server).acknowledge(data.sessionId, data.id, data.result);
+                json(req, res, { ok: accepted }, accepted ? 200 : 409);
                 return;
             }
 
@@ -290,6 +349,14 @@ export async function handleApiRequest(
                 }
                 const body = await readBody(req);
                 const data = JSON.parse(body);
+                if (typeof data.sessionId === 'string' && data.sessionId.length > 0 && data.sessionId.length <= 128) {
+                    cachedState = caches.sessions.get(data.sessionId) ?? emptyCache(data.sessionId);
+                    if (!caches.sessions.has(data.sessionId) && caches.sessions.size >= 64) {
+                        caches.sessions.delete(caches.sessions.keys().next().value!);
+                    }
+                    caches.sessions.set(data.sessionId, cachedState);
+                }
+                caches.latest = cachedState;
                 if (data.components) cachedState.components = data.components;
                 if (data.timeline) cachedState.timeline = data.timeline;
                 if (data.remote) cachedState.remote = data.remote;
@@ -302,53 +369,11 @@ export async function handleApiRequest(
 
             // ── SvelteKit routes from filesystem ──
             case '/routes': {
-                const { readdirSync, statSync, existsSync } = await import('node:fs');
-                const { join, relative, resolve } = await import('node:path');
+                const { scanRoutes, resolveRouteDirectory } = await import('./route-scanner.js');
                 const root = server.config?.root ?? process.cwd();
-                const routesDir = join(root, 'src', 'routes');
-                const svelteKitRoutes: Array<{
-                    id: string; cleanedUrl: string; files: Record<string, boolean>;
-                    routeGroup?: string; paramNames?: string[];
-                }> = [];
-                if (existsSync(routesDir)) {
-                    function scanDir(dir: string, prefix: string): void {
-                        let entries: string[];
-                        try { entries = readdirSync(dir); } catch { return; }
-                        for (const entry of entries.sort()) {
-                            const fullPath = join(dir, entry);
-                            const stat = statSync(fullPath);
-                            if (stat.isDirectory()) {
-                                if (entry.startsWith('(') && entry.endsWith(')')) {
-                                    // Route group — transparent to URL
-                                    scanDir(fullPath, prefix);
-                                } else {
-                                    scanDir(fullPath, prefix + '/' + entry.replace(/\[\.\.\./g, '*').replace(/\[/g, ':').replace(/\]/g, ''));
-                                }
-                            } else if (entry.endsWith('.svelte') || entry.endsWith('.ts') || entry.endsWith('.js')) {
-                                const base = entry.replace(/\.(svelte|ts|js)$/, '');
-                                if (base.startsWith('+')) {
-                                    const relPath = relative(routesDir, fullPath);
-                                    const urlPath = prefix || '/' || '';
-                                    let routeId = svelteKitRoutes.find(r => r.cleanedUrl === urlPath);
-                                    if (!routeId) {
-                                        routeId = {
-                                            id: urlPath || '/',
-                                            cleanedUrl: urlPath || '/',
-                                            files: {},
-                                            routeGroup: prefix.includes('(') ? prefix.match(/\((\w+)\)/)?.[1] : undefined,
-                                            paramNames: urlPath.match(/:(\w+)/g)?.map(p => p.slice(1)) || [],
-                                        };
-                                        svelteKitRoutes.push(routeId);
-                                    }
-                                    const fileKey = base.slice(1); // +page → page, +layout → layout, etc.
-                                    routeId.files[fileKey] = true;
-                                }
-                            }
-                        }
-                    }
-                    scanDir(routesDir, '');
-                }
-                json(req, res, { ok: true, routes: svelteKitRoutes });
+                const directory = resolveRouteDirectory(root, server.config?.plugins ?? []);
+                const routes = scanRoutes(directory.routesDir);
+                json(req, res, { ok: true, count: routes.length, routes, ...directory });
                 return;
             }
 

@@ -22,6 +22,13 @@ export default defineConfig({
 	timeout: 120_000,
 	expect: { timeout: 10_000 },
 	globalSetup: './tests/e2e/global-setup.ts',
+	webServer: {
+		command: 'npm run dev -- --port 5174 --strictPort',
+		cwd: 'tests/apps/svelte-kit',
+		url: 'http://localhost:5174/navigation-test',
+		reuseExistingServer: false,
+		timeout: 60_000,
+	},
 	reporter: [['list']],
 	outputDir: 'test-results',
 	use: {

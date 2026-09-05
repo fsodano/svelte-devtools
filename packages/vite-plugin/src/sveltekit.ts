@@ -13,49 +13,91 @@ interface ServerEvent {
     data: unknown;
 }
 
-/** Install the fetch interceptor at module load time so it wraps
- *  globalThis.fetch before SvelteKit caches it for load functions. */
-const _origFetch = globalThis.fetch.bind(globalThis);
-globalThis.fetch = ((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    const urlStr = typeof input === 'string' ? input
-        : input instanceof URL ? input.href
-        : input instanceof Request ? input.url
-        : String(input);
-    const startTime = Date.now();
-    const perfStart = performance.now();
-    const method = init?.method || 'GET';
-    const promise = _origFetch(input, init);
-    promise.then(async (res) => {
-        const addEvent = (globalThis as Record<string, unknown>)[GLOBAL_KEY] as
-            | ((e: ServerEvent) => void)
-            | undefined;
-        if (!addEvent) return;
-        const duration = performance.now() - perfStart;
-        let responseBody = '';
-        try { responseBody = await res.clone().text(); } catch { /* ignore */ }
-        addEvent({
-            id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-            type: 'server:request',
-            timestamp: startTime,
-            duration,
-            data: {
-                url: urlStr,
-                method,
-                statusCode: res.status,
-                _handler: 'fetch-interceptor',
-                requestBody: init?.body instanceof ReadableStream
-                    ? '(stream)'
-                    : (init?.body as string | undefined)?.slice(0, 2000) || undefined,
-                responseSize: responseBody.length,
-                responsePreview: responseBody.slice(0, 2000),
-                reqHeaders: init?.headers,
-            }
+interface BodyPreview { text: string; bytes: number; truncated: boolean }
+const emptyPreview = (): BodyPreview => ({ text: '', bytes: 0, truncated: false });
+
+/** Read only an inspection branch. Neither uploads nor responses wait on tracing. */
+function capturePreview(source: Request | Response, limit = 2000): Promise<BodyPreview> {
+    try {
+        const body = source.clone().body;
+        if (!body) return Promise.resolve(emptyPreview());
+        const reader = body.getReader();
+        return new Promise(resolve => {
+            const decoder = new TextDecoder();
+            let text = '';
+            let bytes = 0;
+            let finished = false;
+            const finish = (truncated: boolean) => {
+                if (finished) return;
+                finished = true;
+                clearTimeout(timer);
+                text += decoder.decode();
+                resolve({ text, bytes, truncated });
+                // Tee cancellation waits for both branches. Never await the application's branch.
+                void reader.cancel().catch(() => {});
+            };
+            const timer = setTimeout(() => finish(true), 250);
+            timer.unref?.();
+            void (async () => {
+                try {
+                    while (!finished) {
+                        const { value, done } = await reader.read();
+                        if (finished) break;
+                        if (done) { finish(false); break; }
+                        const chunk = value.subarray(0, limit - bytes);
+                        text += decoder.decode(chunk, { stream: true });
+                        bytes += chunk.byteLength;
+                        if (bytes >= limit) finish(true);
+                    }
+                } catch { finish(true); }
+                finally { reader.releaseLock(); }
+            })();
         });
-    }).catch(() => {});
-    return promise;
-}) as typeof globalThis.fetch;
+    } catch { return Promise.resolve({ ...emptyPreview(), truncated: true }); }
+}
+
+/** Importing the production no-op must not change global fetch. */
+let fetchInterceptorInstalled = false;
+function installFetchInterceptor(): void {
+    if (fetchInterceptorInstalled) return;
+    fetchInterceptorInstalled = true;
+    const originalFetch = globalThis.fetch.bind(globalThis);
+    globalThis.fetch = ((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const addEvent = (globalThis as Record<string, unknown>)[GLOBAL_KEY] as ((e: ServerEvent) => void) | undefined;
+        if (!addEvent) return originalFetch(input, init);
+        const url = input instanceof Request ? input.url : String(input);
+        const startTime = Date.now();
+        const perfStart = performance.now();
+        const method = init?.method || (input instanceof Request ? input.method : 'GET');
+        // Do not construct a Request from an existing body: that can disturb the upload.
+        // Request objects can be cloned; init bodies are inspected only when already strings.
+        const requestPreview = init?.body != null
+            ? Promise.resolve({ text: typeof init.body === 'string' ? init.body.slice(0, 2000) : '(stream or binary body)', truncated: typeof init.body !== 'string' || init.body.length > 2000 })
+            : input instanceof Request ? capturePreview(input) : Promise.resolve(emptyPreview());
+        const promise = originalFetch(input, init);
+        void promise.then(async response => {
+            const duration = performance.now() - perfStart;
+            const [body, preview] = await Promise.all([requestPreview, capturePreview(response)]);
+            addEvent({
+                id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                type: 'server:request', timestamp: startTime, duration,
+                data: {
+                    url, method, statusCode: response.status, _handler: 'fetch-interceptor',
+                    requestBody: body.text || undefined, requestBodyTruncated: body.truncated,
+                    responseSize: preview.truncated ? undefined : preview.bytes,
+                    responsePreview: preview.text, responseBodyTruncated: preview.truncated,
+                    contentType: response.headers.get('content-type') || '',
+                    reqHeaders: Object.fromEntries(new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))),
+                    resHeaders: Object.fromEntries(response.headers),
+                },
+            });
+        }).catch(() => { /* A trace must never alter the original fetch promise. */ });
+        return promise;
+    }) as typeof globalThis.fetch;
+}
 
 export function svelteDevToolsHandle(): Handle {
+    installFetchInterceptor();
     return async ({ event, resolve }) => {
         const svelteRuntime =
             `<script type="module" src="/__svelte-devtools/svelte-runtime.js"></script>`;
@@ -79,21 +121,14 @@ export function svelteDevToolsHandle(): Handle {
             | undefined;
         if (markSeen) markSeen(reqKey);
 
-        let requestBody = '';
-        if (event.request.method === 'POST') {
-            try {
-                const reqClone = event.request.clone();
-                requestBody = await reqClone.text();
-            } catch (e) {
-                console.warn('[Svelte DevTools] Could not read request body:', e instanceof Error ? e.message : e);
-            }
-        }
+        const addEvent = (globalThis as Record<string, unknown>)[GLOBAL_KEY] as ((e: ServerEvent) => void) | undefined;
+        const shouldTrace = !!addEvent && !/\.(svelte|js|ts|css|json|ico|svg|png|woff2?)$/.test(event.url.pathname);
+        const requestPreview = shouldTrace ? capturePreview(event.request) : Promise.resolve(emptyPreview());
 
         const startTime = Date.now();
         const perfStart = performance.now();
         let response: Response | undefined;
         let error: Error | undefined;
-        let responseBody = '';
 
         try {
             response = await resolve(event, {
@@ -119,64 +154,35 @@ export function svelteDevToolsHandle(): Handle {
                 }
             }
             });
-            // Clone response to read body for the trace
-            const clone = response.clone();
-            responseBody = await clone.text();
         } catch (e) {
             error = e instanceof Error ? e : new Error(String(e));
-            throw error;
+            throw e;
         } finally {
-            const duration = performance.now() - perfStart;
-            const addEvent = (globalThis as Record<string, unknown>)[GLOBAL_KEY] as
-                | ((e: ServerEvent) => void)
-                | undefined;
-
-            if (addEvent) {
-                // Skip Vite dev module requests (individual .svelte/.js/.ts/.css files)
-                const path = event.url.pathname;
-                if (/\.(svelte|js|ts|css|json|ico|svg|png|woff2?)$/.test(path)) { return response!; }
-                const resHeadersRaw = response?.headers;
-                const headersEntries: [string, string][] = typeof resHeadersRaw?.entries === 'function'
-                    ? [...resHeadersRaw.entries()] as [string, string][]
-                    : typeof resHeadersRaw?.forEach === 'function'
-                        ? [] as [string, string][]
-                        : Object.entries(resHeadersRaw || {}) as unknown as [string, string][];
-                const contentType = typeof resHeadersRaw?.get === 'function'
-                    ? resHeadersRaw.get('content-type') || ''
-                    : (resHeadersRaw as unknown as Record<string, string>)?.['content-type'] || '';
-                const isJson = contentType.includes('json');
-                addEvent({
-                    id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-                    type: error ? 'server:error' : 'server:ssr',
-                    timestamp: startTime,
-                    duration,
-                    data: {
-                        url: event.url.pathname + event.url.search,
-                        method: event.request.method,
-                        requestBody: requestBody.slice(0, 2000) || undefined,
-                        _handler: 'sveltekit',
-                        statusCode: response?.status,
-                        routeId: event.route.id,
-                        contentType,
-                        responseSize: responseBody.length,
-                        responsePreview: isJson ? responseBody.slice(0, 2000) : responseBody.slice(0, 500),
-                        reqHeaders: {
-                            'content-type': typeof event.request.headers?.get === 'function'
-                                ? event.request.headers.get('content-type') : undefined,
-                            'user-agent': typeof event.request.headers?.get === 'function'
-                                ? event.request.headers.get('user-agent') : undefined,
-                            'accept': typeof event.request.headers?.get === 'function'
-                                ? event.request.headers.get('accept') : undefined,
-                            'referer': typeof event.request.headers?.get === 'function'
-                                ? event.request.headers.get('referer') : undefined,
+            if (shouldTrace && addEvent) {
+                const duration = performance.now() - perfStart;
+                const contentType = response?.headers.get('content-type') || '';
+                const responsePreview = response ? capturePreview(response, contentType.includes('json') ? 2000 : 500) : Promise.resolve(emptyPreview());
+                void Promise.all([requestPreview, responsePreview]).then(([body, preview]) => {
+                    addEvent({
+                        id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                        type: error ? 'server:error' : 'server:ssr', timestamp: startTime, duration,
+                        data: {
+                            url: event.url.pathname + event.url.search,
+                            method: event.request.method,
+                            requestBody: body.text || undefined,
+                            requestBodyTruncated: body.truncated,
+                            _handler: 'sveltekit', statusCode: response?.status,
+                            routeId: event.route.id, contentType,
+                            responseSize: preview.truncated ? undefined : preview.bytes,
+                            responsePreview: preview.text,
+                            responseBodyTruncated: preview.truncated,
+                            reqHeaders: Object.fromEntries(event.request.headers || []),
+                            resHeaders: Object.fromEntries(response?.headers || []),
+                            duration,
+                            error: error ? { message: error.message, stack: error.stack } : undefined,
                         },
-                        resHeaders: Object.fromEntries(headersEntries),
-                        duration,
-                        error: error
-                            ? { message: error.message, stack: error.stack }
-                            : undefined
-                    }
-                });
+                    });
+                }).catch(() => { /* Tracing errors must not change resolve's result. */ });
             }
         }
 
