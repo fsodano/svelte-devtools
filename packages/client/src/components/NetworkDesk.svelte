@@ -5,27 +5,8 @@
   import { apiFetch } from '../lib/api.js';
   import { NetworkHistory } from '../lib/network-history.js';
 
-  interface NetworkEntry {
-    id: string;
-    type: string;
-    url?: string;
-    method?: string;
-    statusCode?: number;
-    duration?: number;
-    timestamp: number;
-    routeId?: string;
-    mockResponse?: boolean;
-    mockRuleId?: string;
-    mockRulePattern?: string;
-    contentType?: string;
-    responseSize?: number;
-    error?: { message: string; stack?: string };
-    requestHeaders?: Record<string, string>;
-    responseHeaders?: Record<string, string>;
-    requestBody?: string;
-    responseBody?: string;
-    responseBodyTruncated?: boolean;
-  }
+  import { startServerTracePoll, type NetworkEntry } from '../lib/server-traces.js';
+  import ServerTraceDetail from './ServerTraceDetail.svelte';
 
   interface MockRule {
     id: string; pattern: string; method: string;
@@ -33,6 +14,7 @@
   }
 
   let entries = $state<NetworkEntry[]>([]);
+  let recentServerEntries = $state<NetworkEntry[]>([]);
   let mockRules = $state<MockRule[]>([]);
   let filter = $state<string>('all');
   let selectedEntry = $state<NetworkEntry | null>(null);
@@ -48,50 +30,25 @@
   let editingRuleId = $state<string | null>(null);
   let ruleError = $state('');
   let draftHint = $state('');
-  const history = new NetworkHistory<NetworkEntry>();
+  const history = new NetworkHistory<NetworkEntry>(500, 1000);
 
   const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
   const filters = [
     { id: 'all', label: 'All' }, { id: 'server:ssr', label: 'SSR' },
-    { id: 'server:error', label: 'Errors' }, { id: 'client:request', label: 'Client' },
+    { id: 'server:sql', label: 'SQL' }, { id: 'server:error', label: 'Errors' }, { id: 'client:request', label: 'Client' },
     { id: 'mock', label: 'Mocked' }
   ];
 
-  // Poll server events
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
-  let pollInFlight = false;
+  let pollError = $state('');
 
   $effect(() => {
-    fetchServerEvents();
-    pollTimer = setInterval(fetchServerEvents, 1000);
-    window.parent.postMessage({ type: 'svelte-devtools-get-mock-rules' }, window.location.origin);
-    return () => { if (pollTimer) clearInterval(pollTimer); };
-  });
-
-  async function fetchServerEvents() {
-    if (pollInFlight) return;
-    pollInFlight = true;
-    try {
-      const res = await apiFetch('/__svelte-devtools/server-events?last=50');
-      if (!res.ok) return;
-      const data = await res.json();
-      if (!data?.events) return;
-      const newEntries: NetworkEntry[] = (data.events as { id: string; type: string; timestamp: number; duration?: number; data?: Record<string, unknown> }[])
-        .map(e => ({
-          id: e.id, type: e.type, url: e.data?.url as string | undefined, method: e.data?.method as string | undefined,
-          statusCode: e.data?.statusCode as number | undefined, duration: e.duration,
-          timestamp: e.timestamp, routeId: e.data?.routeId as string | undefined,
-          contentType: e.data?.contentType as string | undefined,
-          responseSize: e.data?.responseSize as number | undefined,
-          error: e.data?.error as { message: string; stack?: string } | undefined,
-          requestBody: e.data?.requestBody as string | undefined,
-          responseBody: e.data?.responsePreview as string | undefined,
-          requestHeaders: e.data?.reqHeaders as Record<string, string> | undefined,
-          responseHeaders: e.data?.resHeaders as Record<string, string> | undefined,
-        }));
+    const stop = startServerTracePoll(apiFetch, (newEntries) => {
+      recentServerEntries = newEntries;
       entries = history.ingest('server', newEntries);
-    } catch {} finally { pollInFlight = false; }
-  }
+    }, (message) => { pollError = message; });
+    window.parent.postMessage({ type: 'svelte-devtools-get-mock-rules' }, window.location.origin);
+    return stop;
+  });
 
   // Listen for client-side requests from the store
   $effect(() => {
@@ -122,7 +79,8 @@
   const filtered = $derived(
     filter === 'all' ? entries
     : filter === 'server:ssr' ? entries.filter(e => e.type === 'server:ssr' || e.type === 'server:request')
-    : filter === 'server:error' ? entries.filter(e => e.type === 'server:error' || (e.statusCode ?? 200) >= 400 || e.statusCode === 0)
+    : filter === 'server:sql' ? entries.filter(e => e.type === 'server:sql')
+    : filter === 'server:error' ? entries.filter(e => e.type === 'server:error' || e.status === 'error' || !!e.error || (e.statusCode ?? 200) >= 400 || e.statusCode === 0)
     : filter === 'client:request' ? entries.filter(e => (e.type as string) === 'client:request')
     : filter === 'mock' ? entries.filter(e => e.mockResponse)
     : entries
@@ -132,7 +90,9 @@
     requestFilter ? filtered.filter(e =>
       e.url?.toLowerCase().includes(requestFilter.toLowerCase()) ||
       e.method?.toLowerCase().includes(requestFilter.toLowerCase()) ||
-      e.routeId?.toLowerCase().includes(requestFilter.toLowerCase())
+      e.routeId?.toLowerCase().includes(requestFilter.toLowerCase()) ||
+      e.statement?.toLowerCase().includes(requestFilter.toLowerCase()) ||
+      e.traceId?.toLowerCase().includes(requestFilter.toLowerCase())
     ) : filtered
   );
 
@@ -148,6 +108,7 @@
     switch (type) {
       case 'server:ssr': case 'server:request': return '🖥️';
       case 'server:error': return '❌';
+      case 'server:sql': return '▤';
       case 'client:request': return '🌐';
       default: return '•';
     }
@@ -249,13 +210,14 @@
       {#snippet first()}
       <div class="list">
         <div class="toolbar">
-          <input type="text" bind:value={requestFilter} placeholder="Filter by URL, method, route..." class="search-input" />
+          <input type="text" bind:value={requestFilter} placeholder="Filter URL, SQL, route, trace ID..." class="search-input" />
           <div class="filters">
             {#each filters as f (f.id)}
               <button class="filter-btn" class:active={filter === f.id} onclick={() => filter = f.id}>{f.label}</button>
             {/each}
           </div>
         </div>
+        {#if pollError}<p role="status" class="poll-error">{pollError}</p>{/if}
         <div class="entries-list">
           {#if searched.length === 0}
             <div class="empty-state">
@@ -278,14 +240,14 @@
                 {#if entry.method}
                   <span class="method-badge" style="background: {getMethodColor(entry.method)}">{entry.method}</span>
                 {:else}
-                  <span class="method-badge" style="background:#6b7280">{entry.type.includes('error') ? 'ERR' : 'SSR'}</span>
+                  <span class="method-badge" style="background:#6b7280">{entry.type === 'server:sql' ? entry.operation || 'SQL' : entry.type.includes('error') ? 'ERR' : 'SSR'}</span>
                 {/if}
                 <span class="status-code" class:error={entry.statusCode && entry.statusCode >= 400}>
-                  {entry.statusCode || '...'}
+                  {entry.type === 'server:sql' ? entry.status || 'ok' : entry.statusCode ?? '…'}
                 </span>
-                <span class="request-url" title={entry.url}>{entry.url ? entry.url.slice(0, 60) : entry.routeId || entry.type}</span>
+                <span class="request-url" title={entry.statement || entry.url}>{entry.statement || entry.url || entry.routeId || entry.type}</span>
                 <span class="entry-time">{formatTime(entry.timestamp)}</span>
-                {#if entry.duration}
+                {#if entry.duration !== undefined}
                   <span class="duration">{entry.duration.toFixed(1)}ms</span>
                 {/if}
               </button>
@@ -306,19 +268,24 @@
               {/if}
               <button aria-label="Close request details" class="detail-close" onclick={() => selectedEntry = null}>✕</button>
             </div>
+            {#if selectedEntry.type.startsWith('server:')}
+              <ServerTraceDetail entry={selectedEntry} entries={recentServerEntries} onselect={(entry) => selectedEntry = entry} />
+            {/if}
             {#if selectedEntry.url}
               <div class="detail-row"><span class="label">URL</span><span class="value mono">{selectedEntry.url}</span></div>
             {/if}
             {#if selectedEntry.mockResponse}
               <div class="detail-row"><span class="label">Mocked</span><span class="value mock-badge-inline">Rule: {selectedEntry.mockRulePattern || selectedEntry.mockRuleId || 'yes'}</span></div>
             {/if}
+            {#if selectedEntry.type !== 'server:sql'}
             <div class="detail-row"><span class="label">Method</span><span class="value method-badge" style="background:{selectedEntry.method ? getMethodColor(selectedEntry.method) : '#6b7280'}">{selectedEntry.method || '—'}</span></div>
             <div class="detail-row"><span class="label">Status</span><span class="value status-badge" class:error={selectedEntry.statusCode ? selectedEntry.statusCode >= 400 : false}>{selectedEntry.statusCode || '—'}</span></div>
+            {/if}
             {#if selectedEntry.routeId !== undefined}
               <div class="detail-row"><span class="label">Route</span><span class="value mono">{selectedEntry.routeId || '(root)'}</span></div>
             {/if}
             <div class="detail-row"><span class="label">Time</span><span class="value">{new Date(selectedEntry.timestamp).toLocaleString()}</span></div>
-            {#if selectedEntry.duration}
+            {#if selectedEntry.duration !== undefined}
               <div class="detail-row"><span class="label">Duration</span><span class="value">{selectedEntry.duration.toFixed(1)}ms</span></div>
             {/if}
             {#if selectedEntry.contentType}
@@ -331,11 +298,13 @@
             {#if selectedEntry.requestBody}
               <div class="section-label">Request Body</div>
               <pre class="code-block">{selectedEntry.requestBody}</pre>
+              {#if selectedEntry.requestBodyTruncated}<p class="poll-error">Request preview is truncated.</p>{/if}
             {/if}
 
             {#if selectedEntry.responseBody}
               <div class="section-label">Response Body</div>
               <pre class="code-block">{selectedEntry.responseBody}</pre>
+              {#if selectedEntry.responseBodyTruncated}<p class="poll-error">Response preview is truncated.</p>{/if}
             {/if}
 
             {#if selectedEntry.requestHeaders}
@@ -357,7 +326,7 @@
             {/if}
 
             {#if selectedEntry.error}
-              <div class="detail-row"><span class="label">Error</span><span class="value error-text">{selectedEntry.error.message}</span></div>
+              <div class="detail-row"><span class="label">Error</span><span class="value error-text">{selectedEntry.error.message || selectedEntry.error.code || 'Operation failed'}</span></div>
               {#if selectedEntry.error.stack}
                 <pre class="code-block stack">{selectedEntry.error.stack}</pre>
               {/if}
@@ -431,6 +400,7 @@
 </div>
 
 <style>
+  .poll-error { margin: 8px; color: var(--text-muted); overflow-wrap: anywhere; font-size: 12px; }
   .create-mock-btn { margin-left: auto; border: 1px solid var(--svelte-brand); background: var(--svelte-brand-10); color: var(--text-primary); border-radius: var(--radius-sm); padding: 5px 9px; cursor: pointer; font-size: 11px; white-space: nowrap; }
   .rule-count { padding: 1px 5px; border-radius: 8px; background: var(--bg-inset); font-variant-numeric: tabular-nums; }
   .rule-hint, .draft-hint { color: var(--text-muted); font-size: 11px; line-height: 1.6; margin: 0; }
