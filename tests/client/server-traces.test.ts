@@ -103,3 +103,14 @@ it('formats sub-millisecond SQL durations without treating zero as missing', () 
   expect(formatTraceDuration(1, 'server:sql')).toBe('1.0 ms');
   expect(formatTraceDuration(12.34, 'server:ssr')).toBe('12.3 ms');
 });
+
+
+it.each([100, 99])('places a later-arriving parent before its child when parent starts at %i', parentStart => {
+  const rows = serverEntries({ events: [
+    { id: 'child', type: 'server:sql', timestamp: 100, data: { traceId: 't', spanId: 'child', parentSpanId: 'parent' } },
+    { id: 'parent', type: 'server:ssr', timestamp: parentStart, data: { traceId: 't', spanId: 'parent' } },
+    { id: 'sibling', type: 'server:sql', timestamp: 100, data: { traceId: 't', spanId: 'sibling', parentSpanId: 'parent' } },
+    { id: 'later', type: 'server:request', timestamp: 101, data: { traceId: 't', spanId: 'later' } },
+  ] });
+  expect(traceRows(rows, rows[0]).map(row => row.entry.id)).toEqual(['parent', 'child', 'sibling', 'later']);
+});

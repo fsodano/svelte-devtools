@@ -32,7 +32,17 @@ export function traceRows(entries: NetworkEntry[], selected: NetworkEntry) {
   const end = Math.max(...peers.map(entry => entry.timestamp + Math.max(0, entry.duration ?? 0)));
   const total = Math.max(1, end - start);
   const bySpan = new Map(peers.filter(entry => entry.spanId).map(entry => [entry.spanId!, entry]));
-  return peers.sort((a, b) => a.timestamp - b.timestamp).map(entry => {
+  // Completion events arrive child-first. At equal clock precision, render the
+  // hierarchy before applying arrival order to unrelated spans.
+  function depth(entry: NetworkEntry): number {
+    let parent = entry.parentSpanId;
+    const seen = new Set<string>();
+    while (parent && bySpan.has(parent) && !seen.has(parent)) {
+      seen.add(parent); parent = bySpan.get(parent)?.parentSpanId;
+    }
+    return seen.size;
+  }
+  return peers.sort((a, b) => a.timestamp - b.timestamp || depth(a) - depth(b)).map(entry => {
     let parent = entry.parentSpanId; let depth = 0;
     const seen = new Set<string>();
     while (parent && bySpan.has(parent) && !seen.has(parent)) {
