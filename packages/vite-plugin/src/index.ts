@@ -1,3 +1,4 @@
+import { resolvePackageAssets } from './package-assets.js';
 import type {Plugin, ResolvedConfig, ViteDevServer} from 'vite';
 import {createFilter} from 'vite';
 import MagicString from 'magic-string';
@@ -157,20 +158,8 @@ if (typeof window !== 'undefined') {
             console.log('  Use it for /__svelte-devtools/api/* and legacy endpoints:');
             console.log('  curl -H "Authorization: Bearer <token>" http://localhost:<port>/__svelte-devtools/api/');
 
-            let clientPath: string;
-            try {
-                clientPath = path.resolve(path.dirname(require.resolve('@fsodano/svelte-devtools-client/package.json')), 'dist');
-            } catch {
-                clientPath = path.resolve(__dirname, '../../client/dist');
-            }
-
+            const { clientPath, runtimePath } = resolvePackageAssets();
             const distPath = path.resolve(__dirname, '../../../dist');
-            let runtimePath: string;
-            try {
-                runtimePath = path.resolve(path.dirname(require.resolve('@fsodano/svelte-devtools-runtime/package.json')), '../runtime/dist');
-            } catch {
-                runtimePath = path.resolve(__dirname, '../../runtime/dist');
-            }
 
             // Resolve @vitejs/devtools inject.js from project root (Vite allow-list scope)
             let viteDevtoolsInjectPath: string;
