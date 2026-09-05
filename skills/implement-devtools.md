@@ -16,11 +16,13 @@ Follow these steps to add Svelte DevTools to any Vite or SvelteKit project.
 | Svelte | 5.20+ (runes mode) |
 | @vitejs/devtools | 0.4.8 (tested host) |
 
-The project must use Svelte 5 with runes mode enabled (`compilerOptions: { runes: true }` in svelte.config.js).
+Use Svelte 5 runes in application components. Keep the generated compiler options. Current Svelte CLI projects configure these inside `sveltekit(...)` in `vite.config.ts`; older projects use `svelte.config.js`.
 
 ## Installation
 
-Install `@fsodano/vite-plugin-svelte-devtools@0.2.1` and `@vitejs/devtools@0.4.8` with `npm install -D`. Keep the application's normal Svelte compiler integration. The [installation guide](../docs/02_vite-plugin.md#installation) also covers source development and local fixtures.
+Install `@fsodano/vite-plugin-svelte-devtools@0.2.2` and `@vitejs/devtools@0.4.8` with `npm install -D`. Keep the application's normal Svelte compiler integration. The [installation guide](../docs/02_vite-plugin.md#installation) also covers source development and local fixtures.
+
+Run `npx svelte-devtools init` in the application directory, then `npm run dev`. The command preserves the generated config and adds the SvelteKit hook. Use `--dry-run` to preview edits. Existing custom hooks and dynamic configs require the manual setup below.
 
 ## Vite Config Setup
 
@@ -84,7 +86,7 @@ export const handle: Handle = dev ? svelteDevToolsHandle() : noopHandle();
 
 The `dev` check ensures the hooks only run in development mode. In production, `noopHandle()` passes requests through unchanged.
 
-When the plugin detects SvelteKit, it logs this exact snippet to stdout as a reminder.
+The plugin prints this reminder only when debug logging is enabled. Use the setup command or add the hook explicitly.
 
 ## Plugin Options
 
@@ -154,8 +156,8 @@ If everything is working:
 | Problem | Likely Cause | Fix |
 |---|---|---|
 | Plugin does not load in SvelteKit | Missing `hooks.server.ts` or wrong hooks setup | Add `src/hooks.server.ts` with `svelteDevToolsHandle()` and `noopHandle()` for production guard |
-| Runtime not found (blank iframe) | Runtime package was not built or path resolution failed | Rebuild the runtime: `npm run build:runtime` or `npm run build` from the monorepo root |
-| Blank iframe for the Svelte tab | Client UI package was not built | Rebuild the client: `npm run build:client` or `npm run build` from the monorepo root |
+| Runtime not found (blank iframe) | Runtime package was not built or path resolution failed | For npm users, reinstall the latest plugin and restart the app. Contributors must rebuild the runtime from the monorepo root |
+| Blank iframe for the Svelte tab | Client UI package was not built | For npm users, reinstall the latest plugin and restart the app. Contributors must rebuild the client from the monorepo root |
 | Transform not applied to a component | Include/exclude patterns filter it out, or it's in `.svelte-kit/generated/` | Check your `include` and `exclude` patterns. Generated files in `.svelte-kit/generated/` are automatically skipped. |
 | Component not in tree | Component ID collision or registration timing | Check `window.__SVELTE_DEVTOOLS_REGISTRY__` in the browser console. Each mounted instance has a unique ID; repeated instances share file metadata but must remain separate in the tree. |
 | State values do not update | `$inspect` injection did not fire, or the runtime is not loaded | Verify the runtime script is in the page HTML. Check `window.__SVELTE_DEVTOOLS_RUNTIME__` in the console. |

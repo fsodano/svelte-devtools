@@ -22,19 +22,25 @@ try {
   dependencies['@types/node'] = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')).devDependencies['@types/node'];
   write('package.json', JSON.stringify({ name: 'svelte-release-consumer', private: true, type: 'module', dependencies }, null, 2));
   write('install.log', run('npm', ['install', '--cache', cache, '--no-audit', '--no-fund']));
-  for (const app of ['plain', 'kit']) mkdirSync(join(directory, app));
+  for (const app of ['plain', 'kit']) {
+    mkdirSync(join(directory, app));
+    write(`${app}/package.json`, JSON.stringify({ type: 'module', devDependencies: dependencies }));
+  }
   write('plain/index.html', '<!doctype html><html><head><title>Consumer</title></head><body><div id="app"></div><script type="module" src="/main.js"></script></body></html>');
   write('plain/main.js', "import { mount } from 'svelte'; import App from './App.svelte'; mount(App, { target: document.getElementById('app') });");
   const component = '<script>let count = $state(0);</script><button onclick={() => count++}>Consumer count {count}</button>';
   write('plain/App.svelte', component);
-  write('plain/vite.config.js', "import { svelte } from '@sveltejs/vite-plugin-svelte'; import { DevTools } from '@vitejs/devtools'; import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools'; export default { plugins: [DevTools(), svelte(), svelteDevTools()] };");
+  write('plain/vite.config.js', "import { svelte } from '@sveltejs/vite-plugin-svelte'; export default { plugins: [svelte()] };");
   mkdirSync(join(directory, 'kit/src/routes'), { recursive: true });
-  write('kit/package.json', '{"type":"module"}');
   write('kit/svelte.config.js', "import adapter from '@sveltejs/adapter-auto'; export default { kit: { adapter: adapter() } };");
-  write('kit/vite.config.js', "import { sveltekit } from '@sveltejs/kit/vite'; import { DevTools } from '@vitejs/devtools'; import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools'; export default { plugins: [DevTools(), sveltekit(), svelteDevTools()] };");
+  write('kit/vite.config.js', "import { sveltekit } from '@sveltejs/kit/vite'; export default { plugins: [sveltekit()] };");
   write('kit/src/app.html', '<!doctype html><html><head>%sveltekit.head%</head><body><div style="display: contents">%sveltekit.body%</div></body></html>');
   write('kit/src/routes/+page.svelte', component);
-  write('kit/src/hooks.server.js', "import { dev } from '$app/environment'; import { svelteDevToolsHandle, noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit'; export const handle = dev ? svelteDevToolsHandle() : noopHandle();");
+  for (const app of ['plain', 'kit']) {
+    write(`${app}-setup.log`, run(join(directory, 'node_modules/.bin/svelte-devtools'), ['init'], join(directory, app)));
+    const repeated = run(join(directory, 'node_modules/.bin/svelte-devtools'), ['init'], join(directory, app));
+    if (!repeated.includes('already configured')) throw new Error(`${app}: repeated setup must be idempotent`);
+  }
   write('imports.ts', "import { svelteDevTools } from '@fsodano/vite-plugin-svelte-devtools'; import { noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit'; import { traceSqliteQuery } from '@fsodano/vite-plugin-svelte-devtools/sqlite'; import { createDevtoolsMcpServer } from '@fsodano/svelte-devtools-mcp'; import type { ComponentInstance } from '@fsodano/svelte-devtools-types'; void [svelteDevTools, noopHandle, traceSqliteQuery, createDevtoolsMcpServer]; let component: ComponentInstance | undefined; void component;");
   write('types.log', run(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit', '--skipLibCheck', '--module', 'NodeNext', '--target', 'ES2022', 'imports.ts']));
   write('smoke.mjs', String.raw`

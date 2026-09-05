@@ -1,6 +1,6 @@
 {
   "name": "@fsodano/svelte-devtools-client",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "private": false,
   "description": "Svelte DevTools panel for components, state replay, network requests, and server traces",
@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@phosphor-icons/core": "^2.1.1",
-    "@fsodano/svelte-devtools-types": "^0.2.1",
+    "@fsodano/svelte-devtools-types": "^0.2.2",
     "@sveltejs/vite-plugin-svelte": "^7.0.0"
   },
   "publishConfig": {

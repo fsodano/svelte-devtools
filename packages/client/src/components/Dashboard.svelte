@@ -87,8 +87,8 @@
       <p>Give your coding agent the same view of your application.</p>
       <div class="agent-status"><span class="dot" class:ready={agentReady}></span>{loading ? 'Checking runtime sync…' : agentReady ? 'Runtime data available' : 'Waiting for the first panel sync'}</div>
       <p class="agent-note">Connect <code>@fsodano/svelte-devtools-mcp</code> with your dev server URL and token. Start with <code>svelte_status</code>.</p>
-      <div class="agent-footer"><span>8 inspection tools</span><span>Freshness checks</span></div>
-      <p class="fine-print">Keep this panel open. Agents read its cached data; live state editing is not available.</p>
+      <div class="agent-footer"><span>9 agent tools</span><span>Freshness checks</span></div>
+      <p class="fine-print">Keep this panel open. Agents can inspect your app and edit writable state in a selected browser session.</p>
       {#if error}<p class="error" role="status">{error}</p>{/if}
     </section>
   </div>

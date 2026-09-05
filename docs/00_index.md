@@ -58,7 +58,7 @@ flowchart TB
 
 ### 1. Install the Plugin
 
-Install `@fsodano/vite-plugin-svelte-devtools@0.2.1` and the tested `@vitejs/devtools@0.4.8` host as development dependencies. Follow the [installation guide](02_vite-plugin.md#installation) for package and source workflows.
+Install `@fsodano/vite-plugin-svelte-devtools@0.2.2` and the tested `@vitejs/devtools@0.4.8` host as development dependencies. Follow the [installation guide](02_vite-plugin.md#installation) for package and source workflows.
 
 ### 2. Configure Vite
 

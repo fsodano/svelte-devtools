@@ -18,7 +18,7 @@ Open the app, authorize the Vite dock, and keep the Svelte panel open. Configure
   "mcpServers": {
     "svelte-devtools": {
       "command": "npx",
-      "args": ["-y", "@fsodano/svelte-devtools-mcp@0.2.1"],
+      "args": ["-y", "@fsodano/svelte-devtools-mcp@0.2.2"],
       "env": {
         "SVELTE_DEVTOOLS_URL": "http://localhost:5173",
         "SVELTE_DEVTOOLS_TOKEN": "your-local-token"

@@ -9,7 +9,7 @@ Tracks mounted instances, state and prop events, element inspection, and browser
 For application setup, install the [Vite plugin](https://www.npmjs.com/package/@fsodano/vite-plugin-svelte-devtools):
 
 ```bash
-npm install -D @fsodano/vite-plugin-svelte-devtools@0.2.1 @vitejs/devtools@0.4.8
+npm install -D @fsodano/vite-plugin-svelte-devtools@0.2.2 @vitejs/devtools@0.4.8
 ```
 
 Follow the [configuration guide](https://github.com/fsodano/svelte-devtools#integrate-with-your-app). SvelteKit also needs a development-only handle hook. Requirements: Svelte 5.20+, Vite 8, and a supported Node.js version; Node.js 22.12+ is the documented workflow.

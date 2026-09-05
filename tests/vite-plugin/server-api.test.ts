@@ -316,7 +316,7 @@ describe('handleApiRequest', () => {
             expect(body).toMatchObject({
                 ok: true,
                 name: '@fsodano/vite-plugin-svelte-devtools',
-                version: '0.2.1',
+                version: '0.2.2',
             });
             expect(body.endpoints).toBeInstanceOf(Array);
             expect((body.endpoints as string[]).length).toBeGreaterThan(0);
