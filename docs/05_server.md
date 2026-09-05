@@ -1,129 +1,97 @@
-# Server Integration
+# Server integration
 
-SvelteKit server-side integration for tracing HTTP requests during SSR.
+Inspect SvelteKit requests, server fetches, and explicitly instrumented SQLite queries in Network. The authenticated HTTP API and MCP expose the same server events. All implementation lives in `packages/vite-plugin`; there is no separate server package.
 
-**Status**: implemented — basic request tracing. There is **no standalone `packages/server`**; all server-side logic lives inside `packages/vite-plugin` (`server-events.ts`, `server-api.ts`, `sveltekit.ts`, and the middleware in `index.ts`).
+## Enable SvelteKit tracing
 
-## Overview
-
-The Vite plugin provides server-side request tracing out of the box:
-
-- **SvelteKit SSR traces** — the `svelteDevToolsHandle()` hook traces every SSR response with `event.route.id`, method, status, duration, headers, and JSON response previews (`server:ssr` / `server:error` event types)
-- **SvelteKit fetch traces** — a `globalThis.fetch` interceptor installed when `svelteDevToolsHandle()` is created captures server fetches as `server:request` events. Importing the module or using `noopHandle()` does not install it
-- **Generic HTTP traces** — a Vite middleware records every non-asset, non-devtools request (URL, method, status, duration, response preview, request/response headers)
-- **Client fetch traces** — the browser runtime also intercepts `window.fetch`, emitting `client:request` events shown in the Network tab
-
-## Usage
-
-### SvelteKit Handle
-
-Add the SvelteKit handle helper to `src/hooks.server.ts`:
-
-```typescript
+```ts
 // src/hooks.server.ts
-import type { Handle } from '@sveltejs/kit';
 import { dev } from '$app/environment';
+import type { Handle } from '@sveltejs/kit';
 import { svelteDevToolsHandle, noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
 
 export const handle: Handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```
 
-The handle:
-1. Injects the Vite DevTools client script + Svelte runtime script into every SSR response via `transformPageChunk`
-2. Traces the request (duration, status, headers, response preview, `routeId`)
-3. `noopHandle()` is a zero-overhead pass-through for production
+If another handle already exists, compose it with SvelteKit's `sequence` helper. Keep the development guard. Importing the module or selecting `noopHandle()` does not install fetch interception.
 
-## How It Works
+The development handle injects each DevTools script once into HTML responses, including streamed responses. It measures request resolution and captures bounded previews asynchronously. It does not wait for an SSE stream to close. Generic Vite middleware supplies tracing for other eligible requests.
 
-### Event Store (`server-events.ts`)
+## Trace identity
 
-An in-memory ring buffer:
+Each request receives `traceId` and `spanId` values. An AsyncLocalStorage context carries them through asynchronous work. Server fetches and SQL calls create child spans with `parentSpanId`. Internal SvelteKit `event.fetch` requests retain that parentage. Concurrent requests to the same URL remain separate traces; URLs and timing windows are not used to infer identity.
 
-```typescript
-interface ServerEvent {
-  id: string;          // 'evt-...' or 'srv-...'
-  type: string;        // 'server:request' | 'server:ssr' | 'server:error' | 'server:trace'
-  timestamp: number;
-  duration?: number;
-  data: {
-    url: string;
-    method: string;
-    statusCode?: number;
-    routeId?: string;            // SvelteKit route id (e.g. '/counter')
-    requestBody?: string;
-    responseSize?: number;
-    responsePreview?: string;
-    reqHeaders?: Record<string, unknown>;
-    resHeaders?: Record<string, unknown>;
-    _handler?: string;           // 'fetch-interceptor' | 'sveltekit' | 'generic'
-  };
-}
+Each dev server owns its event buffer and tracing lifecycle. The buffer retains the newest 1,000 events. Request context marks Kit-handled requests so the outer middleware does not emit a duplicate root span.
+
+## Observe a SQLite query
+
+Use the server-only `@fsodano/vite-plugin-svelte-devtools/sqlite` export around an actual synchronous call:
+
+```ts
+import { dev } from '$app/environment';
+import { traceSqliteQuery } from '@fsodano/vite-plugin-svelte-devtools/sqlite';
+
+const statement = db.prepare('SELECT * FROM todos WHERE id = @id');
+const todo = traceSqliteQuery({
+  enabled: dev,
+  database: 'todos',
+  operation: 'get',
+  statement: statement.source,
+  captureStatement: true
+}, () => statement.get({ id }));
 ```
 
-- Capped at `MAX_EVENTS = 1000` entries (oldest evicted)
-- `seenIds` dedup map avoids double-recording the same request (SvelteKit handle + generic middleware)
-- Exports `addServerEvent(event)`, `getServerEvents({last?, sinceId?})`, `clearServerEvents()`
+The database and statement remain native objects. The callback's returned value or thrown error passes through unchanged. Durations use a monotonic clock and measure the callback, not preparation or result rendering. Supported operation labels are `get`, `all`, `run`, `exec`, and `pragma`.
 
-### API Endpoints
+`enabled` is required. When disabled, the wrapper calls the callback directly. Outside an active request context, it emits nothing. Use a logical database name, not a filesystem path.
 
-All endpoints require the per-run bearer token (`Authorization: Bearer <token>`, or `?token=<token>` for beacon-only requests). Requests without a valid token get `401`. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server, or copy the token printed in the terminal.
+Statement capture defaults to off. If you enable it, supply a fixed prepared template without expanded values. SQL literals can contain secrets even when bindings are omitted. Captured statements are limited to 4,096 characters; `statementTruncated` identifies a shortened value. Database labels and safe error codes are limited to 128 characters. The wrapper collects neither bindings nor result rows. Errors expose a SQLite code such as `SQLITE_CONSTRAINT_UNIQUE`, or `SQLITE_QUERY_FAILED`; arbitrary error messages are omitted.
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/__svelte-devtools/server-events` | `GET` | All server events (`?last=N`, `?sinceId=X`) |
-| `/__svelte-devtools/server-events` | `DELETE` | Clear all server events |
-| `/__svelte-devtools/api/server-events` | `GET` / `DELETE` | Same data under the JSON API prefix |
+`rowCount` is the number of returned rows for `all`, zero or one for `get`, and the native `changes` value for `run`. It is absent when unavailable. Result getters are not invoked to compute it. The operation label describes the method: an `INSERT ... RETURNING` executed with `get` still has operation `get`.
+
+This wrapper does not automatically trace transactions, lazy iterators, asynchronous work, or other database clients. Wrap each synchronous operation you need to observe. Time Travel does not undo database writes.
+
+## Event contract
+
+Events retain the envelope `{ id, type, timestamp, duration, data }`. Timestamps are epoch milliseconds; durations are milliseconds. Server types include `server:ssr`, `server:request`, `server:error`, and `server:sql`.
+
+SQL data contains:
+
+| Field | Meaning |
+|---|---|
+| `traceId`, `spanId`, `parentSpanId` | Request correlation and direct parent relationship. |
+| `routeId` | SvelteKit route when available. |
+| `database`, `operation` | Logical database name and execution method. |
+| `statement`, `statementTruncated` | Optional bounded template and truncation indicator. |
+| `rowCount` | Returned or affected count when available. |
+| `status`, `error` | `success` or `error`, with a safe error code on failure. |
+
+HTTP events include URL, method, status, route, headers, and bounded previews. These can contain application data; they are not a general redaction system. Request previews are limited to 2,000 bytes. Kit response previews use 2,000 bytes for JSON and 500 for other content, with a 250 ms collection deadline. A truncated preview is not the full response. Request duration measures resolution, not necessarily the lifetime of a streamed body.
+
+## Inspect in Network or through an agent
+
+Open Network and use the SSR, SQL, or Errors filters. Select a row to inspect its details and trace waterfall. Select another span in that trace to follow the request/query relationship. The panel retains at most 500 combined browser and server rows; a parent can be outside the retained window. There is no separate Server tab.
+
+The panel polls the canonical authenticated API. Clear dismisses visible history without immediately replaying retained rows. Browser mock actions apply only to browser fetches, not SQL or server requests.
 
 ```bash
+export SVELTE_DEVTOOLS_TOKEN=your-local-token
 curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  http://localhost:5173/__svelte-devtools/api/server-events | jq '.events | length'
+  'http://localhost:5175/__svelte-devtools/api/server-events?last=100'
 ```
 
-### Client Display
+`GET /__svelte-devtools/api/server-events` returns an object with `events` and `count`; `DELETE` clears the server buffer. The legacy `/__svelte-devtools/server-events` GET returns an array. Both require the bearer token. `last` and `sinceId` select recent events. The MCP `svelte_server_events` tool accepts `last` from 1 to 500 and an optional `sinceId`. Runtime component caches need an open panel; server events come from observed server requests independently.
 
-The Network panel attempts to poll `/__svelte-devtools/server-events` every second. In release 0.1.1, this legacy endpoint returns an array but the poller reads `data.events`. Consequently, server traces do not populate the panel through this path. Use authenticated `/__svelte-devtools/api/server-events` or the MCP server-events tool to inspect them. Repairing this display path is separate follow-up work.
+## Verify against real applications
 
-Browser `client:request` events and browser fetch mock rules remain available in Network. There is no separate Server tab in the current application shell.
-
-## Security Considerations
-
-1. **Dev-only**: All tracing middleware only runs when `apply: 'serve'`
-2. **No production impact**: `noopHandle()` passes requests through unchanged; the plugin is never loaded in production builds
-3. **Memory bounded**: Event buffer is capped at 1000 entries
-4. **Header privacy**: the `cookie` request header is logged only as `'[present]'` (generic middleware)
-5. **Token required**: every server-events endpoint requires the per-run bearer token; CORS is allow-listed to localhost and configured origins (ADR-0009)
-
-## Troubleshooting
-
-### No server events in timeline
-
-Ensure you are in development mode and the DevTools panel is open:
-
-```javascript
-// In browser console (the plugin exposes the per-run token on the page)
-fetch('/__svelte-devtools/server-events?token=' + encodeURIComponent(window.__SVELTE_DEVTOOLS_TOKEN__))
-  .then(r => r.json())
-  .then(console.log);
+```bash
+npm run build
+npm ci --prefix tests/apps/svelte-kit
+npm ci --prefix tests/apps/todo-sqlite
+npx playwright install chromium
+node scripts/verify-ssr-sql.mjs
 ```
 
-Also make sure `src/hooks.server.ts` exists with `svelteDevToolsHandle()` — without it, SvelteKit requests bypass the generic Vite middleware for HTML pages.
+The script owns ports 5183 and 5184 and creates a temporary SQLite database. It checks SSR, hydration, streaming, navigation, request isolation, Todo CRUD, SQL parentage, HTTP/MCP parity, and the visible trace details. Read its reported evidence before declaring a change verified.
 
-## Current boundaries
-
-Tracing does not instrument SQLite or other database queries. A Todo request trace shows the HTTP operation; it does not contain SQL statements, query timing, or correlated database spans.
-
-Response previews are collected asynchronously so tracing does not wait for an SSE or streaming body to finish. SvelteKit previews are bounded to 2,000 bytes for JSON responses and 500 bytes for other responses, with a 250 ms collection deadline. Request-body previews are bounded to 2,000 bytes. These previews can be incomplete and do not replace the application response stream.
-
-## Implementation Status
-
-Completed:
-- ✅ SvelteKit SSR request tracing (routeId, headers, previews)
-- ✅ `globalThis.fetch` interceptor for load functions (`server:request`)
-- ✅ Generic Vite middleware request tracing
-- ✅ Client-side `window.fetch` tracing (`client:request`)
-- ✅ Server events endpoints (`GET` / `DELETE`)
-- ⚠️ Network server-trace display: blocked by the response-shape mismatch described above
-
-Planned:
-- 🚧 Database query tracing
-- 🚧 Server-side request mocking. Browser `fetch` mocking is already available in the Network panel; it does not intercept server requests.
+The [Todo fixture](../tests/apps/todo-sqlite/README.md) uses `TODO_SQLITE_DB_PATH` for isolated runs. Production uses the no-op handle and disabled query wrapper. The plugin itself runs only during development. Server mocking and automatic instrumentation of arbitrary database drivers remain outside the current scope.

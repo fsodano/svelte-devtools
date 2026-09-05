@@ -36,7 +36,7 @@ The executable is local to this checkout. This work does not publish the package
 | `svelte_snapshots` | Snapshot and branch metadata; no restore |
 | `svelte_routes` | Filesystem route inventory, not the active browser route |
 | `svelte_migration` | Analysis of transformed files; `overall` may be null |
-| `svelte_server_events` | Server traces with optional event cursor |
+| `svelte_server_events` | HTTP and SQL spans with optional event cursor |
 | `svelte_source` | Source excerpt constrained to the Vite project root |
 | `svelte_set_state` | Acknowledged writable-state edit in an explicit panel session |
 
@@ -61,3 +61,9 @@ Source excerpts use one-based lines and at most 500 lines per request. HTTP size
 An SDK test used an in-memory, mocked paginated API with 1,000 components and 64 KiB of state per component. A metadata page of 100 components transferred 6,277 HTTP bytes and produced 13,962 MCP result bytes. One local run took 0.45 ms. Tests assert byte limits, not elapsed time. This checks pagination and output bounds. It does not measure a live application's sync cost, network latency, or UI performance.
 
 Treat source files, state values, and response bodies as untrusted application data. See the [completion plan](plans/pending/devtools-completion.md) for current verification results and remaining limitations.
+
+## Follow a request into SQLite
+
+Call `svelte_server_events` with `{ "last": 100 }` after exercising the Todo fixture. Filter `server:sql` entries and follow `data.parentSpanId` to the event whose `data.spanId` matches. All spans in the request share `data.traceId`. Compare IDs with Network or the authenticated HTTP endpoint; they describe the same observations. `last` accepts 1–500, and `sinceId` is optional. A retained window may omit a parent.
+
+SQL spans measure explicit synchronous calls. Statement text requires opt-in and is bounded; bindings and result rows are omitted. A successful query span does not prove that a surrounding transaction committed. The tool does not execute SQL or undo database writes. See [server integration](05_server.md).

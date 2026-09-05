@@ -71,7 +71,7 @@ curl -fsS -G -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
 
 Select a mounted instance ID from this response, then request that ID with state included. Do not use a build-time file ID as a mounted instance ID. Inspect `cachedAt`; an empty or stale panel cache does not prove that the application has no components. `cachedAt: 0` means no panel sync has arrived. Refresh the page and verify the panel connection before drawing conclusions.
 
-Check timeline, snapshots, and server events for the same session where supported. Component, timeline, and snapshot endpoints support pagination. The [API reference](../docs/06_api.md) defines exact query fields and scope. Server traces describe HTTP activity; SQL query spans are not implemented.
+Check timeline, snapshots, and server events for the same session where supported. Component, timeline, and snapshot endpoints support pagination. The [API reference](../docs/06_api.md) defines exact query fields and scope. Server traces include HTTP requests and explicit synchronous SQLite query spans. Correlate `traceId`, `spanId`, and `parentSpanId`; do not infer parentage from URL or timing.
 
 ## Verify an authorized live edit
 
@@ -103,3 +103,9 @@ Verify repeated components stay separate, source links launch the editor, detail
 For Network, create a mock from an observed browser request, enable it, and repeat that request. Verify the application's received response as well as the panel label. Mocks affect browser `fetch` only; native XMLHttpRequest, server fetches, and DevTools infrastructure pass through. The panel retains at most 500 combined network rows. A bounded preview may be incomplete; review a generated mock body before using it.
 
 Report the commands run, the app tested, and any uncovered boundaries. A successful HTTP query alone does not verify rendering or editor launch.
+
+## Verify SSR and SQL observations
+
+Run `node scripts/verify-ssr-sql.mjs` after a root build and dependency installation for the SvelteKit and Todo fixtures. It starts servers on 5183/5184 and uses a temporary SQLite database through `TODO_SQLITE_DB_PATH`. Read the evidence output. Verify native form failures as well as enhanced actions, then compare SQL span IDs in the HTTP API, MCP, and Network trace details.
+
+Use MCP `svelte_server_events` with `last` between 1 and 500. Confirm measured duration, statement truncation flags, and direct parent IDs. Do not expect bindings, result rows, automatic transaction spans, or database rollback. See [server capture semantics](../docs/05_server.md).

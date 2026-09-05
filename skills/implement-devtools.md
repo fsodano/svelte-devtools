@@ -162,3 +162,16 @@ If everything is working:
 | `@vitejs/devtools` peer dependency error | DevTools kit is not installed | Run `npm install --save-dev @vitejs/devtools@0.4.8` |
 | Svelte 4 patterns not detected | File is already fully migrated, or runes mode is off | Verify `svelte.config.js` has `compilerOptions: { runes: true }` |
 | "Unknown entry" error during dock registration | Wrong dock config structure | Use flat structure: `{ id, title, icon, type: 'iframe', url }`, not nested `view` object |
+
+## Add explicit SQLite observations
+
+Keep database code on the server. Import `traceSqliteQuery` from `@fsodano/vite-plugin-svelte-devtools/sqlite` and wrap the actual synchronous call:
+
+```ts
+const result = traceSqliteQuery({
+  enabled: dev, database: 'todos', operation: 'get',
+  statement: statement.source, captureStatement: true
+}, () => statement.get({ id }));
+```
+
+Use the framework's `dev` flag. Statement capture is off by default; opt in only for safe templates without expanded user values. The wrapper keeps native return/error behavior and records no bindings or result rows. It requires an active traced request. It does not automatically instrument promises, iterators, or transaction boundaries. See [server integration](../docs/05_server.md).

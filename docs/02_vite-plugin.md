@@ -6,10 +6,10 @@ The Vite plugin (`packages/vite-plugin`) is the build-time entry point for Svelt
 
 ## Installation
 
-The current release is **0.1.1** on GitHub. The 0.1.x packages are not published to npm. Build the source checkout before using the plugin or MCP server. A registry install does not install this release.
+These instructions describe the current source, including correlated SQL tracing. Build the checkout before using the plugin or MCP server. Do not substitute the older npm packages for this implementation.
 
 ```bash
-git clone --branch v0.1.1 https://github.com/fsodano/svelte-devtools.git
+git clone https://github.com/fsodano/svelte-devtools.git
 cd svelte-devtools
 npm ci
 npm run build
@@ -408,3 +408,9 @@ export function svelteDevTools(options: SvelteDevToolsPluginOptions = {}): Plugi
 ```
 
 All injected code includes `typeof window !== 'undefined'` guards for SSR safety.
+
+## Correlated server and SQLite tracing
+
+The development middleware establishes an AsyncLocalStorage request context. SvelteKit, internal fetches, and explicit SQLite operations share trace IDs and direct span parent IDs. Streamed HTML injection occurs once per response. Event buffers belong to the dev server, not a process-wide URL cache.
+
+Import `traceSqliteQuery` from the server-only `@fsodano/vite-plugin-svelte-devtools/sqlite` subpath to observe a synchronous operation. Set `enabled: dev`; statement capture is an explicit opt-in. See [server setup and capture controls](05_server.md). Network, HTTP, and MCP expose these same spans.

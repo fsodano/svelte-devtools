@@ -259,5 +259,9 @@ Implemented:
 6. ✅ Browser `fetch` mock rules (native XMLHttpRequest is preserved)
 
 Future ideas:
-1. 🚧 Server trace display repair and database observability. See [current server boundaries](05_server.md#current-boundaries).
+1. ✅ Correlated request, server-fetch, and explicit SQLite spans in Network. See [server tracing and boundaries](05_server.md).
 2. 🚧 Server-side mocking. Browser fetch mocking is implemented; server requests pass through.
+
+## Request and database spans
+
+Server tracing uses a shared AsyncLocalStorage context with request IDs, span IDs, and an owner-specific emitter. Internal fetches and explicit synchronous SQLite calls become child spans. The server buffer retains 1,000 events per dev server; Network retains 500 combined rows. HTTP and MCP expose the same event identities. No URL/time-window matching or database rollback is involved. See [server integration](05_server.md) for capture controls and lifecycle boundaries.
