@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+> **Current implementation:** These records retain decisions and constraints from their original dates. For release 0.1.1 behavior, use the [API reference](../06_api.md), [MCP guide](../07_mcp.md), and [client guide](../04_client.md). Browser fetch mocks and acknowledged session-targeted state edits are implemented; historical proposals can describe earlier gaps.
+
 This directory records the significant architectural decisions behind Svelte DevTools: why the plugin transforms `.svelte` files the way it does, why the runtime talks to the panel over `postMessage`, why state restore uses surgical diffs. Each record answers one question: given the constraints at the time, why did we build it this way?
 
 ADRs are for developers contributing to this repo. They are the history of the design, not a tutorial. Read the record for an area before you change it, and write one when you change the design.
@@ -58,7 +60,7 @@ Accepted does not mean "shipped as written". It means "this is the decision we a
 
 When a newer decision replaces an accepted one, the older record is marked, not deleted:
 
-- The old record's `Status` becomes `Superseded` and links to the replacing ADR in the form `Superseded by [ADR-0009](./ADR-0009-....md)`.
+- The old record's `Status` becomes `Superseded` and links to the replacing ADR with the words `Superseded by` followed by a link to that record.
 - The new record should note `Supersedes ADR-000X` in its Context or Status so the pair is findable from either side.
 - The old record stays in `docs/adr/`. Its history is the point of the record; removing it would erase why the newer decision was made.
 - A record can be superseded in practice before the replacement exists. In that case set `Status` to `Accepted, superseded in practice` and explain in the implementation note what actually shipped (as ADR-0004 and ADR-0005 do). A formal replacement ADR can follow later.

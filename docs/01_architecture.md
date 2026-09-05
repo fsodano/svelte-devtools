@@ -11,7 +11,7 @@ Svelte DevTools is a Vite plugin that integrates with `@vitejs/devtools-kit` to 
 The architecture follows a **build-time $inspect injection + runtime postMessage emission** pattern:
 
 1. **Build Time**: Transform Svelte files to inject `$inspect` hooks and component metadata
-2. **Runtime**: Receive state changes via injected hooks, detect components via a MutationObserver, emit events via `postMessage`
+2. **Runtime**: Receive state changes via injected hooks, track registered component instances with a DOM-observer fallback, emit events via `postMessage`
 3. **UI**: Display data in a DevTools panel iframe via a postMessage window bridge backed by Svelte 5 runes stores
 
 ## Data Flow
@@ -67,7 +67,7 @@ A single plugin object (`name: 'svelte-devtools'`, `apply: 'serve'`, `enforce: '
 **Responsibilities:**
 - Run in the main app context (loaded as a script tag injected into the HTML)
 - Receive state changes via `handleState()` from injected `$inspect` hooks
-- Detect component mount/unmount via a `MutationObserver` on `data-svelte-devtools-id`
+- Track component mount/unmount through transformed registration and `onDestroy`; correlate DOM elements with a `MutationObserver` on `data-svelte-devtools-id`
 - Track component state, props (via `propKeys` metadata), and effects in memory
 - Intercept `window.fetch` to emit `client:request` traces
 - Emit events via `postMessage`
@@ -237,7 +237,7 @@ See [ADR-0002](./adr/ADR-0002-debounced-state-change-batching.md).
 2. **Runtime Overhead**:
    - `$inspect` callback: minimal, synchronous
    - Event emission: `postMessage` is fast
-   - Component detection: MutationObserver — zero background CPU when idle (no polling)
+   - Component detection: registration hooks and a MutationObserver fallback; no component polling
    - Memory: component state stored in Maps
 3. **UI**: Debounced state batching + Svelte 5 reactivity ensure minimal DOM updates
 
@@ -256,8 +256,8 @@ Implemented:
 3. ✅ Component graph visualization
 4. ✅ Router inspector (SvelteKit route scan)
 5. ✅ Element inspector (hover overlay + click-to-select)
-6. ✅ Network mock rules (client-side fetch/XHR interception groundwork)
+6. ✅ Browser `fetch` mock rules (native XMLHttpRequest is preserved)
 
 Future ideas:
-1. 🚧 Network interception engine (ADR-0007) fully integrated with the runtime
-3. 🚧 Build-mode DevTools for production debugging
+1. 🚧 Server trace display repair and database observability. See [current server boundaries](05_server.md#current-boundaries).
+2. 🚧 Server-side mocking. Browser fetch mocking is implemented; server requests pass through.

@@ -2,30 +2,33 @@
 
 The Vite plugin (`packages/vite-plugin`) is the build-time entry point for Svelte DevTools. It transforms Svelte components to inject metadata and state tracking, registers the DevTools dock with `@vitejs/devtools-kit`, and serves the runtime, client UI, and HTTP API during development.
 
-> **Implementation note**: `svelteDevTools()` returns a **single** Vite plugin object (`name: 'svelte-devtools'`, `apply: 'serve'`, `enforce: 'pre'`). The `src/plugins/` subdirectory (configure, transform, static-serve, devtools-setup, virtual-runtime, optimizer) is an **unwired, dead-code refactor** — do not document it as active. All live logic lives in `src/index.ts`, with support modules `sveltekit.ts`, `server-api.ts`, `server-events.ts`, and `migration-analyzer.ts`.
+> **Implementation note**: `svelteDevTools()` returns one Vite plugin (`apply: 'serve'`, `enforce: 'pre'`). The entry point is `src/index.ts`; supporting modules implement the HTTP API, command broker, editor integration, route scanner, and SvelteKit tracing.
 
 ## Installation
 
-### Development (Local)
-
-Since this package is not yet published to npm, install via workspace or link:
+The current release is **0.1.1** on GitHub. The 0.1.x packages are not published to npm. Build the source checkout before using the plugin or MCP server. A registry install does not install this release.
 
 ```bash
-# From the monorepo root
-npm install
+git clone --branch v0.1.1 https://github.com/fsodano/svelte-devtools.git
+cd svelte-devtools
+npm ci
+npm run build
 
-# Or link the package
-cd packages/vite-plugin
-npm link
-# Then in your project:
-npm link @fsodano/vite-plugin-svelte-devtools
+# Try the plain Svelte fixture:
+npm ci --prefix tests/apps/svelte
+npm run dev --prefix tests/apps/svelte -- --port 5173
 ```
 
-### Production (Published)
+For an existing project, keep the built checkout available and install its plugin directory as a local dependency:
 
 ```bash
-npm install -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools
+# Run in your application; replace the absolute path with your checkout.
+npm install --save-dev /absolute/path/to/svelte-devtools/packages/vite-plugin @vitejs/devtools@0.4.8
 ```
+
+The fixtures use this local-package arrangement. Do not install an individual unpublished workspace package from the registry. Rebuild the checkout after changes; restart the application server so it serves the new client and runtime artifacts.
+
+The declared minimums are Node.js 20.19+, Vite 8.0.3+, and Svelte 5.20+. The tested fixtures use Vite 8.2.2 and the pinned `@vitejs/devtools` 0.4.8 host. Svelte 5.20 compiler checks cover client and SSR transforms; they are not a complete minimum-version browser matrix.
 
 ## Usage
 

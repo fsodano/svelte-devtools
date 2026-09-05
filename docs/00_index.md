@@ -4,7 +4,7 @@ Full-stack debugging for Svelte 5 and SvelteKit applications, built on [Vite Dev
 
 ## Overview
 
-Svelte DevTools provides real-time component inspection, state tracking, timeline visualization, time-travel debugging, network tracing, and migration scoring for Svelte 5 applications. It integrates directly with the Vite dev server for a seamless cross-browser debugging experience — no browser extension required.
+Svelte DevTools provides real-time component inspection, state tracking, timeline visualization, time-travel debugging, network tracing, and migration scoring for Svelte 5 applications. It integrates directly with the Vite dev server for an integrated debugging experience (Chromium is the tested browser) — no browser extension required.
 
 ## Features
 
@@ -14,7 +14,7 @@ Svelte DevTools provides real-time component inspection, state tracking, timelin
 - **Time Travel**: Record state snapshots, undo/redo, restore across SvelteKit routes
 - **Timeline**: Chronological event history (mounts, updates, effects, network) with filters
 - **Component Graph**: Force-directed graph of the component hierarchy
-- **Network Tracing**: SSR request traces (with `routeId`), client-side fetch calls, and mock rules
+- **Network Tracing**: Browser fetch calls and mock rules in the panel; SSR traces with `routeId` through HTTP/MCP. See the [current server display limitation](05_server.md#client-display).
 - **Router Inspector**: SvelteKit route inventory from the resolved routes directory
 - **Migration Scoring**: Svelte 4 → 5 migration analysis per file
 - **Agent Access**: MCP inspection and acknowledged state edits plus authenticated HTTP endpoints. Runtime data requires an open Svelte panel.
@@ -58,23 +58,7 @@ flowchart TB
 
 ### 1. Install the Plugin
 
-**Development** (package not yet published):
-
-```bash
-# From this repo
-npm install
-npm run build
-
-# In your project
-npm link ../../svelte-dev-extension/packages/vite-plugin
-npm install @vitejs/devtools
-```
-
-**Production** (once published):
-
-```bash
-npm install -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools
-```
+Follow the [source installation steps](02_vite-plugin.md#installation) for GitHub release 0.1.1. Build the checkout, then use the fixture or install the built local plugin directory into your project. The 0.1.x packages are not published to npm.
 
 ### 2. Configure Vite
 
@@ -140,7 +124,7 @@ npm run dev
 | — | [Agent MCP](./07_mcp.md) | Setup, tools, and runtime data limits |
 | — | [Completion plan](./plans/pending/devtools-completion.md) | Current discrepancies and verification status |
 | — | [Inspiration](./inspiration.md) | Vue DevTools feature comparison |
-| — | [ADR](./adr/README.md) | Architecture Decision Records (8 accepted, 6 proposed) |
+| — | [ADR](./adr/README.md) | Architecture Decision Records and historical context |
 
 ## Package Structure
 
@@ -159,7 +143,7 @@ packages/
 
 The Vite plugin transforms each `.svelte` file during development:
 
-1. **Component Registration**: Injects registry entry with a stable `svt-*` ID
+1. **Component Registration**: Injects a registry entry with a unique mounted-instance ID derived from file metadata and `$props.id()`
 2. **Data Attributes**: Adds `data-svelte-devtools-id` and `data-svelte-component` to the root element
 3. **$inspect Injection**: Wraps `$state`, `$derived`, `$props` declarations with `$inspect` hooks
 4. **Effect Tracking**: Instruments `$effect` / `$effect.pre` callbacks
@@ -168,7 +152,7 @@ The Vite plugin transforms each `.svelte` file during development:
 
 **Runtime Package** (`window.__SVELTE_DEVTOOLS_RUNTIME__`):
 1. **Receives State**: `$inspect` callbacks call `runtime.handleState()`
-2. **Detects Components**: A `MutationObserver` watches `data-svelte-devtools-id` attributes
+2. **Detects Components**: Transformed registration tracks mounted instances; a `MutationObserver` correlates `data-svelte-devtools-id` attributes with DOM elements
 3. **Emits Events**: Uses `postMessage` for real-time updates
 4. **Exposes API**: `window.__SVELTE_DEVTOOLS_RUNTIME__` and `window.__SVELTE_DEVTOOLS__`
 

@@ -1,383 +1,105 @@
 ---
 name: verify-svelte-devtools
-description: Use when verifying the Svelte DevTools plugin works end-to-end after changes. Covers building, serving, Vite DevTools authorization, opening the panel via DocumentPictureInPicture, verifying with Playwright, and checking the HTTP API. Also use when debugging agent accessibility issues or auth flow problems.
+description: Use when validating Svelte DevTools changes, checking browser authorization, or diagnosing differences between runtime data and the panel.
 ---
 
-# Verifying Svelte DevTools End-to-End
+# Verify Svelte DevTools
 
-After making changes to the Svelte DevTools plugin, runtime, or client UI, follow this verification workflow to confirm everything works.
+This reference targets source release 0.1.1 and the tested `@vitejs/devtools` 0.4.8 host. Start with [source installation](../docs/02_vite-plugin.md#installation). The 0.1.x packages are not published to npm.
 
-## Quick Reference
+## Build and run the maintained tests
 
-```
-Build → Start test app → Authorize Vite DevTools → Open Svelte panel → Check HTTP API
-```
-
-## Step 1: Build
+Run from the repository root:
 
 ```bash
+npm ci
+npm ci --prefix tests/apps/svelte
+npm ci --prefix tests/apps/svelte-kit
 npm run build
+npm run check
+npx vitest run --maxWorkers=2
+npx playwright install chromium
+npm run test:e2e
 ```
 
-This builds all packages in order: types → runtime → vite-plugin → client.
+The browser suite starts its fixture servers on ports 5173 and 5174. Stop conflicting servers first. It covers component identity, source opening, live edits, time travel, mocks, settings, resize behavior, and cleanup. Use the assertions in `tests/e2e/` as the maintained examples.
 
-If only the client UI changed:
-```bash
-npm run build:client -w @fsodano/svelte-devtools-client
+Client changes require a rebuild. The application server serves `packages/client/dist/`; it does not compile panel source on demand. Restart an existing fixture server after rebuilding.
+
+For the full release validation gate, run `bash scripts/publish.sh --dry-run`. This builds, checks, runs unit and browser tests, and validates package contents. Do not use `--publish` unless publishing is explicitly authorized. `npm run release:check` checks existing build artifacts; it does not replace the full gate.
+
+## Authorize and open the panel
+
+The API bearer token and dock authorization code are separate credentials. Set `SVELTE_DEVTOOLS_TOKEN` before starting a manual fixture server to make the API token predictable. Keep it local.
+
+1. Open the application in Chromium.
+2. Read the latest six-digit `devframe auth code` from the server terminal. Remove ANSI escapes before extracting the digits from a captured log.
+3. Click the dock's **Unauthorized** button.
+4. Fill the six fields named **Digit 1 of 6** through **Digit 6 of 6**. The last digit submits authorization.
+5. Open the Svelte dock entry. Its button does not have a `title="Svelte"` attribute in host 0.4.8; use the dock tooltip to identify it.
+6. Find the panel frame by a URL containing `__svelte-devtools`.
+
+Use the maintained helper for automation:
+
+```js
+import { openDevToolsPanel } from './tests/e2e/panel-helpers.mjs';
+const panel = await openDevToolsPanel(page, 'http://localhost:5173/', readLatestCode);
 ```
 
-## Step 2: Start a Test App
+`readLatestCode` returns the current six-digit code from your server log. Do not wait for a newly printed code on every browser connection. See `scripts/verify-pokedex.mjs` for a log reader. Legacy Manual Auth Token and `auth-verify` examples are not the supported host workflow.
 
-### Plain Vite + Svelte (recommended for quick iteration)
+## Verify live data without changing state
 
-```bash
-cd tests/apps/svelte
-npx vite --port 5173
-```
+Use [MCP discovery](../docs/07_mcp.md) first when an MCP client is available. The server has eight inspection tools and one acknowledged state-edit tool. It reads the same HTTP API as scripts.
 
-### SvelteKit (needed for SSR/hooks testing)
-
-```bash
-cd tests/apps/svelte-kit
-npx vite dev --port 5174
-```
-
-## Step 3: Authorize Vite DevTools
-
-The Vite DevTools requires authorization on first use. This is a one-time setup per browser session.
-
-> **⚠️ Token caveat**: The Manual Auth Token printed in the terminal is **single-use** and is invalidated whenever a new WebSocket connection is established from the same origin. The HTTP `auth-verify` endpoint returns `403` with plain text `"Invalid or expired auth token"` on failure (not JSON). **Use the manual dialog method below — it is the only reliably working approach.**
-
-### Authorize with Playwright (manual dialog — reliable):
-
-```typescript
-// 1. Click the "Unauthorized" button inside the web component shadow DOM
-await page.evaluate(() => {
-  const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-  const btn = Array.from(dock?.querySelectorAll('button') || [])
-    .find(b => b.textContent?.includes('Unauthorized'));
-  btn?.click();
-});
-await page.waitForTimeout(300);
-
-// 2. Read the Manual Auth Token from the server terminal (requires tmux)
-const token = execSync('tmux capture-pane -t SESSION_NAME -p -S -10')
-  .toString().match(/Manual Auth Token : (\S+)/)?.[1];
-
-// 3. Type the token into the auth dialog input and click Authorize
-await page.locator('vite-devtools-dock-embedded').first()
-  .locator('input').first().fill(token);
-await page.waitForTimeout(200);
-await page.evaluate(() => {
-  const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-  const btn = Array.from(dock?.querySelectorAll('button') || [])
-    .find(b => b.textContent?.includes('Authorize'));
-  btn?.click();
-});
-await page.waitForTimeout(2000);
-
-// 4. Verify — dock buttons should NOT include "Unauthorized"
-const dockState = await page.evaluate(() => {
-  const d = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-  if (!d) return [];
-  return Array.from(d.querySelectorAll('button')).map(b => b.textContent?.trim());
-});
-console.log('Dock buttons:', dockState);
-// Expect: ["Rolldown", "Svelte", "Settings", ...] (no "Unauthorized")
-```
-
-After authorization, the dock shows buttons for available DevTools plugins (e.g., "Rolldown", "Svelte", "Settings", notification badge).
-
-## Step 4: Open the Svelte DevTools Panel
-
-The plugin registers its dock entry as `type: 'iframe'` with `url: '/__svelte-devtools/'` (`DOCK_CONFIG` in `@fsodano/svelte-devtools-types`). How Vite DevTools Kit renders that iframe — embedded in the dock or in a **DocumentPictureInPicture popup window** — depends on the Kit version and browser. In Chromium with popup support it typically opens as a popup; in headless mode it falls back to an embedded iframe.
-
-### Click the Svelte dock button:
-
-```javascript
-const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-const btn = dock?.querySelector('button[title="Svelte"]');
-btn?.click();
-```
-
-After clicking, the DevTools client loads (`/__svelte-devtools/`) and begins:
-- Polling `/__svelte-devtools/server-events?last=50` for server traces
-- POSTing state to `/__svelte-devtools/api/sync` every 2 seconds
-- Displaying the component tree, timeline, and snapshots
-
-### Verify it loaded:
+For direct HTTP access:
 
 ```bash
-# Check the client UI is serving
-curl -s http://localhost:5173/__svelte-devtools/ | grep -c "svelte"
-
-# Check components are being tracked (sync happens every 2s)
-curl -s -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  http://localhost:5173/__svelte-devtools/api/components | jq '.count'
-# Expect > 0 after the browser has been open for a few seconds
-```
-
-## Step 5: Verify via HTTP API
-
-Every endpoint at `/__svelte-devtools/api/` requires the per-run token. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server, or copy the token printed in the terminal. Send it as an `Authorization: Bearer <token>` header, or as a `?token=<token>` query parameter for beacon-only requests that cannot set headers. CORS is allow-listed to `http://localhost:*`, `http://127.0.0.1:*`, and configured origins; requests without an `Origin` header get no CORS header.
-
-### Status check
-
-```bash
-curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+curl -fsS -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   http://localhost:5173/__svelte-devtools/api/
 ```
 
-Returns the plugin name, version, and available endpoints.
-
-### Components
+Read the status response and select the intended browser session. Open the Svelte panel so it can sync. Pass that exact `sessionId` on runtime queries. Start with component metadata to avoid retrieving large state values:
 
 ```bash
-curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  http://localhost:5173/__svelte-devtools/api/components | jq '.count, .components[].name'
+# Set SESSION_ID to the selected session from status.
+curl -fsS -G -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  --data-urlencode "sessionId=$SESSION_ID" \
+  --data-urlencode 'includeState=false' --data-urlencode 'limit=20' \
+  http://localhost:5173/__svelte-devtools/api/components
 ```
 
-Expect:
-- `count > 0` after client sync
-- Each component has `id` (svt-*), `name`, `state`, `props`, `filename`
-- Child components have `parentId` linking to their parent
+Select a mounted instance ID from this response, then request that ID with state included. Do not use a build-time file ID as a mounted instance ID. Inspect `cachedAt`; an empty or stale panel cache does not prove that the application has no components. `cachedAt: 0` means no panel sync has arrived. Refresh the page and verify the panel connection before drawing conclusions.
 
-### Timeline
+Check timeline, snapshots, and server events for the same session where supported. Component, timeline, and snapshot endpoints support pagination. The [API reference](../docs/06_api.md) defines exact query fields and scope. Server traces describe HTTP activity; SQL query spans are not implemented.
 
-```bash
-curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  http://localhost:5173/__svelte-devtools/api/timeline | jq '.count'
-```
+## Verify an authorized live edit
 
-Expect entries with types: `component:mount`, `state:change`, `effect:run`, `trace:trigger`, `server:request`.
+`POST /api/set-state` is implemented. Its body requires `{sessionId, componentId, key, value}`. It waits for a result from the selected browser session. The MCP tool `svelte_set_state` exposes this operation. Use it only when changing application state is authorized.
 
-### Server Events
+Select a writable key from fresh inspection data. JSON-compatible `$state` values can be edited. Props, derived values, and display markers for unsupported values are read-only. A successful edit is acknowledged by the runtime; then verify the app's visible value, the timeline, and a fresh component query.
 
-```bash
-curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  http://localhost:5173/__svelte-devtools/api/server-events | jq '.events | length'
-```
+A timeout can mean the outcome is unknown. Inspect the live value before deciding what happened. Do not automatically retry an edit with an unknown outcome. The API does not expose remote snapshot restore.
 
-Server request traces captured by the Vite plugin. Each event includes URL, method, status code, request/response bodies, and timing info.
+## Verify time travel in the browser
 
-### Snapshots (time-travel)
+Open Time Travel and click **Record** before interacting. The panel starts paused.
 
-```bash
-curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  http://localhost:5173/__svelte-devtools/api/snapshots
-```
+For the SvelteKit Spring counter regression:
 
-Returns the branch/snapshot tree with parentId, branchId, and timestamps.
+1. Start recording, increment once, and wait for the Spring to settle.
+2. Confirm two snapshots and counter value 1.
+3. Undo. Confirm snapshot position 1/2 and counter value 0.
+4. Redo. Confirm position 2/2 and counter value 1.
+5. Confirm no third snapshot appears after settlement.
+6. Edit state while recording and verify undo/redo also restores the edited value.
 
-### Migration Score
+The maintained browser suite checks these behaviors. `scripts/verify-time-travel.mjs` is an additional standalone check that requires the built SvelteKit fixture already running on port 5174 in a tmux session named `svelte-kit`.
 
-```bash
-curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  http://localhost:5173/__svelte-devtools/api/migration
-```
+## Check the UI as well as the API
 
-Svelte 4→5 migration progress per file (percentage and pattern breakdown). `overall` is `null` until components are scored.
+Verify repeated components stay separate, source links launch the editor, detail panes resize with pointer and keyboard, and long values remain scrollable. Test settings after a reload.
 
-### Routes (SvelteKit)
+For Network, create a mock from an observed browser request, enable it, and repeat that request. Verify the application's received response as well as the panel label. Mocks affect browser `fetch` only; native XMLHttpRequest, server fetches, and DevTools infrastructure pass through. The panel retains at most 500 combined network rows. A bounded preview may be incomplete; review a generated mock body before using it.
 
-```bash
-curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  http://localhost:5173/__svelte-devtools/api/routes
-```
-
-SvelteKit route map scanned from `src/routes` (route groups, params, page/layout/api files).
-
-### State Editing (set-state)
-
-`POST /api/set-state` is **not implemented** and returns `501`. It does not edit state. Do not use it to change app state.
-
-```bash
-curl -X POST http://localhost:5173/__svelte-devtools/api/set-state \
-  -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"componentId": "svt-xxx", "key": "count", "value": 42}'
-# Expect: HTTP 501 with a JSON error
-```
-
-### Source File Lookup
-
-```bash
-curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
-```
-
-Returns the source code of the specified file.
-
-## Playwright: Interacting with the DevTools Panel
-
-The DevTools panel loads as an **iframe** at `/__svelte-devtools/` (dock type `'iframe'`). In supported Chromium versions the Vite DevTools Kit may render it inside a `DocumentPictureInPicture` popup instead; when that happens, access the panel via `page.frames().find(f => f.url().includes('svelte-devtools'))`. The same-origin iframe (served from the same dev server) is accessible directly via `contentDocument` — no cross-origin issues.
-
-### Accessing the DevTools iframe
-
-```javascript
-const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-const iframe = dock?.querySelector('iframe');
-const doc = iframe.contentDocument || iframe.contentWindow?.document;
-```
-
-If the panel opened as a popup instead, use Playwright's frame locator:
-
-```javascript
-const popupFrame = page.frames().find(f => f.url().includes('svelte-devtools'));
-await popupFrame.locator('button', { hasText: 'Time Travel' }).click();
-```
-
-### Full Playwright Verification Script
-
-```typescript
-import { chromium } from 'playwright';
-
-async function verifyDevTools() {
-  const browser = await chromium.launch({ headless: false });
-  const page = await browser.newPage();
-  await page.goto('http://localhost:5173/');
-
-  // Wait for Vite DevTools dock
-  await page.waitForSelector('vite-devtools-dock-embedded', { state: 'attached', timeout: 10000 });
-
-  // Authorize if needed (token from terminal output, see Step 3)
-  // Then open Svelte panel by clicking the dock button
-  await page.evaluate(() => {
-    const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-    dock?.querySelector('button[title="Svelte"]')?.click();
-  });
-  await page.waitForTimeout(3000);
-
-  // Helper: evaluate JS inside the DevTools iframe
-  async function devtoolsEval<T>(fn: (doc: Document) => T): Promise<T | null> {
-    return page.evaluate((fnStr) => {
-      const dock = document.querySelector('vite-devtools-dock-embedded')?.shadowRoot;
-      const iframe = dock?.querySelector('iframe');
-      if (!iframe) return null;
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!doc) return null;
-      return (new Function('doc', fnStr))(doc);
-    }, fn.toString());
-  }
-
-  // Navigate to a tab in the sidebar
-  async function clickTab(tabName: string) {
-    await devtoolsEval((doc: Document) => {
-      const buttons = doc.querySelectorAll('button');
-      for (const btn of buttons) {
-        if (btn.textContent?.trim() === tabName) { btn.click(); break; }
-      }
-    });
-    await page.waitForTimeout(1000);
-  }
-
-  // Click a button on the main page
-  async function clickMainButton(text: string) {
-    await page.evaluate((btnText) => {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if (btn.textContent?.trim() === btnText) { btn.click(); return; }
-      }
-    }, text);
-    await page.waitForTimeout(1000);
-  }
-
-  // Verify via HTTP API (requires the per-run token)
-  const res = await page.request.get('http://localhost:5173/__svelte-devtools/api/components', {
-    headers: { Authorization: 'Bearer ' + process.env.SVELTE_DEVTOOLS_TOKEN }
-  });
-  const data = await res.json();
-  console.log(`Components: ${data.count}`);
-
-  await browser.close();
-}
-```
-
-### Testing Time Travel Snapshots
-
-The Time Travel tab (`TimeTravelConsole.svelte`) shows snapshots with undo/redo controls. Use the iframe access pattern to interact with them.
-
-**Prerequisite — enable recording first:** The panel starts in "Paused" state. No snapshots are captured until you click the Record button (`.record-btn`). Without this, the panel shows "No snapshots — Click Record and interact with your app".
-
-```typescript
-// MUST DO FIRST: Click Record to enable snapshot capture
-// Toggles the panel from "Paused" → "Recording"
-await devtoolsEval((doc: Document) => {
-  const btn = doc.querySelector('.record-btn');
-  if (btn && !btn.classList.contains('recording')) btn.click();
-});
-await page.waitForTimeout(500);
-
-// Read snapshot counter (e.g. "3 / 3")
-const snapInfo = await devtoolsEval((doc: Document) => {
-  const text = doc.body?.textContent || '';
-  const match = text.match(/(\d+)\s*\/\s*(\d+)/);
-  return match ? { current: +match[1], total: +match[2] } : null;
-});
-
-// Click Undo (first .tb-btn in TimeTravelConsole)
-await devtoolsEval((doc: Document) => {
-  const tbs = doc.querySelectorAll('.tb-btn');
-  if (tbs.length > 0 && !(tbs[0] as HTMLButtonElement).disabled) tbs[0].click();
-});
-
-// Click Redo (second .tb-btn)
-await devtoolsEval((doc: Document) => {
-  const tbs = doc.querySelectorAll('.tb-btn');
-  if (tbs.length > 1 && !(tbs[1] as HTMLButtonElement).disabled) tbs[1].click();
-});
-
-// Click a specific snapshot row (uses restore(idx, true) — truncates future)
-await devtoolsEval((doc: Document) => {
-  const rows = doc.querySelectorAll('[class*="row"]');
-  if (rows.length > index) rows[index].querySelector('button')?.click();
-});
-```
-
-**Verify no phantom snapshots:** After undo/redo operations, `snapInfo.total` must remain constant.
-
-### Using `browser_run_code_unsafe` (Playwright MCP)
-
-When using the Playwright MCP server, `browser_run_code_unsafe` gives you direct access to the `page` object for complex multi-step scripts:
-
-```javascript
-await browser_run_code_unsafe({
-  code: `async (page) => {
-    await page.goto('http://localhost:5173/');
-    await page.waitForTimeout(2000);
-    // ...full script with iframe access, button clicks, etc.
-    return result;
-  }`
-});
-```
-
-### CI / headless mode
-
-The DevTools iframe is accessible in headless mode since it's same-origin. All verification (components, timeline, snapshots) works without a visible browser window. The HTTP API works headlessly too, with the per-run token passed as an `Authorization: Bearer` header or `?token=` query parameter.
-
-## Common Issues
-
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| Auth dialog shows "Check your terminal" | Token not yet entered | Navigate to `.devtools/auth?id=<TOKEN>` using token from terminal |
-| "Unauthorized access to method" | Old WebSocket client still connected | Refresh the page to get a fresh connection |
-| `cachedAt: 0` in API response | No client has synced yet | Open the browser page and wait 2-3 seconds |
-| Component count is 0 | DevTools panel hasn't been opened yet | Click "Svelte" dock button to trigger client init |
-| Panel opens but is blank | Client bundle not built | Run `npm run build:client` |
-| Dock shows "Unauthorized" after auth | Auth token expired or wrong | Re-authorize with fresh token from terminal |
-| `isRecording is not defined` in console | Missing store prefix in Timeline.svelte | Check `devtoolsStore.isRecording` is used everywhere (not bare `isRecording`) |
-| Server filter tab shows no entries | Event type mismatch between plugin and Timeline filter | The plugin emits `server:trace`/`server:error`, Timeline filter should use `e.type.startsWith('server:')` |
-| Time Travel shows "No snapshots — Click Record and interact with your app" | Panel starts in "Paused" state; snapshot capture is not automatic | Click the Record button (`.record-btn` inside the DevTools iframe) to toggle "Paused" → "Recording" before interacting with the app |
-
-## Verification Checklist
-
-After any change to the devtools codebase, verify everything still works:
-
-- [ ] Build passes (no TypeScript errors)
-- [ ] Dev server starts without errors
-- [ ] Vite DevTools dock appears and can be authorized
-- [ ] Svelte panel opens (iframe dock; popup in supported Chromium)
-- [ ] Components appear in tree with state
-- [ ] Timeline populates with events
-- [ ] HTTP API returns data for all endpoints
-- [ ] Server events are captured (for SvelteKit or Vite proxy)
+Report the commands run, the app tested, and any uncovered boundaries. A successful HTTP query alone does not verify rendering or editor launch.

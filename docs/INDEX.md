@@ -8,12 +8,14 @@ Svelte DevTools 0.1.1 is an early-development npm-workspaces monorepo with 5 pac
 ### Prerequisites
 - Node.js 20.19+
 - npm workspaces
-- Vite 8 (Rolldown-based)
+- Vite 8.0.3+ (fixtures test 8.2.2 with the 0.4.8 DevTools host)
 
 ### Setup
 ```bash
-git clone <repo-url>
-npm install
+git clone --branch v0.1.1 https://github.com/fsodano/svelte-devtools.git
+cd svelte-devtools
+npm ci
+npm run build
 ```
 
 ### Build Order

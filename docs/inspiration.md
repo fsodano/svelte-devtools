@@ -1,5 +1,7 @@
 # Vue DevTools Feature Analysis — Adaptation for Svelte DevTools
 
+> This comparison contains design context as well as implemented features. For source release 0.1.1, use the [client guide](04_client.md), [server limitations](05_server.md#client-display), and [MCP contract](07_mcp.md). SQL query tracing is not implemented.
+
 > Analysis date: 2026-07-23
 > Source: https://github.com/vuejs/devtools
 > Status update: 2026-08-04 — adaptation status refreshed against the current `packages/client` source.
@@ -99,7 +101,7 @@ Vue DevTools is structured across these packages:
 - Time-travel debugging per store
 - Integrated with Vue DevTools' custom inspector API
 
-**Svelte adaptation**: ✅ Time Travel tab exists (`TimeTravelConsole.svelte`) with snapshot capture/restore, undo/redo, and a diff view. Dedicated store inspector not implemented (Svelte stores are tracked as component state).
+**Svelte adaptation**: ✅ Time Travel tab exists (`TimeTravelConsole.svelte`) with snapshot capture/restore, undo/redo, and a diff view. A dedicated store inspector is not implemented. Component rune inspection does not imply full coverage of stores or standalone `.svelte.ts` modules.
 
 ## 3. UI Component Library (`packages/ui/src/components/`)
 

@@ -1,13 +1,13 @@
 # Runtime
 
-The runtime package (`packages/runtime`) receives state changes from injected `$inspect` hooks, detects components via a `MutationObserver`, and emits events for the DevTools panel via `postMessage`.
+The runtime package (`packages/runtime`) receives state changes from injected `$inspect` hooks, tracks transformed component registrations with a `MutationObserver` fallback, and emits events for the DevTools panel via `postMessage`.
 
 ## Loading
 
 The runtime loads in two phases (see `src/init.ts`):
 
 1. **Phase 1 — passive buffer**: The Vite plugin injects a tiny inline `<script id="__svelte-devtools-init">` (from `getInitScript()`) into the HTML `<head>`. It creates a placeholder `window.__SVELTE_DEVTOOLS_RUNTIME__` whose methods buffer calls into a `_queue` until the real runtime activates — so injected `$inspect` hooks never crash, even if components mount before the runtime loads.
-2. **Phase 3 — full runtime**: The real runtime module is loaded as `<script type="module" src="/__svelte-devtools/svelte-runtime.js">` (plain Vite, via `transformIndexHtml`) or injected through `svelteDevToolsHandle()` (SvelteKit, via `transformPageChunk`). It binds its implementations onto the global, drains the buffered queue FIFO, and calls `init()`.
+2. **Phase 2 — full runtime**: The real runtime module is loaded as `<script type="module" src="/__svelte-devtools/svelte-runtime.js">` (plain Vite, via `transformIndexHtml`) or injected through `svelteDevToolsHandle()` (SvelteKit, via `transformPageChunk`). It binds its implementations onto the global, drains the buffered queue FIFO, and calls `init()`.
 
 For SvelteKit SSR apps, use the exported helper in `hooks.server.ts`:
 
@@ -48,7 +48,7 @@ interface SvelteDevToolsRuntime {
   // Register a per-key setter so the panel can restore values into live runes
   _registerState(componentId: string, key: string, setter: (v: unknown) => void): void;
 
-  // Apply a state value (used by time-travel restore; the HTTP /api/set-state returns 501)
+  // Apply a state value (used by time-travel restore and acknowledged live edits)
   setComponentState(componentId: string, key: string, value: unknown): void;
 
   // Force a DOM re-scan for missed components
@@ -96,7 +96,7 @@ interface SvelteDevToolsAPI {
   getComponentTree(): ComponentInstance[];          // nested by parentId
   getAllComponents(): ComponentInstance[];          // flat
   getComponentById(id: string): ComponentInstance | undefined;
-  getTimeline(): TimelineEntry[];                   // ⚠️ stub — returns []
+  getTimeline(): TimelineEntry[];                   // newest 1000 runtime events, copied
   setComponentState(id, key, value): void;
   startInspectBatch(): void;
   endInspectBatch(): void;
@@ -104,21 +104,23 @@ interface SvelteDevToolsAPI {
   refresh(): void;
   enableInspector(): void;                          // hover-highlight mode
   disableInspector(): void;
-  subscribe(cb): () => void;                        // no-op
-  trace(name, deps): void;                          // no-op
+  subscribe(cb): () => void;                        // event subscription and cleanup
+  trace(name, deps): void;                          // manual trace event
 }
 ```
 
-> `getTimeline()` is currently a stub returning `[]` — the timeline lives client-side.
+> These browser APIs describe the mounted runtime. Agent queries use the authenticated HTTP API or MCP and read the most recent panel sync; see [MCP access](07_mcp.md).
 
-## Component Detection (MutationObserver)
+## Component registration and DOM correlation
 
-The runtime does **not** poll for components. It uses a `MutationObserver` on `document.body` watching:
+The transform assigns each mounted instance a file ID plus a `$props.id()` suffix. It registers the instance, records its parent through Svelte context, and unregisters it with `onDestroy`. This keeps repeated components separate and supports components without their own DOM element.
+
+The runtime does **not** poll for components. A `MutationObserver` provides DOM correlation and fallback detection on `document.body`, watching:
 
 - `childList` mutations — newly added/removed nodes carrying `data-svelte-devtools-id`
 - `attributes` mutations on `data-svelte-devtools-id` — Svelte 5 often sets the attribute *after* the element is in the DOM
 
-On startup, an initial scan of `document.querySelectorAll('[data-svelte-devtools-id]')` catches components mounted before the runtime initialized. Parent/child relationships are resolved by walking DOM ancestors for the nearest `data-svelte-devtools-id`. See [ADR-0001](./adr/ADR-0001-event-driven-component-detection.md).
+On startup, an initial scan of `document.querySelectorAll('[data-svelte-devtools-id]')` catches components mounted before the runtime initialized. Svelte context supplies the primary parent relationship. DOM ancestry supplies a fallback for the nearest `data-svelte-devtools-id`. See [ADR-0001](./adr/ADR-0001-event-driven-component-detection.md).
 
 ## Event System (postMessage Protocol)
 
@@ -146,7 +148,7 @@ window.postMessage({
 |------|--------|-------------|
 | `runtime-ready` | `init()` | Runtime initialized |
 | `component-register` | `registerComponent()` | Component registered (payload: `{id, name, filename, parentId}`) |
-| `component:unmount` | MutationObserver | Component removed from DOM |
+| `component:unmount` | `unregisterComponent()` / DOM fallback | Mounted instance removed |
 | `state` | `handleState()` | State variable changed (payload has `inspectType: 'state'\|'derived'\|'props'`) |
 | `effect` | `handleEffect()` | Effect ran (payload: `{runeName, filename, runCount, observedState}`) |
 | `trace:trigger` | `reportError()` | Error reported (`key: 'error'`, `{message, stack}`) |
@@ -201,7 +203,7 @@ The runtime renders a fixed-position orange overlay + name tooltip around hovere
 |---------|----------------|
 | Event Mechanism | `postMessage` (`{source: 'svelte-devtools', ...}`) |
 | State Detection | `$inspect` injection (build time) |
-| Component Detection | `MutationObserver` + initial DOM scan (no polling) |
+| Component Detection | Transformed registration and `onDestroy`; DOM observer fallback (no polling) |
 | Batching | Client-side (debounced flush, latest-per-key) |
 | State Write-back | `_registerState` setters + `setComponentState` |
 
