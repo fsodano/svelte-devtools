@@ -1,6 +1,7 @@
 import './theme.css';
 import { mount } from 'svelte';
 import App from './App.svelte';
+import { applyPreferences, readPreferences } from './lib/preferences';
 import { devtoolsStore } from './lib/stores/devtools-store.svelte';
 
 const isDebug = typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>).__SVELTE_DEVTOOLS_DEBUG__;
@@ -8,6 +9,7 @@ const isDebug = typeof window !== 'undefined' && !!(window as unknown as Record<
 if (isDebug) console.log('[Svelte DevTools] Starting...');
 
 function init() {
+  applyPreferences(readPreferences());
   const target = document.getElementById('app');
   if (!target) {
     console.error('[Svelte DevTools] #app element not found!');

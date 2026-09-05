@@ -48,7 +48,7 @@ interface SvelteDevToolsRuntime {
   // Register a per-key setter so the panel can restore values into live runes
   _registerState(componentId: string, key: string, setter: (v: unknown) => void): void;
 
-  // Apply a state value (used by time-travel restore and /api/set-state)
+  // Apply a state value (used by time-travel restore; the HTTP /api/set-state returns 501)
   setComponentState(componentId: string, key: string, value: unknown): void;
 
   // Force a DOM re-scan for missed components

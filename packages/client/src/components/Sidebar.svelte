@@ -56,7 +56,7 @@
 </script>
 
 <nav class="sidebar">
-  {#each tabs as tab}
+  {#each tabs as tab (tab.id)}
     <button
       class="tab"
       class:active={activeTab === tab.id}
@@ -102,7 +102,7 @@
     margin: 0 auto;
     border: none;
     background: transparent;
-    color: var(--text-muted);
+    color: #a9a9b4;
     cursor: pointer;
     transition: all var(--transition-fast);
     font-size: 10px;
@@ -111,7 +111,7 @@
     position: relative;
   }
   .tab svg { display: block; }
-  .tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .tab:hover { color: #ffffff; background: var(--bg-hover); }
   .tab.active { color: var(--svelte-brand); background: var(--svelte-brand-15); }
   .tab.active::before {
     content: '';

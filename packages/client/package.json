@@ -1,19 +1,20 @@
 {
   "name": "@fsodano/svelte-devtools-client",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
   "private": false,
   "description": "Svelte DevTools client UI (iframe)",
   "scripts": {
     "build": "vite build",
-    "dev": "vite build --watch"
+    "dev": "vite build --watch",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "vis-network": "^9.1.9"
   },
   "devDependencies": {
     "@phosphor-icons/core": "^2.1.1",
-    "@fsodano/svelte-devtools-types": "file:../types",
+    "@fsodano/svelte-devtools-types": "^0.1.0",
     "@sveltejs/vite-plugin-svelte": "^7.0.0"
   },
   "publishConfig": {

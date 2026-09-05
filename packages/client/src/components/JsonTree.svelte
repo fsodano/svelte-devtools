@@ -9,7 +9,7 @@
   // `currentSeen` parameter — no $effect needed to pre-populate the set.
   let visited = $derived(seen ?? new Set<unknown>());
 
-  function getValueType(val: unknown): "null" | "undefined" | "string" | "number" | "boolean" | "array" | "object" {
+  function getValueType(val: unknown): "null" | "undefined" | "string" | "number" | "boolean" | "array" | "object" | "unknown" {
     if (val === null) return "null";
     if (val === undefined) return "undefined";
     if (typeof val === "string") return "string";
@@ -38,7 +38,7 @@
   }
 </script>
 
-{#snippet valueNode(val: unknown, key?: string, currentSeen: Set<unknown>)}
+{#snippet valueNode(val: unknown, currentSeen: Set<unknown>, key?: string)}
   {@const type = getValueType(val)}
   {@const itemCount = getItemCount(val)}
   {@const entries = getEntries(val)}
@@ -133,7 +133,7 @@
       {:else if type === "undefined"}
         <span class="undefined">undefined</span>
       {:else}
-        <span class="unknown">{String(val)}</span>
+        <span class="unknown">{typeof val === "function" ? "[Function]" : String(val)}</span>
       {/if}
     </span>
   {/if}
@@ -142,10 +142,10 @@
 <div class="json-tree">
   {#if name !== undefined}
     <span class="named-node">
-      {@render valueNode(value, name, visited)}
+      {@render valueNode(value, visited, name)}
     </span>
   {:else}
-    {@render valueNode(value, undefined, visited)}
+    {@render valueNode(value, visited)}
   {/if}
 </div>
 

@@ -1,16 +1,45 @@
 import type {BridgeHandler, ComponentInstance, ComponentMountPayload, SvelteDevToolsAPI} from '@fsodano/svelte-devtools-types';
-import {mapRuntimeEventTypeToBridge, RUNE_TYPES} from '@fsodano/svelte-devtools-types';
+import {mapRuntimeEventTypeToBridge, RUNE_TYPES, toDisplayValue} from '@fsodano/svelte-devtools-types';
 
 const isDebug = typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>).__SVELTE_DEVTOOLS_DEBUG__;
+
+// Security: only trust messages from the same-origin app page (the parent
+// window). The runtime posts from there; any other sender is hostile.
+const ALLOWED_LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+function isAllowedMessageOrigin(origin: string): boolean {
+    try {
+        const url = new URL(origin);
+        return (url.protocol === 'http:' || url.protocol === 'https:')
+            && ALLOWED_LOCAL_HOSTNAMES.has(url.hostname);
+    } catch {
+        return false;
+    }
+}
+
+function isValidBridgeMessage(event: MessageEvent, targetWindow: Window): boolean {
+    return event.source === targetWindow && isAllowedMessageOrigin(event.origin);
+}
 
 export function createWindowBridge() {
     const listeners = new Map<string, Set<BridgeHandler>>();
     const mountedComponents = new Set<string>();
+    const cleanups: Array<() => void> = [];
+    let disposed = false;
+    function dispose(): void {
+        if (disposed) return;
+        disposed = true;
+        for (const cleanup of cleanups.splice(0)) cleanup();
+        listeners.clear();
+        mountedComponents.clear();
+    }
 
     if (typeof window !== 'undefined') {
         const targetWindow = window.parent !== window ? window.parent : window;
 
-        targetWindow.addEventListener('message', (event) => {
+        const handleMessage = (event: MessageEvent) => {
+            if (!isValidBridgeMessage(event, targetWindow)) return;
+
             const data = event.data;
             if (!data || data.source !== 'svelte-devtools') return;
 
@@ -32,7 +61,12 @@ export function createWindowBridge() {
             } else {
                 if (isDebug) console.log('[Bridge:postMessage] No callbacks registered for type:', bridgeType);
             }
-        });
+        };
+        targetWindow.addEventListener('message', handleMessage);
+        cleanups.push(() => targetWindow.removeEventListener('message', handleMessage));
+        const handlePageHide = (event: PageTransitionEvent) => { if (!event.persisted) dispose(); };
+        window.addEventListener('pagehide', handlePageHide);
+        cleanups.push(() => window.removeEventListener('pagehide', handlePageHide));
 
         if (window.parent && window.parent !== window) {
             const parentWindow = window.parent as unknown as { __SVELTE_DEVTOOLS__?: SvelteDevToolsAPI };
@@ -50,8 +84,8 @@ export function createWindowBridge() {
 const payload: ComponentMountPayload = {
     id: comp.id,
     name: comp.name,
-    props: comp.props || {},
-    state: Object.fromEntries(comp.state || []),
+    props: toDisplayValue(comp.props || {}) as Record<string, unknown>,
+    state: toDisplayValue(Object.fromEntries(comp.state || [])) as Record<string, unknown>,
     children: (comp.children || []) as string[],
     parentId: comp.parentId,
     filename: comp.filename
@@ -70,33 +104,45 @@ const payload: ComponentMountPayload = {
                 }
             }, 100);
 
-            setTimeout(() => clearInterval(connectInterval), 5000);
+            const connectTimeout = setTimeout(() => clearInterval(connectInterval), 5000);
 
             if (connected) {
                 syncComponents();
             }
 
-            setInterval(syncComponents, 500);
+            const syncInterval = setInterval(syncComponents, 500);
+            cleanups.push(() => {
+                clearInterval(connectInterval);
+                clearTimeout(connectTimeout);
+                clearInterval(syncInterval);
+            });
 
             // Listen for unmount events to clean up tracking
-            targetWindow.addEventListener('message', (event) => {
+            const handleUnmount = (event: MessageEvent) => {
+                if (!isValidBridgeMessage(event, targetWindow)) return;
+
                 const data = event.data;
-                if (data?.source === 'svelte-devtools' && data?.type === 'component-unmount') {
+                if (data?.source === 'svelte-devtools' && (data?.type === 'component-unmount' || data?.type === 'component:unmount')) {
                     const payload = data.payload as { componentId?: string; id?: string };
                     const id = payload?.componentId || payload?.id;
                     if (id) mountedComponents.delete(id);
                 }
-            });
+            };
+            targetWindow.addEventListener('message', handleUnmount);
+            cleanups.push(() => targetWindow.removeEventListener('message', handleUnmount));
         }
     }
 
     return {
+        dispose,
         on(type: string, fn: BridgeHandler) {
+            if (disposed) return () => {};
             if (!listeners.has(type)) listeners.set(type, new Set());
             listeners.get(type)!.add(fn);
             return () => listeners.get(type)!.delete(fn);
         },
         refresh() {
+            if (disposed) return;
             const parentWindow = window.parent as unknown as { __SVELTE_DEVTOOLS__?: SvelteDevToolsAPI };
             if (parentWindow.__SVELTE_DEVTOOLS__?.refresh) {
                 parentWindow.__SVELTE_DEVTOOLS__.refresh();
@@ -110,8 +156,8 @@ const payload: ComponentMountPayload = {
                         const payload: ComponentMountPayload = {
                             id: comp.id,
                             name: comp.name,
-                            props: comp.props || {},
-                            state: Object.fromEntries(comp.state || []),
+                            props: toDisplayValue(comp.props || {}) as Record<string, unknown>,
+                            state: toDisplayValue(Object.fromEntries(comp.state || [])) as Record<string, unknown>,
                             children: (comp.children || []) as string[],
                             parentId: comp.parentId,
                             filename: comp.filename
@@ -128,6 +174,10 @@ function mapPostMessagePayload(payload: unknown, eventType: string): unknown {
     const _payload = payload as Record<string, unknown>;
 
     switch (eventType) {
+        case 'component:unmount':
+        case 'component-unmount':
+            return { id: _payload.componentId || _payload.id, name: _payload.componentName || _payload.name };
+
         case RUNE_TYPES.STATE:
         case RUNE_TYPES.DERIVED:
         case RUNE_TYPES.INSPECT:

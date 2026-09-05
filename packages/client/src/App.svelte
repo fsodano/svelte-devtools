@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SplitPane from "./components/SplitPane.svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import Dashboard from "./components/Dashboard.svelte";
   import ComponentTree from "./components/ComponentTree.svelte";
@@ -64,12 +65,15 @@
       {#if activeTab === "info"}
         <Dashboard navigate={(tab: string) => activeTab = tab} />
       {:else if activeTab === "components"}
-        <div class="split-view">
+        <SplitPane label="Resize component tree and details" initial={36}>
+          {#snippet first()}
           <ComponentTree
             {components}
             onSelect={(id) => (selectedComponent = id)}
             selectedId={selectedComponent}
           />
+          {/snippet}
+          {#snippet second()}
           {#if selectedComponent}
             <ComponentDetail componentId={selectedComponent} />
           {:else}
@@ -84,7 +88,8 @@
               {/if}
             </div>
           {/if}
-        </div>
+          {/snippet}
+        </SplitPane>
       {:else if activeTab === "timeline"}
         <Timeline />
       {:else if activeTab === "timetravel"}
@@ -107,10 +112,10 @@
 </div>
 
 <style>
-  .panel { display: flex; flex-direction: column; height: 100vh; background: var(--bg-base); color: var(--text-primary); font-family: var(--font-ui); }
-  .status-bar { display: flex; align-items: center; padding: 0 var(--space-3); height: 36px; background: var(--bg-sidebar); flex-shrink: 0; gap: var(--space-3); }
+  .panel { display: flex; flex-direction: column; height: calc(100vh / var(--devtools-ui-scale, 1)); background: var(--bg-base); color: var(--text-primary); font-family: var(--font-ui); }
+  .status-bar { display: flex; align-items: center; padding: 0 var(--space-3); height: 42px; background: var(--bg-sidebar); flex-shrink: 0; gap: var(--space-3); }
   .status-left { display: flex; align-items: center; gap: var(--space-2); }
-  .brand { display: inline-flex; align-items: center; gap: var(--space-1); font-weight: 600; font-size: 12px; color: var(--text-inverse); }
+  .brand { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 600; font-size: 12px; color: var(--text-inverse); }
   .brand-icon { flex-shrink: 0; }
   .status-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
   .inspect-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: rgba(255,255,255,0.5); cursor: pointer; }
@@ -121,9 +126,7 @@
   .status-pill.disconnected { background: rgba(255,69,58,0.15); color: #ff453a; }
   .status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
   .main { display: flex; flex: 1; overflow: hidden; }
-  .content { flex: 1; min-height: 0; overflow: hidden; background: var(--bg-base); }
-  .split-view { display: grid; grid-template-columns: 1fr 1fr; height: 100%; min-height: 0; gap: 1px; background: var(--border-default); }
-  .split-view > :global(*) { background: var(--bg-surface); min-height: 0; overflow: hidden; }
-  .empty { display: flex; align-items: center; justify-content: center; background: var(--bg-surface); color: var(--text-muted); font-size: 13px; }
+  .content { flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg-base); }
+  .empty { height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-surface); color: var(--text-muted); font-size: 13px; }
   .refresh-btn { margin-left: var(--space-2); padding: var(--space-1) var(--space-2); font-size: 11px; }
 </style>

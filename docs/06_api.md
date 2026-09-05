@@ -73,9 +73,11 @@ interface SvelteDevToolsAPI {
   getComponentTree(): ComponentInstance[];            // nested by parentId
   getAllComponents(): ComponentInstance[];            // flat
   getComponentById(id: string): ComponentInstance | undefined;
-  getTimeline(): TimelineEntry[];                     // ⚠️ stub — returns []
-  subscribe(callback): () => void;                    // no-op
-  trace(name, dependencies): void;                    // no-op
+  getWritableStateKeys?(id: string): string[];         // safe JSON-edit targets
+  editComponentState?(id: string, key: string, value: unknown): void;
+  getTimeline(): TimelineEntry[];                     // newest 1000 runtime events, returned as a copy
+  subscribe(callback): () => void;                    // returns an unsubscribe function
+  trace(name, dependencies): void;                    // emits a manual trace event
   setComponentState?(componentId, key, value): void;
   refresh?(): void;
   startInspectBatch?(): void;
@@ -85,6 +87,10 @@ interface SvelteDevToolsAPI {
   disableInspector?(): void;
 }
 ```
+
+`getTimeline()` returns at most 1,000 events from the current runtime. Each entry has an ID, type, timestamp, and `data` containing the sanitized runtime event. State, effect, and mount types use `state:change`, `effect:run`, and `component:mount`. Event timestamps retain their source clock; do not compare relative runtime timestamps directly with epoch timestamps.
+
+`subscribe()` receives sanitized runtime events and returns an independent unsubscribe function. Listener failures do not interrupt other listeners or the app. Returned history and delivered events are copies. `trace(name, dependencies)` emits a manual `trace:trigger` event; it does not automatically discover reactive dependencies. Final page departure clears listeners and history. Back-forward cache navigation preserves them.
 
 ### `window.__SVELTE_DEVTOOLS_REGISTRY__`
 
@@ -210,8 +216,8 @@ interface SvelteDevToolsPluginOptions {
   /** File patterns to exclude (default: [/node_modules/]) */
   exclude?: RegExp[];
 
-  /** Reserved: enable state inspection via $inspect injection (default: true).
-   *  Currently a no-op — injection always runs. */
+  /** Enable component state inspection via $inspect injection (default: true).
+   *  False skips state inspection and setter injection; component metadata remains. */
   enableStateInspection?: boolean;
 }
 ```
@@ -285,7 +291,7 @@ export const handle = dev ? svelteDevToolsHandle() : noopHandle();
 
 ### Plugin Hooks
 
-The plugin implements: `resolveId`/`load` (SvelteKit `$app/navigation` virtual module), `configResolved` (rolldown detection, tsconfig path aliases), `configureServer` (middleware: tracing, server-events, open-in-editor, migration-score, API, static assets), `transformIndexHtml` (runtime script — plain Vite), `transform` (`$inspect` injection + metadata + effect tracking + migration analysis), and `devtools.setup` (dock registration + RPC).
+The plugin implements: `resolveId`/`load` (devtools-only navigation bridge virtual module for SvelteKit), `configResolved` (rolldown detection, tsconfig path aliases, SvelteKit detection), `configureServer` (middleware: tracing, server-events, open-in-editor, migration-score, API, static assets), `transformIndexHtml` (runtime script — plain Vite; navigation bridge — SvelteKit only), `transform` (`$inspect` injection + metadata + effect tracking + migration analysis), and `devtools.setup` (dock registration + RPC). `$app/navigation` is not intercepted.
 
 ## RPC Methods (live)
 
@@ -302,36 +308,54 @@ Registered in `devtools.setup` via `ctx.rpc.register`:
 
 > `RPC_METHODS` in `@fsodano/svelte-devtools-types` also lists `get-timeline`, `get-state`, `update-component-state`, `set-network-rule`, `get-routes` — **not yet registered** by the live plugin.
 
-## HTTP API (CI-safe)
+## HTTP API (token-authenticated)
 
-All endpoints at `/__svelte-devtools/api/` return JSON with CORS headers (`Access-Control-Allow-Origin: *`):
+All endpoints at `/__svelte-devtools/api/` require the per-run bearer token. The token is generated once per dev-server run, printed in the terminal, and read from `SVELTE_DEVTOOLS_TOKEN` when set. Send it as an `Authorization: Bearer <token>` header. The panel uses periodic authenticated fetch for sync. Query-token compatibility remains available for clients that cannot set headers. Requests without a valid token get `401` with a JSON error and no application data.
+
+CORS is allow-listed, not wildcard. The API reflects an origin only for `http://localhost:*`, `http://127.0.0.1:*`, and origins you configure (see `SVELTE_DEVTOOLS_ALLOWED_ORIGINS`). Responses always carry `Vary: Origin`. Requests with no `Origin` header (curl, server-to-server) get no CORS header at all.
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/` or `/api/status` | Plugin status, version, endpoint list |
-| `GET` | `/api/components` | Components + state, `{count, components, cachedAt}` |
-| `GET` | `/api/timeline` | Timeline entries, `{count, entries, cachedAt}` |
+| `GET` | `/api/components` | Session-scoped component page, `{count, total, offset, components, cachedAt, sessionId}` |
+| `GET` | `/api/timeline` | Session-scoped event page, `{count, total, offset, entries, cachedAt, sessionId}` |
 | `GET` | `/api/remote` | Remote-debugging payload |
 | `GET` | `/api/server-events` | Server traces (`?last=N`, `?sinceId=X`) |
 | `DELETE` | `/api/server-events` | Clear server event buffer |
-| `GET` | `/api/migration` | Migration scores, `{overall, totalFiles, perFile}` |
-| `GET` | `/api/snapshots` | `{snapshots, branches, count, cachedAt}` |
-| `POST` | `/api/set-state` | Edit state, body `{componentId, key, value}` |
+| `GET` | `/api/migration` | Migration scores, `{overall, totalFiles, perFile}`; `overall` is `null` until components are scored |
+| `GET` | `/api/snapshots` | `{snapshots, branches, count, total, offset, cachedAt, sessionId}` |
+| `POST` | `/api/set-state` | Acknowledged live edit; body `{sessionId, componentId, key, value}` |
 | `GET` | `/api/source?file=<path>` | Source code with line numbers (403 outside project) |
+| `GET` | `/api/commands?sessionId=<id>&url=<url>` | Internal panel registration and command polling |
+| `POST` | `/api/commands/result` | Internal panel acknowledgement |
 | `POST` | `/api/sync` | (internal) Panel syncs components/timeline/snapshots here every 2s |
-| `GET` | `/api/routes` | SvelteKit route map scanned from `src/routes` |
+| `GET` | `/api/routes` | SvelteKit route inventory from the resolved routes directory |
 
-Also available (legacy paths): `/__svelte-devtools/server-events` (GET/DELETE), `/__svelte-devtools/open-in-editor` (POST), `/__svelte-devtools/migration-score` (GET).
+Also available (legacy paths): `/__svelte-devtools/server-events` (GET/DELETE), `/__svelte-devtools/open-in-editor` (POST), `/__svelte-devtools/migration-score` (GET). The legacy endpoints require the same bearer token.
 
-### Example: set component state
+Components, timeline, and snapshots accept `sessionId`, `offset`, and `limit`. Components also accept `id`, `name`, and `includeState=false` for metadata-only discovery. Timeline accepts `type`. Filtering and pagination run before the HTTP response is serialized. Pass an explicit session when multiple panels are open. MCP rejects a response that does not match an explicit session selection.
+
+### Example: authenticated request
+
+```bash
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/components | jq '.count'
+```
+
+### Example: edit live component state
 
 ```bash
 curl -X POST http://localhost:5173/__svelte-devtools/api/set-state \
+  -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"componentId": "svt-xxx", "key": "count", "value": 42}'
+  -d '{"sessionId": "panel-session-from-status", "componentId": "instance-id", "key": "count", "value": 42}'
 ```
 
-> Component/timeline/snapshot data is cached via periodic sync from the panel. If the panel has not been opened, the cache may be empty (`cachedAt: 0`). Server events and migration scores are computed server-side and always available.
+First read `/api/` and select a session from `capabilities.sessions`. The server delivers the command to that panel and waits for acknowledgement. A `200` response confirms that the live setter ran and recording is active. JSON editing excludes functions, undefined, nonfinite numbers, collections, class instances, cycles, and nested values that JSON would discard. Restore preserves these non-JSON live values; snapshots do not reconstruct them. The edited snapshot is captured asynchronously through the normal runtime event path. It is not a cache-only write.
+
+A `409` response includes the failure reason. `COMMAND_NOT_DELIVERED` means the panel did not receive the command. `OUTCOME_UNKNOWN` means delivery occurred without acknowledgement; inspect live state before retrying. The broker does not automatically repeat mutations. Remote snapshot restore is not exposed.
+
+> Component/timeline/snapshot data is cached via periodic sync from the panel. If the panel has not been opened, the cache may be empty (`cachedAt: 0`). Server events require tracing integration and observed requests. Migration scores come from the live build-time registry: with no scored components, `overall` is `null` and `totalFiles` is `0` (ADR-0010).
 
 ## Store API
 
@@ -381,3 +405,11 @@ import type {
   // ... and more
 } from '@fsodano/svelte-devtools-types';
 ```
+
+## MCP adapter and capability discovery
+
+See [Agent access with MCP](07_mcp.md) for the stdio setup, eight read-only tools, and one acknowledged state-edit tool. The adapter uses this HTTP API. State edits use the acknowledged panel command channel.
+
+The API root reports `apiVersion`, `capabilities`, and `operations`. Check `capabilities.runtimeData.requiresOpenPanel`, `hasSynced`, `cachedAt`, and `ageMs` before interpreting component or snapshot data. Use `capabilities.sessions` to select the target panel for runtime reads and state edits. `operations.setState.supported` reports the command capability; an available session is still required. Server availability alone does not establish that runtime state is live.
+
+MCP runtime tools reject missing or stale cache data. Direct HTTP clients must inspect the cache metadata themselves. Route results use the resolved SvelteKit routes directory, with `src/routes` as the fallback when configuration is unavailable; migration results cover transformed files. Neither endpoint is a full-project semantic analysis.

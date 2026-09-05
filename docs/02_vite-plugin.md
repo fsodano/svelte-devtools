@@ -80,8 +80,7 @@ svelteDevTools({
   // File patterns to exclude (default: [/node_modules/])
   exclude: [/node_modules/, /\.test\.svelte$/],
 
-  // Reserved: enable state inspection (default: true).
-  // Accepted for API compatibility; injection currently always runs.
+  // Enable state inspection (default: true); false disables injection.
   enableStateInspection: true
 });
 ```
@@ -290,9 +289,9 @@ transformIndexHtml(html: string) {
 }
 ```
 
-### SvelteKit `$app/navigation` Interception
+### SvelteKit `$app/navigation` Bridge (ADR-0012)
 
-For cross-route time travel, the plugin rewrites `$app/navigation` to a virtual module exposing the real `goto` on `window.__SVELTE_DEVTOOLS_REAL_GOTO__` (index.ts:55-81). SvelteKit calls `goto` from the panel iframe directly, bypassing SvelteKit's navigation guard during snapshot restore.
+The plugin no longer intercepts `$app/navigation` — app code always resolves SvelteKit's real module, so `goto`, `invalidate`, `invalidateAll`, `beforeNavigate`, and `afterNavigate` behave exactly as SvelteKit defines them. For cross-route time travel, a devtools-only virtual module (`\0virtual:svelte-devtools-navigation-bridge`) imports the real `$app/navigation` and assigns `goto` to `window.__SVELTE_DEVTOOLS_REAL_GOTO__` (index.ts `resolveId`/`load`). It is injected as `<script type="module" src="/@svelte-devtools-navigation-bridge">` into the page only when SvelteKit is present — via `transformIndexHtml` (plain Vite path) and the SvelteKit handle's `transformPageChunk` (SSR path, sveltekit.ts). Vite's transform middleware serves the URL through the plugin pipeline; it is never served by static middleware. Plain Vite apps get no bridge script.
 
 ### tsconfig Path Aliases
 
@@ -300,7 +299,7 @@ In `configResolved`, the plugin reads `tsconfig.json` `compilerOptions.paths` an
 
 ## HTTP API Endpoints
 
-All endpoints under `/__svelte-devtools/api/` return JSON with CORS headers (see `server-api.ts`):
+All endpoints under `/__svelte-devtools/api/` require the per-run bearer token (`Authorization: Bearer <token>`; query-token compatibility remains available for clients that cannot set headers). Requests without a valid token get `401`. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server, or copy the token printed in the terminal. CORS reflects an origin only for `http://localhost:*`, `http://127.0.0.1:*`, and configured origins; requests without an `Origin` header get no CORS header (see `server-api.ts`, `http-guard.ts`, `token.ts`).
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -310,19 +309,29 @@ All endpoints under `/__svelte-devtools/api/` return JSON with CORS headers (see
 | `GET` | `/api/remote` | Remote-debugging payload |
 | `GET` | `/api/server-events` | Server request traces (`?last=N`, `?sinceId=X`) |
 | `DELETE` | `/api/server-events` | Clear server event buffer |
-| `GET` | `/api/migration` | `{overall, totalFiles, perFile}` |
+| `GET` | `/api/migration` | `{overall, totalFiles, perFile}`; `overall` is `null` until components are scored |
 | `GET` | `/api/snapshots` | Snapshot branch tree (`parentId`, `branchId`) |
-| `POST` | `/api/set-state` | `{componentId, key, value}` — edit cached state |
+| `POST` | `/api/set-state` | Acknowledged live edit (`{sessionId, componentId, key, value}`) |
 | `GET` | `/api/source?file=<path>` | Source code with line numbers (403 outside project) |
-| `POST` | `/api/sync` | (internal) Panel syncs state here every 2s |
-| `GET` | `/api/routes` | SvelteKit route map scanned from `src/routes` |
+| `POST` | `/api/sync` | (internal) Panel syncs state with authenticated fetch every 2s |
+| `GET` | `/api/routes` | SvelteKit route inventory from the resolved configured routes directory |
+
+```bash
+# Verify the plugin is running
+curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
+  http://localhost:5173/__svelte-devtools/api/
+```
+
+Runtime reads use panel caches. Start with status discovery and select a `sessionId` from `capabilities.sessions`. Components, timeline, and snapshots accept `sessionId`, `offset`, and `limit`. Components also accept `id`, `name`, and `includeState=false`; timeline accepts `type`. Check `cachedAt` before using cached values. The panel sends periodic authenticated fetch requests; it does not use sendBeacon for sync.
+
+State edits require a live panel session and writable JSON-compatible state. Success acknowledges the live setter and active recording. Snapshot capture follows asynchronously. If delivery returns `OUTCOME_UNKNOWN`, inspect state before retrying. The broker does not retry mutations. See [the current API contract](06_api.md) and [MCP setup](07_mcp.md).
 
 ## SvelteKit Integration
 
 SvelteKit bypasses Vite's `transformIndexHtml` during SSR. The `svelteDevToolsHandle()` helper (in `@fsodano/vite-plugin-svelte-devtools/sveltekit`, see sveltekit.ts) solves this by injecting both the Vite DevTools client script and the Svelte runtime script via `transformPageChunk` on every server-rendered response. It also:
 
-- Installs a `globalThis.fetch` interceptor at module load (so SvelteKit load functions are traced as `server:request` events)
-- Traces SSR responses as `server:ssr` / `server:error` with `event.route.id`, status, headers, and JSON response previews
+- Installs a `globalThis.fetch` interceptor when the development handle is created. Importing `noopHandle` does not modify global fetch.
+- Traces SSR responses as `server:ssr` / `server:error` with `event.route.id`, status, headers, and bounded response previews. Tracing does not wait for streams to close.
 - `noopHandle()` is a zero-overhead pass-through for production
 
 The plugin logs the exact `hooks.server.ts` snippet when it detects SvelteKit (debug mode only, index.ts:121-131).
@@ -347,8 +356,7 @@ interface SvelteDevToolsPluginOptions {
   /** File patterns to exclude (default: [/node_modules/]) */
   exclude?: RegExp[];
 
-  /** Reserved: enable state inspection via $inspect injection (default: true).
-   *  Currently a no-op — injection always runs. */
+  /** Enable state inspection via $inspect injection (default: true). */
   enableStateInspection?: boolean;
 }
 ```

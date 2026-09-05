@@ -112,7 +112,7 @@ Key behaviors:
 - **Motion gate** — Spring/Tween frames dropped until `|current − target| < 0.0015` (SETTLE_TOLERANCE); duplicate settled frames skipped
 - **Timeline cap** — max 1000 entries
 - **Server events polling** — `/__svelte-devtools/server-events` every 1s
-- **Server sync** — `navigator.sendBeacon('/__svelte-devtools/api/sync', ...)` every 2s mirrors components/timeline/snapshots so the HTTP API can serve them
+- **Server sync** — authenticated `fetch('/__svelte-devtools/api/sync', ...)` every 2s, with at most one request in flight, mirrors components/timeline/snapshots so the HTTP API can serve them
 - **Bridge wiring** — `init()` registers handlers for `component:mount`, `component:unmount`, `state:change`, `trace:trigger`, `effect:run`, `client:request`, `inspect:toggle`, `inspect:select`
 
 ## Time Travel Store
@@ -223,7 +223,7 @@ The `base` path ensures assets load correctly within the iframe.
 |---|---|
 | Runtime → Panel | `postMessage` (`{source: 'svelte-devtools', type, payload}`) |
 | Panel → Runtime | Direct calls on `window.parent.__SVELTE_DEVTOOLS__` |
-| Panel → Server | HTTP polling (server-events 1s) + `sendBeacon` sync (2s) |
+| Panel → Server | HTTP polling (server-events 1s) + authenticated fetch sync (2s, one request in flight) |
 | Panel → Parent (app) | `postMessage` (navigate, mock rules) |
 | Agent → Plugin | RPC (`ctx.rpc`) / HTTP API (`/__svelte-devtools/api/*`) |
 

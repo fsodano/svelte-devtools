@@ -1,5 +1,8 @@
 <script lang="ts">
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte.js';
+  import SplitPane from './SplitPane.svelte';
+  import { untrack } from 'svelte';
+  import { apiFetch } from '../lib/api.js';
 
   interface NetworkEntry {
     id: string;
@@ -20,11 +23,12 @@
     responseHeaders?: Record<string, string>;
     requestBody?: string;
     responseBody?: string;
+    responseBodyTruncated?: boolean;
   }
 
   interface MockRule {
     id: string; pattern: string; method: string;
-    statusCode: number; body: string; enabled: boolean;
+    statusCode: number; body: string; enabled: boolean; headers?: Record<string, string>;
   }
 
   let entries = $state<NetworkEntry[]>([]);
@@ -39,6 +43,11 @@
   let newMethod = $state('GET');
   let newStatusCode = $state(200);
   let newBody = $state('');
+  let newContentType = $state('application/json');
+  let editingRuleId = $state<string | null>(null);
+  let ruleError = $state('');
+  let draftHint = $state('');
+  const ignoredEntries = new Set<string>();
 
   const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
   const filters = [
@@ -53,20 +62,19 @@
   $effect(() => {
     fetchServerEvents();
     pollTimer = setInterval(fetchServerEvents, 1000);
-    // Sync any existing mock rules to the runtime on mount
-    syncMockRules();
+    window.parent.postMessage({ type: 'svelte-devtools-get-mock-rules' }, window.location.origin);
     return () => { if (pollTimer) clearInterval(pollTimer); };
   });
 
   async function fetchServerEvents() {
     try {
-      const res = await fetch('/__svelte-devtools/server-events?last=50');
+      const res = await apiFetch('/__svelte-devtools/server-events?last=50');
       if (!res.ok) return;
       const data = await res.json();
       if (!data?.events) return;
       const existingIds = new Set(entries.map(e => e.id));
       const newEntries: NetworkEntry[] = (data.events as { id: string; type: string; timestamp: number; duration?: number; data?: Record<string, unknown> }[])
-        .filter(e => !existingIds.has(e.id))
+        .filter(e => !existingIds.has(e.id) && !ignoredEntries.has(e.id))
         .map(e => ({
           id: e.id, type: e.type, url: e.data?.url as string | undefined, method: e.data?.method as string | undefined,
           statusCode: e.data?.statusCode as number | undefined, duration: e.duration,
@@ -89,9 +97,10 @@
   $effect(() => {
     const tl = devtoolsStore.timeline;
     const clientReqs = tl.filter(e => (e.type as string) === 'client:request').slice(-50);
+    untrack(() => {
     for (const req of clientReqs) {
       const data = req.data as Record<string, unknown> || {};
-      if (!entries.find(e => e.id === req.id)) {
+      if (!ignoredEntries.has(req.id) && !entries.find(e => e.id === req.id)) {
         entries = [...entries, {
           id: req.id, type: req.type, url: data.url as string,
           method: data.method as string, statusCode: data.statusCode as number,
@@ -99,7 +108,8 @@
           requestHeaders: data.requestHeaders as Record<string, string> | undefined,
           responseHeaders: data.responseHeaders as Record<string, string> | undefined,
           requestBody: data.requestBody as string | undefined,
-          responseBody: (data.responsePreview as string)?.slice(0, 500),
+          responseBody: data.responsePreview as string | undefined,
+          responseBodyTruncated: data.responseBodyTruncated === true,
           contentType: data.contentType as string | undefined,
           responseSize: data.responseSize as number | undefined,
           mockResponse: data.mockResponse as boolean | undefined,
@@ -108,12 +118,13 @@
         }];
       }
     }
+    });
   });
 
   const filtered = $derived(
     filter === 'all' ? entries
     : filter === 'server:ssr' ? entries.filter(e => e.type === 'server:ssr' || e.type === 'server:request')
-    : filter === 'server:error' ? entries.filter(e => e.type === 'server:error')
+    : filter === 'server:error' ? entries.filter(e => e.type === 'server:error' || (e.statusCode ?? 200) >= 400 || e.statusCode === 0)
     : filter === 'client:request' ? entries.filter(e => (e.type as string) === 'client:request')
     : filter === 'mock' ? entries.filter(e => e.mockResponse)
     : entries
@@ -146,19 +157,62 @@
 
   function syncMockRules(): void {
     try {
-      window.parent.postMessage({ type: 'svelte-devtools-set-mock-rules', rules: mockRules }, '*');
+      window.parent.postMessage({ type: 'svelte-devtools-set-mock-rules', rules: $state.snapshot(mockRules) }, window.location.origin);
     } catch {}
   }
 
+  function receiveRules(event: MessageEvent) {
+    if (event.origin === window.location.origin && event.data?.type === 'svelte-devtools-mock-rules') {
+      mockRules = event.data.rules;
+    }
+  }
+
+  function resetDraft() {
+    editingRuleId = null; newPattern = ''; newMethod = 'GET'; newStatusCode = 200;
+    newBody = ''; newContentType = 'application/json'; ruleError = ''; draftHint = '';
+  }
+
+  function mockRequest(entry: NetworkEntry) {
+    resetDraft();
+    newPattern = '^' + (entry.url || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$';
+    newMethod = entry.method || 'GET';
+    newStatusCode = entry.statusCode && entry.statusCode >= 200 ? entry.statusCode : 200;
+    newBody = entry.responseBody || '';
+    newContentType = entry.responseHeaders?.['content-type'] || entry.contentType || 'application/json';
+    draftHint = entry.responseBodyTruncated
+      ? 'This response preview is incomplete. Replace it with a complete response body before saving.'
+      : 'Prefilled from this request. Review the response body before saving.';
+    showRuleEditor = true;
+  }
+
+  function editRule(rule: MockRule) {
+    editingRuleId = rule.id; newPattern = rule.pattern; newMethod = rule.method;
+    newStatusCode = rule.statusCode; newBody = rule.body;
+    newContentType = rule.headers?.['content-type'] || ''; ruleError = ''; draftHint = '';
+  }
+
   function addRule() {
-    if (!newPattern.trim()) return;
-    mockRules = [...mockRules, {
-      id: `rule-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      pattern: newPattern, method: newMethod,
-      statusCode: newStatusCode, body: newBody, enabled: true,
-    }];
-    newPattern = ''; newMethod = 'GET'; newStatusCode = 200; newBody = '';
+    ruleError = '';
+    if (!newPattern.trim()) { ruleError = 'Enter a URL pattern.'; return; }
+    try { new RegExp(newPattern); } catch { ruleError = 'Enter a valid regular expression.'; return; }
+    if (!Number.isInteger(newStatusCode) || newStatusCode < 200 || newStatusCode > 599) {
+      ruleError = 'Use a response status from 200 to 599.'; return;
+    }
+    if ([204, 205, 304].includes(newStatusCode) && newBody.trim()) {
+      ruleError = 'This status requires an empty response body.'; return;
+    }
+    if (newBody.trim() && /(?:application\/json|\+json)(?:;|$)/i.test(newContentType)) {
+      try { JSON.parse(newBody); } catch { ruleError = 'Enter complete, valid JSON for this response body.'; return; }
+    }
+    const rule: MockRule = {
+      id: editingRuleId || crypto.randomUUID(), pattern: newPattern, method: newMethod,
+      statusCode: newStatusCode, body: newBody,
+      headers: newContentType ? { 'content-type': newContentType } : {},
+      enabled: mockRules.find(r => r.id === editingRuleId)?.enabled ?? true,
+    };
+    mockRules = editingRuleId ? mockRules.map(r => r.id === editingRuleId ? rule : r) : [...mockRules, rule];
     syncMockRules();
+    resetDraft();
   }
 
   function toggleRule(id: string) {
@@ -171,12 +225,14 @@
     syncMockRules();
   }
 
-  function clearEntries() { entries = []; selectedEntry = null; }
+  function clearEntries() { entries.forEach(entry => ignoredEntries.add(entry.id)); entries = []; selectedEntry = null; }
 
   function formatTime(ts: number): string {
     return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 </script>
+
+<svelte:window onmessage={receiveRules} />
 
 <div class="network-panel">
   <div class="network-header">
@@ -184,14 +240,15 @@
       <span class="panel-title">Network</span>
       <div class="header-tabs">
         <button class="header-tab" class:active={!showRuleEditor} onclick={() => showRuleEditor = false}>Requests</button>
-        <button class="header-tab" class:active={showRuleEditor} onclick={() => showRuleEditor = true}>Mock Rules</button>
+        <button class="header-tab" class:active={showRuleEditor} onclick={() => showRuleEditor = true}>Mock Rules <span class="rule-count">{mockRules.filter(r => r.enabled).length}</span></button>
       </div>
     </div>
     <button class="clear-btn" onclick={clearEntries} disabled={entries.length === 0}>Clear</button>
   </div>
 
   {#if !showRuleEditor}
-    <div class="split">
+    <SplitPane label="Resize network request panels">
+      {#snippet first()}
       <div class="list">
         <div class="toolbar">
           <input type="text" bind:value={requestFilter} placeholder="Filter by URL, method, route..." class="search-input" />
@@ -239,12 +296,17 @@
         </div>
       </div>
 
+      {/snippet}
+      {#snippet second()}
       <div class="detail-scroll">
         {#if selectedEntry}
           <div class="detail">
             <div class="detail-header">
               <span class="detail-title">{selectedEntry.type}</span>
-              <button class="detail-close" onclick={() => selectedEntry = null}>✕</button>
+              {#if selectedEntry.type === 'client:request' && selectedEntry.url}
+                <button class="create-mock-btn" onclick={() => mockRequest(selectedEntry!)}>Mock this request</button>
+              {/if}
+              <button aria-label="Close request details" class="detail-close" onclick={() => selectedEntry = null}>✕</button>
             </div>
             {#if selectedEntry.url}
               <div class="detail-row"><span class="label">URL</span><span class="value mono">{selectedEntry.url}</span></div>
@@ -281,7 +343,7 @@
             {#if selectedEntry.requestHeaders}
               <div class="section-label">Request Headers</div>
               <div class="headers-block">
-                {#each Object.entries(selectedEntry.requestHeaders).filter(([_, v]) => v) as [key, val]}
+                {#each Object.entries(selectedEntry.requestHeaders).filter(([_, v]) => v) as [key, val] (key)}
                   <div class="header-row"><span class="h-key">{key}</span><span class="h-val">{val}</span></div>
                 {/each}
               </div>
@@ -290,7 +352,7 @@
             {#if selectedEntry.responseHeaders}
               <div class="section-label">Response Headers</div>
               <div class="headers-block">
-                {#each Object.entries(selectedEntry.responseHeaders).filter(([_, v]) => v) as [key, val]}
+                {#each Object.entries(selectedEntry.responseHeaders).filter(([_, v]) => v) as [key, val] (key)}
                   <div class="header-row"><span class="h-key">{key}</span><span class="h-val">{val}</span></div>
                 {/each}
               </div>
@@ -307,20 +369,31 @@
           <div class="detail-empty">Select a request to inspect details.</div>
         {/if}
       </div>
-    </div>
+      {/snippet}
+    </SplitPane>
   {:else}
     <div class="rule-editor">
       <div class="rule-form">
-        <h3 class="rule-form-title">New Mock Rule</h3>
-        <input type="text" bind:value={newPattern} placeholder="URL regex pattern (e.g. /api/.*)" class="rule-input" />
+        <h3 class="rule-form-title">{editingRuleId ? 'Edit mock rule' : 'New mock rule'}</h3>
+        <p class="rule-hint">Mock browser fetch and XHR requests. Rules run in list order; the first match wins. Rules last until the app reloads.</p>
+        {#if draftHint}<p class="draft-hint">{draftHint}</p>{/if}
+        <label for="mock-pattern">URL pattern (regular expression)</label>
+        <input id="mock-pattern" type="text" bind:value={newPattern} placeholder="URL regex pattern (e.g. /api/.*)" class="rule-input" />
         <div class="rule-form-row">
-          <select bind:value={newMethod}>
-            {#each methods as m}<option value={m}>{m}</option>{/each}
+          <select aria-label="Request method" bind:value={newMethod}>
+            {#each methods as m (m)}<option value={m}>{m}</option>{/each}
           </select>
-          <input type="number" bind:value={newStatusCode} placeholder="Status" min="100" max="599" class="rule-input-narrow" />
+          <input aria-label="Response status" type="number" bind:value={newStatusCode} placeholder="Status" min="200" max="599" class="rule-input-narrow" />
         </div>
-        <textarea bind:value={newBody} placeholder="Response body (JSON)" class="rule-body" rows="3"></textarea>
-        <button class="add-rule-btn" onclick={addRule} disabled={!newPattern.trim()}>Add Rule</button>
+        <label for="mock-content-type">Content type</label>
+        <input id="mock-content-type" class="rule-input" bind:value={newContentType} placeholder="application/json" />
+        <label for="mock-body">Response body</label>
+        <textarea id="mock-body" bind:value={newBody} placeholder="Response body (JSON)" class="rule-body" rows="8"></textarea>
+        {#if ruleError}<p class="rule-error" role="alert">{ruleError}</p>{/if}
+        <div class="rule-form-row">
+          <button class="add-rule-btn" onclick={addRule} disabled={!newPattern.trim()}>{editingRuleId ? 'Save changes' : 'Enable mock rule'}</button>
+          <button class="clear-btn" onclick={resetDraft}>Reset</button>
+        </div>
       </div>
       <div class="rules-list">
         {#if mockRules.length === 0}
@@ -334,6 +407,7 @@
                 <span class="rule-status">→ {rule.statusCode}</span>
               </div>
               <div class="rule-actions">
+                <button class="clear-btn" onclick={() => editRule(rule)}>Edit</button>
                 <button class="icon-btn" onclick={() => toggleRule(rule.id)} title={rule.enabled ? 'Disable' : 'Enable'}>
                   <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
                     {#if rule.enabled}
@@ -359,6 +433,14 @@
 </div>
 
 <style>
+  .create-mock-btn { margin-left: auto; border: 1px solid var(--svelte-brand); background: var(--svelte-brand-10); color: var(--text-primary); border-radius: var(--radius-sm); padding: 5px 9px; cursor: pointer; font-size: 11px; white-space: nowrap; }
+  .rule-count { padding: 1px 5px; border-radius: 8px; background: var(--bg-inset); font-variant-numeric: tabular-nums; }
+  .rule-hint, .draft-hint { color: var(--text-muted); font-size: 11px; line-height: 1.6; margin: 0; }
+  .draft-hint { padding: 8px; background: var(--svelte-brand-10); border-radius: var(--radius-sm); color: var(--text-secondary); }
+  .rule-error { color: var(--error, #ef4444); font-size: 11px; }
+  .rule-form label { font-size: 11px; color: var(--text-secondary); }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--svelte-brand); outline-offset: 2px; }
+
   .network-panel { display: flex; flex-direction: column; height: 100%; }
   .network-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-default); flex-shrink: 0; }
   .header-left { display: flex; align-items: center; gap: var(--space-3); }
@@ -373,8 +455,7 @@
   .filters { display: flex; gap: var(--space-1); }
   .filter-btn { padding: 2px var(--space-2); border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 10px; border-radius: var(--radius-sm); }
   .filter-btn.active { background: var(--bg-hover); color: var(--text-primary); }
-  .split { display: flex; flex: 1; min-height: 0; }
-  .list { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .list { height: 100%; display: flex; flex-direction: column; flex: 1; min-width: 0; }
   .entries-list { flex: 1; overflow-y: auto; min-height: 0; }
   .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); height: 150px; color: var(--text-muted); font-size: 12px; padding: var(--space-3); text-align: center; }
   .empty-hint { font-size: 10px; opacity: 0.7; }
@@ -391,10 +472,10 @@
   .duration { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); flex-shrink: 0; min-width: 40px; text-align: right; }
 
   /* ── Detail side panel ── */
-  .detail-scroll { width: 320px; flex-shrink: 0; overflow-y: auto; border-left: 1px solid var(--border-default); background: var(--bg-surface); }
+  .detail-scroll { height: 100%; min-width: 0; overflow: auto; }
   .detail-empty { display: flex; align-items: center; justify-content: center; height: 150px; color: var(--text-muted); font-size: 12px; }
   .detail { padding: var(--space-2) var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
-  .detail-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-1) 0; border-bottom: 1px solid var(--border-default); }
+  .detail-header { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; justify-content: space-between; padding: var(--space-1) 0; border-bottom: 1px solid var(--border-default); }
   .detail-title { font-size: 12px; font-weight: 600; font-family: var(--font-mono); }
   .detail-close { border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 14px; }
   .detail-close:hover { color: var(--text-primary); }
@@ -409,7 +490,7 @@
   .code-block { margin: 0; padding: var(--space-2); font-family: var(--font-mono); font-size: 10px; background: var(--bg-inset); border-radius: var(--radius-sm); overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 150px; }
   .code-block.stack { max-height: 100px; }
   .headers-block { display: flex; flex-direction: column; gap: 2px; padding: var(--space-1) var(--space-2); background: var(--bg-inset); border-radius: var(--radius-sm); }
-  .header-row { display: flex; gap: var(--space-2); font-size: 10px; font-family: var(--font-mono); }
+  .header-row { display: flex; flex-wrap: wrap; overflow-wrap: anywhere; gap: var(--space-2); font-size: 10px; font-family: var(--font-mono); }
   .h-key { color: var(--syntax-key); flex-shrink: 0; }
   .h-val { color: var(--text-secondary); word-break: break-all; }
   .error-text { color: var(--status-error); font-family: var(--font-mono); font-size: 10px; }
@@ -417,7 +498,7 @@
   .rule-editor { flex: 1; overflow-y: auto; padding: var(--space-3); }
   .rule-form { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background: var(--bg-inset); border-radius: var(--radius-md); margin-bottom: var(--space-3); }
   .rule-form-title { margin: 0; font-size: 12px; font-weight: 600; }
-  .rule-form-row { display: flex; gap: var(--space-2); }
+  .rule-form-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .rule-form-row select, .rule-input-narrow { padding: var(--space-1) var(--space-2); font-size: 11px; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
   .rule-input-narrow { width: 100px; }
   .rule-input, .rule-body { padding: var(--space-1) var(--space-2); font-size: 11px; font-family: var(--font-mono); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
@@ -428,7 +509,7 @@
   .rule-card.disabled { opacity: 0.5; }
   .rule-info { display: flex; align-items: center; gap: var(--space-2); font-size: 11px; }
   .rule-method { font-family: var(--font-mono); font-weight: 600; min-width: 36px; }
-  .rule-pattern { font-family: var(--font-mono); color: var(--text-secondary); font-size: 10px; flex: 1; }
+  .rule-pattern { overflow-wrap: anywhere; min-width: 0; font-family: var(--font-mono); color: var(--text-secondary); font-size: 10px; flex: 1; }
   .rule-status { color: var(--text-muted); font-size: 10px; }
   .rule-actions { display: flex; gap: var(--space-1); }
   .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: none; background: transparent; cursor: pointer; color: var(--text-muted); border-radius: var(--radius-sm); }

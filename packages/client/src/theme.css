@@ -7,22 +7,22 @@
   --svelte-brand-20: rgba(255, 62, 0, 0.2);
 
   /* Light mode (default) — inspired by Vue DevTools warmth */
-  --bg-base: #f5f5f0;
+  --bg-base: #f7f8fa;
   --bg-surface: #ffffff;
   --bg-elevated: #ffffff;
-  --bg-inset: #ebebe5;
+  --bg-inset: #f0f2f5;
   --bg-hover: rgba(255, 62, 0, 0.06);
   --bg-sidebar: #2c2c2e;
 
   --text-primary: #1c1c1e;
   --text-secondary: #6b6b70;
-  --text-muted: #9e9ea4;
+  --text-muted: #737984;
   --text-inverse: #eaeaea;
 
   --border-subtle: rgba(255, 62, 0, 0.1);
   --border-default: rgba(28, 28, 30, 0.08);
 
-  --status-connected: #34c759;
+  --status-connected: #16834b;
   --status-disconnected: #ff3a2f;
 
   /* Accent */
@@ -88,8 +88,8 @@
 
     --text-primary: #eaeaea;
     --text-secondary: #a0a0a6;
-    --text-muted: #6e6e74;
-    --text-inverse: #1c1c1e;
+    --text-muted: #93939d;
+    --text-inverse: #eaeaea;
 
     --border-subtle: rgba(255, 62, 0, 0.12);
     --border-default: rgba(234, 234, 234, 0.06);
@@ -125,8 +125,8 @@
 
   --text-primary: #eaeaea;
   --text-secondary: #a0a0a6;
-  --text-muted: #6e6e74;
-  --text-inverse: #1c1c1e;
+  --text-muted: #93939d;
+  --text-inverse: #eaeaea;
 
   --border-subtle: rgba(255, 62, 0, 0.12);
   --border-default: rgba(234, 234, 234, 0.06);
@@ -151,22 +151,22 @@
 }
 
 [data-theme="light"] {
-  --bg-base: #f5f5f0;
+  --bg-base: #f7f8fa;
   --bg-surface: #ffffff;
   --bg-elevated: #ffffff;
-  --bg-inset: #ebebe5;
+  --bg-inset: #f0f2f5;
   --bg-hover: rgba(255, 62, 0, 0.06);
   --bg-sidebar: #2c2c2e;
 
   --text-primary: #1c1c1e;
   --text-secondary: #6b6b70;
-  --text-muted: #9e9ea4;
+  --text-muted: #737984;
   --text-inverse: #eaeaea;
 
   --border-subtle: rgba(255, 62, 0, 0.1);
   --border-default: rgba(28, 28, 30, 0.08);
 
-  --status-connected: #34c759;
+  --status-connected: #16834b;
   --status-disconnected: #ff3a2f;
 
   --syntax-key: #0550ae;
@@ -223,3 +223,12 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--border-default) transparent;
 }
+
+/* Shared interaction cues across every panel. */
+:where(button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 3px;
+}
+:root[data-reduce-motion="true"] *, :root[data-reduce-motion="true"] *::before,
+:root[data-reduce-motion="true"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

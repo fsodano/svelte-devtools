@@ -1,5 +1,8 @@
+import { tick } from 'svelte';
+import { startCommandClient } from '../command-client.js';
 import { createWindowBridge } from '../bridge/window-bridge.js';
 import { createTimeTravelStore } from './time-travel-store.svelte.js';
+import { apiFetch } from '../api.js';
 import type {
   ComponentNode,
   TimelineEntry,
@@ -25,6 +28,7 @@ interface ServerEvent {
 }
 
 function createDevtoolsStore() {
+  const panelSessionId = crypto.randomUUID();
   let components = $state<ComponentNode[]>([]);
   let selectedComponentId = $state<string | null>(null);
   let timeline = $state<TimelineEntry[]>([]);
@@ -131,7 +135,7 @@ function createDevtoolsStore() {
       const url = lastEventId
         ? `/__svelte-devtools/server-events?sinceId=${encodeURIComponent(lastEventId)}`
         : '/__svelte-devtools/server-events?last=50';
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       if (!res.ok) return;
       const data = await res.json();
       if (!Array.isArray(data)) return;
@@ -157,7 +161,10 @@ function createDevtoolsStore() {
 
   // Sync runtime state to server API cache every 2 seconds so HTTP API
   // endpoints can serve component/timeline data to AI agents and tooling.
+  let syncInFlight = false;
   async function syncStateToServer(): Promise<void> {
+    if (syncInFlight) return;
+    syncInFlight = true;
     try {
       const snapshotTree = timeTravel.snapshots.map(s => ({
         id: s.id, parentId: s.parentId, branchId: s.branchId,
@@ -165,26 +172,38 @@ function createDevtoolsStore() {
       }));
       const branchList = timeTravel.branches;
       const payload = JSON.stringify({
+        sessionId: panelSessionId,
         components: components.map(c => ({ id: c.id, name: c.name, state: c.state, props: c.props, parentId: c.parentId, filename: c.filename })),
         timeline: timeline.map(e => ({ id: e.id, type: e.type, timestamp: e.timestamp, duration: e.duration, data: e.data })),
         snapshots: snapshotTree,
         branches: branchList,
       });
-      // Use sendBeacon for fire-and-forget (doesn't block on page unload)
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon('/__svelte-devtools/api/sync', payload);
-      } else {
-        await fetch('/__svelte-devtools/api/sync', { method: 'POST', body: payload, headers: { 'Content-Type': 'application/json' } });
-      }
+      // Periodic snapshots can exceed the browser's small beacon quota. Use a
+      // normal authenticated request and do not queue overlapping full snapshots.
+      await apiFetch('/__svelte-devtools/api/sync', {
+        method: 'POST', body: payload, headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10000),
+      });
     } catch {
-      // Server not available yet — skip
-    }
+      // The next poll retries; cache freshness reveals a disconnected server.
+    } finally { syncInFlight = false; }
   }
 
   let syncTimer: ReturnType<typeof setInterval> | null = null;
+  let stopCommands: (() => void) | null = null;
 
   function startServerEventsPoll(): void {
     if (serverEventsPollTimer) return;
+    stopCommands = startCommandClient(async ({ componentId, key, value }) => {
+      isRecording = true;
+      timeTravel.setStateEdit(componentId, key, value);
+      await tick();
+      const target = window.opener || window.parent;
+      const api = (target as unknown as { __SVELTE_DEVTOOLS__?: { getComponentById: (id: string) => { state: Map<string, unknown> } | undefined } }).__SVELTE_DEVTOOLS__;
+      const component = api?.getComponentById(componentId);
+      if (!component) throw new Error('Component unmounted before acknowledgement');
+      return component.state.get(key);
+    }, panelSessionId);
     fetchServerEvents();
     serverEventsPollTimer = setInterval(fetchServerEvents, 1000);
     syncStateToServer();
@@ -192,6 +211,8 @@ function createDevtoolsStore() {
   }
 
   function stopServerEventsPoll(): void {
+    stopCommands?.();
+    stopCommands = null;
     if (serverEventsPollTimer) clearInterval(serverEventsPollTimer);
     if (syncTimer) clearInterval(syncTimer);
     serverEventsPollTimer = null;
@@ -268,6 +289,14 @@ function createDevtoolsStore() {
 
   function handleComponentUnmount(payload: unknown): void {
     const data = payload as ComponentUnmountPayload;
+    // A destroyed Spring cannot emit its settled value. Release its motion
+    // bookkeeping so it cannot block recording for surviving components.
+    const prefix = `${data.id}::`;
+    for (const key of activeMotions) if (key.startsWith(prefix)) activeMotions.delete(key);
+    for (const key of _lastCur.keys()) if (key.startsWith(prefix)) _lastCur.delete(key);
+    for (let index = pendingStateChanges.length - 1; index >= 0; index--) {
+      if (pendingStateChanges[index].componentId === data.id) pendingStateChanges.splice(index, 1);
+    }
     const unmounted = components.find(c => c.id === data.id);
     components = components.filter(c => c.id !== data.id);
     addToTimeline({
@@ -371,7 +400,14 @@ function createDevtoolsStore() {
         duration: reqData.duration,
         responseSize: reqData.responseSize,
         responsePreview: reqData.responsePreview,
+        responseBodyTruncated: reqData.responseBodyTruncated,
         requestBody: reqData.requestBody,
+        requestHeaders: reqData.requestHeaders,
+        responseHeaders: reqData.responseHeaders,
+        contentType: reqData.contentType,
+        mockResponse: reqData.mockResponse,
+        mockRuleId: reqData.mockRuleId,
+        mockRulePattern: reqData.mockRulePattern,
       }
     });
   }

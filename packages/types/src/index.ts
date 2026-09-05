@@ -247,6 +247,8 @@ export interface SvelteDevToolsAPI {
   getTimeline(): TimelineEntry[];
   subscribe(callback: (event: unknown) => void): () => void;
   trace(name: string, dependencies: string[]): void;
+  getWritableStateKeys?(componentId: string): string[];
+  editComponentState?(componentId: string, key: string, value: unknown): void;
   setComponentState?(componentId: string, key: string, value: unknown): void;
   refresh?(): void;
   startInspectBatch?(): void;
@@ -289,6 +291,16 @@ export interface SvelteDevToolsPluginOptions {
   include?: RegExp[];
   /** File patterns to exclude (default: [/node_modules/]) */
   exclude?: RegExp[];
+  /**
+   * Extra CORS origins allowed to call the agent HTTP API (ADR-0009).
+   * Localhost/127.0.0.1/[::1] origins are always allowed; add any others.
+   */
+  allowedOrigins?: string[];
+  /**
+   * Extra Host header values allowed to call the agent HTTP API (ADR-0009).
+   * Localhost/127.0.0.1/[::1] hosts are always allowed; add any others.
+   */
+  allowedHosts?: string[];
 }
 
 /**
@@ -347,3 +359,6 @@ export interface ComponentInfo {
 // ============================================================================
 
 export * from './constants.js';
+export { isJsonEditable } from './json-state.js';
+
+export { toDisplayValue } from './display-value.js';

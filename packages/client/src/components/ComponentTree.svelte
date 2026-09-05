@@ -1,5 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { indexComponentTree, flattenComponentTree } from '../lib/component-tree.js';
+  import { getSourceLocation, formatSourceLocation, openInEditor } from '../lib/open-in-editor.js';
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
 
   interface Component {
@@ -31,12 +33,10 @@
   let searchTerm = $state('');
   let virtualizedHeight = 400;
 
-  function getRootComponents(): Component[] {
-    return components.filter((c) => !c.parentId);
-  }
+  const treeIndex = $derived(indexComponentTree(components));
 
   function getChildren(parentId: string): Component[] {
-    return components.filter((c) => c.parentId === parentId);
+    return treeIndex.children.get(parentId) ?? [];
   }
 
   function toggleExpand(id: string): void {
@@ -54,52 +54,20 @@
       : `${duration.toFixed(1)}ms`;
   }
 
-  function formatSourceLocation(
-    sourceLocation:
-      | { filename: string; line: number; column: number }
-      | undefined,
-  ): string {
-    if (!sourceLocation) return '';
-    const filename =
-      sourceLocation.filename.split('/').pop() || sourceLocation.filename;
-    return `${filename}:${sourceLocation.line}:${sourceLocation.column}`;
-  }
+  let editorError = $state('');
 
-  function openSourceLocation(
-    sourceLocation:
-      | { filename: string; line: number; column: number }
-      | undefined,
-  ): void {
-    if (!sourceLocation) return;
-
-    import('../lib/open-in-editor.js').then(({ openInEditor }) =>
-      openInEditor(sourceLocation.filename, sourceLocation.line, sourceLocation.column),
-    );
-  }
-
-  function flattenTree(
-    components: Component[],
-    expanded: ExpandedState,
-    depth: number = 0,
-  ): { component: Component; depth: number }[] {
-    const result: { component: Component; depth: number }[] = [];
-
-    for (const component of components) {
-      result.push({ component, depth });
-      if (isExpanded(component.id) && getChildren(component.id).length > 0) {
-        result.push(
-          ...flattenTree(getChildren(component.id), expanded, depth + 1),
-        );
-      }
+  async function openSourceLocation(component: Component): Promise<void> {
+    const location = getSourceLocation(component);
+    if (!location) return;
+    editorError = '';
+    try {
+      await openInEditor(location.filename, location.line, location.column);
+    } catch (error) {
+      editorError = error instanceof Error ? error.message : String(error);
     }
-
-    return result;
   }
 
-  const flatList = $derived.by(() => {
-    const roots = getRootComponents();
-    return flattenTree(roots, expanded);
-  });
+  const flatList = $derived(flattenComponentTree(treeIndex, expanded));
 
   const filteredList = $derived.by(() => {
     if (!searchTerm.trim()) return flatList;
@@ -121,7 +89,7 @@
   // Sync local search term to the store for global state tracking
   // Only reacts to searchTerm changes, not to components — avoids effect cascades
   // during rapid bridge syncs at startup
-  let prevSearchTerm = $state(searchTerm);
+  let prevSearchTerm = '';
   $effect(() => {
     if (searchTerm !== prevSearchTerm) {
       prevSearchTerm = searchTerm;
@@ -196,6 +164,10 @@
     </div>
   </div>
 
+  {#if editorError}
+    <p class="editor-error" role="alert">{editorError}</p>
+  {/if}
+
   <div class="tree" bind:this={listRef} style="height: {virtualizedHeight}px">
     {#if filteredList.length === 0 && searchTerm.trim()}
       <div class="empty-search">
@@ -223,6 +195,7 @@
     {:else}
       <div class="tree-content" style="height: {filteredList.length * 32}px">
         {#each filteredList.slice(visibleStart, visibleEnd) as item, i (item.component.id)}
+          {@const sourceLocation = getSourceLocation(item.component)}
           <div
             class="tree-node"
             style="transform: translateY({(visibleStart + i) * 32}px); padding-left: {item.depth * 24 + 8}px"
@@ -242,7 +215,7 @@
               }}
             >
               <div class="indent-guide">
-                {#each Array(item.depth) as _, idx}
+                {#each Array(item.depth) as _, idx (idx)}
                   <span
                     class="indent-line"
                     class:last={idx === item.depth - 1}
@@ -303,29 +276,18 @@
                 {/if}
               </div>
 
-              {#if item.component.sourceLocation}
-                <span
+              {#if sourceLocation}
+                <button
                   class="source-link"
-                  role="button"
-                  tabindex="0"
                   onclick={(e) => {
                     e.stopPropagation();
-                    openSourceLocation(item.component.sourceLocation);
+                    openSourceLocation(item.component);
                   }}
-                  onkeydown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      openSourceLocation(item.component.sourceLocation);
-                    }
-                  }}
-                  title="Click to open source file"
+                  onkeydown={(e) => e.stopPropagation()}
+                  title={`Open ${sourceLocation.filename} in editor`}
                 >
-                  {formatSourceLocation(item.component.sourceLocation)}
-                </span>
-              {:else if item.component.filename}
-                <span class="source-filename" title={item.component.filename}>
-                  {item.component.filename.split('/').pop()}
-                </span>
+                  {formatSourceLocation(sourceLocation)}
+                </button>
               {/if}
             </div>
           </div>
@@ -529,18 +491,10 @@
     color: var(--status-disconnected);
   }
 
-  .source-filename {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-muted);
-    cursor: default;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 200px;
-  }
+  .editor-error { padding: var(--space-3); font-size: 12px; color: var(--text-error); }
 
   .source-link {
+    border: none;
     display: inline-flex;
     align-items: center;
     padding: 2px 6px;

@@ -174,7 +174,7 @@ describe('NetworkInterceptor', () => {
       await fetch('http://example.com/test', { method: 'GET' });
 
       // GET shouldn't match the POST-only rule -> passthrough (mockResponse: false)
-      expect(callback).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledTimes(1));
       expect(callback.mock.calls[0][0].mockResponse).toBe(false);
 
       i.uninstall();
@@ -209,7 +209,7 @@ describe('NetworkInterceptor', () => {
 
       await fetch('http://example.com/test');
 
-      expect(callback).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledTimes(1));
       expect(callback.mock.calls[0][0].mockResponse).toBe(false);
 
       i.uninstall();
@@ -303,6 +303,192 @@ describe('NetworkInterceptor', () => {
       expect(req.id).toMatch(/^net-/);
 
       i.uninstall();
+    });
+  });
+
+  describe('fetch-only production boundary', () => {
+    it('preserves native XHR identity and constants when fetchOnly is enabled', () => {
+      const native = globalThis.XMLHttpRequest;
+      interceptor.install({ fetchOnly: true });
+      expect(globalThis.XMLHttpRequest).toBe(native);
+      expect(new XMLHttpRequest()).toBeInstanceOf(native);
+      expect(XMLHttpRequest.DONE).toBe(native.DONE);
+      interceptor.uninstall();
+      expect(globalThis.XMLHttpRequest).toBe(native);
+    });
+
+    it.each(['/__svelte-devtools/api/sync', '/__svelte-devtools', '/.devtools/auth', '/.devtools'])('does not mock or record own infrastructure %s', async path => {
+      const response = new Response('native transport');
+      const native = vi.fn().mockResolvedValue(response);
+      globalThis.fetch = native;
+      const callback = vi.fn();
+      interceptor = new NetworkInterceptor(callback);
+      interceptor.install({ fetchOnly: true });
+      interceptor.setRules([{ id: 'wildcard', pattern: '.*', statusCode: 200, body: 'mock', enabled: true }]);
+      const input = new URL(path, window.location.href).href;
+      expect(await fetch(input)).toBe(response);
+      expect(native).toHaveBeenCalledWith(input, undefined);
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('keeps similarly named app paths and other origins eligible for mock rules', async () => {
+      interceptor.install({ fetchOnly: true });
+      interceptor.setRules([{ id: 'wildcard', pattern: '.*', statusCode: 200, body: 'mock', enabled: true }]);
+      expect(await (await fetch(new URL('/__svelte-devtools-example', window.location.href))).text()).toBe('mock');
+      expect(await (await fetch('https://other.example/__svelte-devtools/api/')).text()).toBe('mock');
+    });
+
+    it('leaves pass-through init upload streams available to native fetch', async () => {
+      const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode('upload')); controller.close(); } });
+      const native = vi.fn(async (_input, init) => {
+        expect(init.body).toBe(stream);
+        expect(stream.locked).toBe(false);
+        expect(await new Response(stream).text()).toBe('upload');
+        return new Response('accepted');
+      });
+      globalThis.fetch = native;
+      interceptor.install({ fetchOnly: true });
+      expect(await (await fetch('http://example.com/upload', { method: 'POST', body: stream, duplex: 'half' } as RequestInit)).text()).toBe('accepted');
+    });
+
+    it('rejects an already aborted Request instead of returning a mock', async () => {
+      const callback = vi.fn();
+      interceptor = new NetworkInterceptor(callback);
+      interceptor.install({ fetchOnly: true });
+      interceptor.setRules([{ id: 'wildcard', pattern: '.*', statusCode: 200, body: 'mock', enabled: true }]);
+      const controller = new AbortController();
+      controller.abort();
+      await expect(fetch(new Request('http://example.com/items', { signal: controller.signal }))).rejects.toMatchObject({ name: 'AbortError' });
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('rejects a mock when aborted before its response is delivered', async () => {
+      const callback = vi.fn();
+      interceptor = new NetworkInterceptor(callback);
+      interceptor.install({ fetchOnly: true });
+      interceptor.setRules([{ id: 'wildcard', pattern: '.*', statusCode: 200, body: 'mock', enabled: true }]);
+      const controller = new AbortController();
+      let source!: ReadableStreamDefaultController<Uint8Array>;
+      const body = new ReadableStream<Uint8Array>({ start(value) { source = value; } });
+      const pending = fetch('http://example.com/upload', { method: 'POST', body, signal: controller.signal, duplex: 'half' } as RequestInit);
+      controller.abort();
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      source.close();
+      expect(callback).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('streaming response previews', () => {
+    it('returns headers before an SSE stream closes and preserves the original body', async () => {
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+      const source = new ReadableStream<Uint8Array>({ start(value) { controller = value; } });
+      const native = new Response(source, { headers: { 'content-type': 'text/event-stream' } });
+      globalThis.fetch = vi.fn().mockResolvedValue(native);
+      const callback = vi.fn();
+      interceptor = new NetworkInterceptor(callback);
+      interceptor.install();
+      const pending = fetch('http://example.com/events');
+      let returned: Response | undefined;
+      void pending.then(value => { returned = value; });
+      await vi.waitFor(() => expect(returned).toBe(native), { timeout: 100 });
+      controller.enqueue(new TextEncoder().encode('data: first\n\n'));
+      const reader = returned!.body!.getReader();
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe('data: first\n\n');
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledOnce());
+      expect(callback.mock.calls[0][0]).toMatchObject({ responseBody: 'data: first\n\n', responseBodyTruncated: true });
+      controller.enqueue(new TextEncoder().encode('data: second\n\n'));
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe('data: second\n\n');
+      controller.close();
+      expect((await reader.read()).done).toBe(true);
+    });
+
+    it('bounds preview bytes while allowing the application to read the full response', async () => {
+      const fullBody = 'x'.repeat(2000);
+      globalThis.fetch = vi.fn().mockResolvedValue(new Response(fullBody));
+      const callback = vi.fn();
+      interceptor = new NetworkInterceptor(callback);
+      interceptor.install();
+      const response = await fetch('http://example.com/large');
+      expect(await response.text()).toBe(fullBody);
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledOnce());
+      expect(callback.mock.calls[0][0]).toMatchObject({ responseBody: 'x'.repeat(500), responseBodyTruncated: true });
+    });
+
+    it('records complete small previews without changing pass-through request bodies', async () => {
+      const native = vi.fn(async (input: RequestInfo | URL) => {
+        expect(await (input as Request).text()).toBe('payload');
+        return new Response('small');
+      });
+      globalThis.fetch = native;
+      const callback = vi.fn();
+      interceptor = new NetworkInterceptor(callback);
+      interceptor.install();
+      const response = await fetch(new Request('http://example.com/upload', { method: 'POST', body: 'payload' }));
+      expect(await response.text()).toBe('small');
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledOnce());
+      expect(callback.mock.calls[0][0]).toMatchObject({ requestBody: 'payload', responseBody: 'small', responseBodyTruncated: false });
+    });
+
+    it('cancels inspection on uninstall without canceling the application stream or emitting stale events', async () => {
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+      const cancel = vi.fn();
+      const native = new Response(new ReadableStream<Uint8Array>({ start(value) { controller = value; }, cancel }));
+      globalThis.fetch = vi.fn().mockResolvedValue(native);
+      const callback = vi.fn();
+      interceptor = new NetworkInterceptor(callback);
+      interceptor.install();
+      const response = await fetch('http://example.com/events');
+      interceptor.uninstall();
+      interceptor.install();
+      controller.enqueue(new TextEncoder().encode('still alive'));
+      controller.close();
+      expect(await response.text()).toBe('still alive');
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(cancel).not.toHaveBeenCalled();
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('preserves stream errors for the consumer and handles preview failures', async () => {
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+      globalThis.fetch = vi.fn().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ start(value) { controller = value; } })));
+      const callback = vi.fn();
+      interceptor = new NetworkInterceptor(callback);
+      interceptor.install();
+      const response = await fetch('http://example.com/broken');
+      controller.error(new Error('stream failed'));
+      await expect(response.text()).rejects.toThrow('stream failed');
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledOnce());
+      expect(callback.mock.calls[0][0]).toMatchObject({ statusCode: 200, responseBodyTruncated: true });
+    });
+  });
+
+  describe('recorded-request mock rules', () => {
+    it('matches an escaped exact URL with query parameters and reports the applied rule', async () => {
+      const callback = vi.fn();
+      const i = new NetworkInterceptor(callback);
+      i.install();
+      const url = 'http://example.com/api/items?page=2&sort=name';
+      i.setRules([{ id: 'recorded', pattern: '^http://example\\.com/api/items\\?page=2&sort=name$', method: 'GET', statusCode: 200, body: '{"items":[]}', enabled: true }]);
+      const response = await fetch(url);
+      expect(await response.json()).toEqual({ items: [] });
+      expect(callback.mock.calls[0][0]).toMatchObject({ mockResponse: true, mockRuleId: 'recorded' });
+      i.uninstall();
+    });
+
+    it('applies Request init overrides when choosing a mock', async () => {
+      interceptor.install();
+      interceptor.setRules([{ id: 'override', pattern: 'example', method: 'POST', statusCode: 201, body: 'created', enabled: true }]);
+      const response = await fetch(new Request('http://example.com/items'), { method: 'POST' });
+      expect(response.status).toBe(201);
+      expect(await response.text()).toBe('created');
+    });
+
+    it.each([204, 205, 304])('returns a bodyless response for status %s', async statusCode => {
+      interceptor.install();
+      interceptor.setRules([{ id: 'empty', pattern: 'example', statusCode, enabled: true }]);
+      const response = await fetch('http://example.com/items');
+      expect(response.status).toBe(statusCode);
+      expect(await response.text()).toBe('');
     });
   });
 

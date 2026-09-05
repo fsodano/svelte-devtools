@@ -1,5 +1,7 @@
 <script lang="ts">
+  import SplitPane from "./SplitPane.svelte";
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
+  import { apiFetch } from '../lib/api.js';
 
   const serverEvents = $derived(
     devtoolsStore.serverEvents as Array<{
@@ -56,14 +58,14 @@
 
   async function refresh(): Promise<void> {
     try {
-      const res = await fetch('/__svelte-devtools/server-events?last=50');
+      const res = await apiFetch('/__svelte-devtools/server-events?last=50');
       if (res.ok) devtoolsStore.setServerEvents(await res.json());
     } catch { /* noop */ }
   }
 
   async function clearAll(): Promise<void> {
     try {
-      await fetch('/__svelte-devtools/server-events', { method: 'DELETE' });
+      await apiFetch('/__svelte-devtools/server-events', { method: 'DELETE' });
     } catch { /* noop */ }
   }
 
@@ -102,7 +104,8 @@
     </div>
   </header>
 
-  <div class="split">
+  <SplitPane label="Resize server requests and details" initial={50}>
+    {#snippet first()}
     <div class="list">
       {#if filteredEvents.length > 0}
         {#each filteredEvents as evt (evt.id)}
@@ -134,6 +137,8 @@
       {/if}
     </div>
 
+    {/snippet}
+    {#snippet second()}
     <div class="detail-scroll">
       {#if selected}
         <div class="detail">
@@ -193,7 +198,7 @@
           {#if selected.data.reqHeaders}
             <div class="section-label">Request Headers</div>
             <div class="headers-block">
-              {#each Object.entries(selected.data.reqHeaders).filter(([_, v]) => v) as [key, val]}
+              {#each Object.entries(selected.data.reqHeaders).filter(([_, v]) => v) as [key, val] (key)}
                 <div class="header-row"><span class="header-key">{key}</span><span class="header-val">{val}</span></div>
               {/each}
             </div>
@@ -202,7 +207,7 @@
           {#if selected.data.resHeaders}
             <div class="section-label">Response Headers</div>
             <div class="headers-block">
-              {#each Object.entries(selected.data.resHeaders).filter(([_, v]) => v) as [key, val]}
+              {#each Object.entries(selected.data.resHeaders).filter(([_, v]) => v) as [key, val] (key)}
                 <div class="header-row"><span class="header-key">{key}</span><span class="header-val">{val}</span></div>
               {/each}
             </div>
@@ -222,7 +227,8 @@
         <div class="empty">Select a request to inspect details.</div>
       {/if}
     </div>
-  </div>
+    {/snippet}
+  </SplitPane>
 </div>
 
 <style>
@@ -237,6 +243,8 @@
   }
 
   .header {
+    flex-wrap: wrap;
+    gap: 8px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -284,17 +292,8 @@
     color: var(--text-primary);
   }
 
-  .split {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-    gap: 1px;
-    background: var(--border-default);
-  }
-
   .list {
+    height: 100%;
     overflow-y: auto;
     min-height: 0;
     background: var(--bg-surface);
@@ -302,7 +301,7 @@
 
   .item {
     display: grid;
-    grid-template-columns: auto auto 1fr auto auto;
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
     gap: var(--space-2);
     align-items: center;
     width: 100%;
@@ -371,6 +370,7 @@
   }
 
   .detail-scroll {
+    height: 100%;
     overflow-y: auto;
     min-height: 0;
     background: var(--bg-surface);
@@ -386,7 +386,7 @@
 
   .detail-row {
     display: grid;
-    grid-template-columns: 80px 1fr;
+    grid-template-columns: 80px minmax(0, 1fr);
     gap: var(--space-2);
     align-items: baseline;
     font-size: 12px;
@@ -406,33 +406,6 @@
   .error-text {
     color: var(--status-disconnected);
     font-weight: 600;
-  }
-
-  .response-block {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    align-items: flex-start;
-  }
-
-  .response-body {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    line-height: 1.3;
-    background: var(--bg-inset);
-    padding: var(--space-2);
-    border-radius: var(--radius-sm);
-    overflow-x: auto;
-    max-height: 200px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-    margin: 0;
-    max-width: 100%;
-  }
-
-  .response-block .response-body {
-    width: 100%;
   }
 
   .status-badge {
@@ -491,7 +464,9 @@
 
   .header-key {
     color: var(--syntax-key);
-    min-width: 120px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    flex-basis: 35%;
     flex-shrink: 0;
   }
 

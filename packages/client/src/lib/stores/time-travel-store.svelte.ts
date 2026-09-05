@@ -1,3 +1,4 @@
+import { resolveSnapshotInstances } from './snapshot-identity.js';
 import type { ComponentNode, TimelineEntry } from '@fsodano/svelte-devtools-types';
 import { LIMITS } from '@fsodano/svelte-devtools-types';
 
@@ -32,6 +33,7 @@ export interface TimeTravelStore {
   branches: BranchInfo[];
   currentIndex: number;
   isTimeTravelMode: boolean;
+  error: string | null;
   /** Clear isTimeTravelMode and process any deferred restore. Called by the
    *  devtools-store motion gate after restore animations drain. */
   clearTimeTravelMode: () => void;
@@ -73,6 +75,8 @@ export function createTimeTravelStore(
   setTimeline?: (t: TimelineEntry[]) => void,
   onRestore?: () => void
 ): TimeTravelStore {
+  let error = $state<string | null>(null);
+
   function getKitStateFromParent(): KitState | null {
     try {
       const parentWin = getParentWindow();
@@ -168,6 +172,7 @@ export function createTimeTravelStore(
     const liveComps = typeof parentApi.getAllComponents === 'function'
       ? (parentApi.getAllComponents as () => Array<{ id: string; state: Map<string, unknown> }>)()
       : [];
+    try {
     for (const comp of components) {
       const liveComp = liveComps.find(c => c.id === comp.id);
       for (const [key, value] of Object.entries(comp.props || {})) {
@@ -179,8 +184,10 @@ export function createTimeTravelStore(
         (parentApi.setComponentState as (id: string, key: string, value: unknown) => void)(comp.id, key, value);
       }
     }
-    parentApi.endInspectBatch?.();
-    parentApi.flushAllEffects?.();
+    } finally {
+      parentApi.endInspectBatch?.();
+      parentApi.flushAllEffects?.();
+    }
   }
 
   function getParentApi(): Record<string, unknown> | undefined {
@@ -211,12 +218,16 @@ export function createTimeTravelStore(
 
   function doRestore(index: number, truncate = false): void {
     if (index < 0 || index >= snapshots.length) return;
+    const original = snapshots[index];
+    let resolvedComponents: ComponentNode[];
+    try { resolvedComponents = resolveSnapshotInstances(original.components, getComponents()); error = null; }
+    catch (e) { error = e instanceof Error ? e.message : String(e); return; }
     isTimeTravelMode = true;
     if (truncate) snapshots = snapshots.slice(0, index + 1);
     currentIndex = index;
 
     const parentApi = getParentApi();
-    const snapshot = snapshots[index];
+    const snapshot = { ...snapshots[index], components: resolvedComponents };
     if (parentApi) {
       parentApi.isTimeTraveling = true;
       if (snapshot.kitState) parentApi._kitSnapshot = snapshot.kitState;
@@ -236,9 +247,6 @@ export function createTimeTravelStore(
         const sc = snapshot.components.find(s => s.id === c.id);
         return sc ? { ...c, state: deepClone(sc.state) } : c;
       });
-      for (const sc of snapshot.components) {
-        if (!merged.find(m => m.id === sc.id)) merged.push(deepClone(sc));
-      }
       setComponents(merged);
       lastCapturedState = { components: getComponents(), timeline: getTimeline() };
     }
@@ -246,8 +254,16 @@ export function createTimeTravelStore(
     // capture dedup that can happen after isTimeTravelMode is cleared.
     lastRestoredSnapshotJSON = JSON.stringify(snapshot.components);
     if (setTimeline) setTimeline(deepClone(snapshot.timeline));
-    pushStateToApp(snapshot.components);
-    onRestore?.();
+    try {
+      pushStateToApp(snapshot.components);
+      onRestore?.();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+      isTimeTravelMode = false;
+    } finally {
+      if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
+      if (parentApi) parentApi.isTimeTraveling = false;
+    }
 
     // isTimeTravelMode stays true to block phantom captures from pushStateToApp
     // echoes. The flushStateChanges gate in the devtools store (line 321) will
@@ -262,14 +278,14 @@ export function createTimeTravelStore(
   // cross-route goto we poll parentApi.getAllComponents() until the
   // snapshot's component ids mount (50ms interval, 2000ms budget).
   async function waitForRouteMount(snapshotComponents: ComponentNode[]): Promise<void> {
-    const snapshotIds = new Set(snapshotComponents.map(c => c.id));
+    const snapshotFiles = new Set(snapshotComponents.map(c => c.filename).filter(Boolean));
     const parentApi = getParentApi() as {
-      getAllComponents?: () => Array<{ id: string }>;
+      getAllComponents?: () => Array<{ id: string; filename?: string }>;
     } | undefined;
     const deadline = Date.now() + 2000;
     while (Date.now() < deadline) {
       const mounted = parentApi?.getAllComponents?.() ?? [];
-      if (mounted.some(c => snapshotIds.has(c.id))) return;
+      if ([...snapshotFiles].every(file => mounted.some(c => c.filename === file))) return;
       await new Promise<void>(resolve => setTimeout(resolve, 50));
     }
   }
@@ -331,18 +347,14 @@ export function createTimeTravelStore(
   }
 
   function setStateEdit(componentId: string, key: string, value: unknown): void {
-    const comps = getComponents();
-    const updated = comps.map(c => {
-      if (c.id !== componentId) return c;
-      const isProp = c.props !== undefined && Object.prototype.hasOwnProperty.call(c.props, key);
-      if (isProp) {
-        return { ...c, props: { ...c.props, [key]: value } };
-      }
-      return { ...c, state: { ...c.state, [key]: value } };
-    });
-    if (setComponents) setComponents(updated);
-    pushStateToApp(updated);
-    capture('state-edit');
+    const api = getParentApi() as { editComponentState?: (id: string, key: string, value: unknown) => void; getWritableStateKeys?: (id: string) => string[] } | undefined;
+    if (!api?.editComponentState) throw new Error('Live state editing is unavailable. Rebuild and reload the app.');
+    if (!api.getWritableStateKeys?.(componentId).includes(key)) throw new Error('This value is read-only or the component is no longer mounted.');
+    if (isTimeTravelMode) internalClearTTMode();
+    // Keep a baseline for undo. The runtime echo records the edited state through
+    // the normal capture path, including derived values and motion settlement.
+    doCapture('Before state edit');
+    api.editComponentState(componentId, key, value);
   }
 
   function clear(): void {
@@ -383,6 +395,7 @@ export function createTimeTravelStore(
     clearTimeTravelMode: () => {
       internalClearTTMode();
     },
+    get error() { return error; },
     get maxSnapshots() { return maxSnapshots; },
     capture,
     doCapture,

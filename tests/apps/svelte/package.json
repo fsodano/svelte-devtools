@@ -10,10 +10,10 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
-    "@fsodano/vite-plugin-svelte-devtools": "file:../../packages/vite-plugin",
-    "@vitejs/devtools": "^0.1.0",
+    "@fsodano/vite-plugin-svelte-devtools": "file:../../../packages/vite-plugin",
+    "@vitejs/devtools": "0.4.8",
     "playwright": "^1.59.1",
     "svelte": "^5.55.1",
-    "vite": "^8.0.3"
+    "vite": "8.2.2"
   }
 }

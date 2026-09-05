@@ -4,6 +4,8 @@
 > Source: https://github.com/vuejs/devtools
 > Status update: 2026-08-04 — adaptation status refreshed against the current `packages/client` source.
 
+> Current status: use the [completion plan](plans/pending/devtools-completion.md). The feature statuses below are a historical comparison and are not current validation results.
+
 ## 1. Architecture Overview
 
 Vue DevTools is structured across these packages:
@@ -12,7 +14,7 @@ Vue DevTools is structured across these packages:
 |---------|---------|----------------|
 | `packages/app` | Main app shell (sidebar, layout) | `packages/client/` |
 | `packages/client` | Tab pages (components, router, timeline, etc.) | `packages/client/src/components/` |
-| `packages/core` | Core logic (RPC, state management, Vue plugin) | `packages/runtime/` + `packages/bridge/` |
+| `packages/core` | Core logic (RPC, state management, Vue plugin) | `packages/runtime/` |
 | `packages/ui` | Reusable UI components (Button, Badge, DarkToggle, etc.) | Inline in `packages/client/` |
 | `packages/vite` | Vite plugin | `packages/vite-plugin/` |
 | `packages/shared` | Constants, env detection, utilities | `packages/types/` |
@@ -40,7 +42,7 @@ Vue DevTools is structured across these packages:
 - **Source link**: Click to open in editor (via `openInEditor` composable)
 - **Custom inspector tabs**: Plugins can register custom tabs
 
-**Svelte adaptation**: ✅ `ComponentTree.svelte` (search, render-duration badges, go-to-source) + `ComponentDetail.svelte` (Props/State/DOM/Source sub-tabs). ✅ Element highlighting via the runtime's inspect overlay (`enableInspector`/`disableInspector`, hover overlay + click-to-select). ⚠️ State editing exists via the time-travel store's `setStateEdit` and the `/api/set-state` endpoint, but there is no inline value editor in the detail panel yet. Slot detection and more tag types not implemented.
+**Svelte adaptation**: ✅ `ComponentTree.svelte` (search, render-duration badges, go-to-source) + `ComponentDetail.svelte` (Props/State/DOM/Source sub-tabs). ✅ Element highlighting via the runtime's inspect overlay (`enableInspector`/`disableInspector`, hover overlay + click-to-select). ✅ Version 0.1.0 adds an inline JSON state editor and acknowledged session-targeted HTTP/MCP edits. Derived and non-JSON values remain read-only. Slot detection and more tag types not implemented.
 
 ### 2c. Router Inspector (`pages/router.vue`)
 - `Router` panel component from `@vue/devtools-applet`
@@ -49,7 +51,7 @@ Vue DevTools is structured across these packages:
 - Shows current active route highlighted
 - Route metadata (name, path, component, props, etc.)
 
-**Svelte adaptation**: ✅ `RouterHub.svelte` — route listing from `/api/routes` (filesystem scan of `src/routes`), badges for page/layout/api/error, **click-to-navigate** via `svelte-devtools-navigate` postMessage to the parent. Active-route highlighting not implemented.
+**Svelte adaptation**: ✅ `RouterHub.svelte` — route listing from `/api/routes` (filesystem scan of the configured SvelteKit routes directory), badges for page/layout/api/error, **click-to-navigate** via `svelte-devtools-navigate` postMessage to the parent. Active-route highlighting not implemented.
 
 ### 2d. Timeline (`pages/timeline.vue`)
 - Category filters: Mouse, Keyboard, Component events, Performance
@@ -178,7 +180,7 @@ Vue DevTools has an `openInEditor` composable that:
 
 | Priority | Feature | Effort | Impact |
 |----------|---------|--------|--------|
-| **P1** | Inline state editing in the component detail panel | Medium | High |
+| Complete in 0.1.0 | Inline JSON state editing in the component detail panel | — | — |
 | **P2** | Assets file explorer (filesystem via plugin) | Large | Medium |
 | **P2** | Graph node selection + detail drawer | Medium | Medium |
 | **P2** | Active-route highlighting in RouterHub | Small | Medium |
