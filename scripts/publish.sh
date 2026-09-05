@@ -18,8 +18,13 @@ done
 
 npm run build
 npm run check
-npx vitest run
+npx vitest run --maxWorkers=2
 npm run test:e2e
+node scripts/verify-stress.mjs
+node scripts/verify-ssr-sql.mjs
+npm run build --prefix tests/apps/svelte-kit
+TODO_SQLITE_DB_PATH="$(mktemp -d)/todos.db" npm run build --prefix tests/apps/todo-sqlite
+node scripts/verify-production.mjs
 npm run release:check
 
 if [[ "$PUBLISH" != true ]]; then

@@ -1,6 +1,6 @@
 {
   "name": "@fsodano/vite-plugin-svelte-devtools",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "description": "Professional Vite plugin for Svelte 5 DevTools",
   "main": "dist/index.js",
@@ -27,9 +27,9 @@
   "dependencies": {
     "@babel/parser": "^7.26.0",
     "@babel/types": "^7.26.0",
-    "@fsodano/svelte-devtools-client": "^0.1.1",
-    "@fsodano/svelte-devtools-runtime": "^0.1.1",
-    "@fsodano/svelte-devtools-types": "^0.1.1",
+    "@fsodano/svelte-devtools-client": "^0.2.0",
+    "@fsodano/svelte-devtools-runtime": "^0.2.0",
+    "@fsodano/svelte-devtools-types": "^0.2.0",
     "@vitejs/devtools-kit": "^0.4.0",
     "launch-editor": "^2.14.1",
     "magic-string": "^0.30.0",

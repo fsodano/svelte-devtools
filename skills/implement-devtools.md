@@ -20,7 +20,7 @@ The project must use Svelte 5 with runes mode enabled (`compilerOptions: { runes
 
 ## Installation
 
-Use the [source installation guide](../docs/02_vite-plugin.md#installation). Release 0.1.1 is on GitHub; the 0.1.x packages are not published to npm. Build the full checkout before installing its local plugin directory in another project. Use the pinned `@vitejs/devtools@0.4.8` host.
+Use the [source installation guide](../docs/02_vite-plugin.md#installation). Release 0.2.0 is on GitHub; the 0.2.x packages are not published to npm. Build the full checkout before installing its local plugin directory in another project. Use the pinned `@vitejs/devtools@0.4.8` host.
 
 ## Vite Config Setup
 

@@ -162,7 +162,7 @@ export function createDevtoolsMcpServer(options: DevtoolsMcpOptions): McpServer 
   }, () => result(() => request('migration')));
 
   server.registerTool('svelte_server_events', {
-    description: 'Read server request traces. Requires SvelteKit tracing to be configured. Responses may contain application data.',
+    description: 'Read correlated server request, fetch, and opt-in SQLite query spans. Requires server tracing to be configured. Match data.traceId and data.parentSpanId to inspect request/query relationships. Responses may contain application data.',
     inputSchema: { last: limit, sinceId: z.string().optional() }, annotations,
   }, ({ last, sinceId }) => result(() => request('server-events', { last: String(last), ...(sinceId ? { sinceId } : {}) })));
 

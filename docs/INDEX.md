@@ -1,7 +1,7 @@
 # Svelte DevTools Developer Documentation
 
 ## Overview
-Svelte DevTools 0.1.1 is an early-development npm-workspaces monorepo with 5 packages. This documentation is for developers CONTRIBUTING to the devtools themselves.
+Svelte DevTools 0.2.0 is an early-development npm-workspaces monorepo with 5 packages. This documentation is for developers CONTRIBUTING to the devtools themselves.
 
 ## Getting Started
 
@@ -12,7 +12,7 @@ Svelte DevTools 0.1.1 is an early-development npm-workspaces monorepo with 5 pac
 
 ### Setup
 ```bash
-git clone --branch v0.1.1 https://github.com/fsodano/svelte-devtools.git
+git clone https://github.com/fsodano/svelte-devtools.git
 cd svelte-devtools
 npm ci
 npm run build

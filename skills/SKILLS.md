@@ -13,7 +13,7 @@ This directory holds skill files for AI agents working with the Svelte DevTools 
 
 Step-by-step guide to add Svelte DevTools to any project. Covers:
 
-- Building release 0.1.1 from source and installing the local plugin with the pinned host
+- Building release 0.2.0 from source and installing the local plugin with the pinned host
 - Configuring Vite for plain Svelte and SvelteKit projects (plugin ordering)
 - Setting up SvelteKit hooks for SSR support
 - Plugin options (include, exclude, enableStateInspection)

@@ -27,6 +27,8 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run check
+      - name: Install native SQLite fixture for adapter tests
+        run: npm ci --prefix tests/apps/todo-sqlite
       # The build above is required. npm test would build all packages again.
       - run: npx vitest run --maxWorkers=2
       # Checks all five publishable workspaces; never publishes a package.
@@ -46,6 +48,7 @@ jobs:
             package-lock.json
             tests/apps/svelte/package-lock.json
             tests/apps/svelte-kit/package-lock.json
+            tests/apps/todo-sqlite/package-lock.json
       - run: npm ci
       # The dock serves packages/client/dist, so build before starting fixtures.
       - run: npm run build
@@ -53,12 +56,20 @@ jobs:
         run: |
           npm ci --prefix tests/apps/svelte
           npm ci --prefix tests/apps/svelte-kit
+          npm ci --prefix tests/apps/todo-sqlite
       - run: npx playwright install --with-deps chromium
       # Global setup starts plain Svelte on 5173 with a local test API token.
       # playwright.config.ts starts SvelteKit on 5174. Both use strict ports.
       - run: npm run test:e2e
       - name: Verify large-tree lifecycle and API sync
         run: node scripts/verify-stress.mjs
+      - name: Verify real SSR and SQLite observability
+        run: node scripts/verify-ssr-sql.mjs
+      - name: Verify production previews stay uninstrumented
+        run: |
+          npm run build --prefix tests/apps/svelte-kit
+          TODO_SQLITE_DB_PATH="$RUNNER_TEMP/svelte-production-todos.db" npm run build --prefix tests/apps/todo-sqlite
+          node scripts/verify-production.mjs
       - name: Retain browser failure traces
         if: failure()
         uses: actions/upload-artifact@v4

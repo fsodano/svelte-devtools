@@ -5,7 +5,7 @@ description: Use when validating Svelte DevTools changes, checking browser autho
 
 # Verify Svelte DevTools
 
-This reference targets source release 0.1.1 and the tested `@vitejs/devtools` 0.4.8 host. Start with [source installation](../docs/02_vite-plugin.md#installation). The 0.1.x packages are not published to npm.
+This reference targets source release 0.2.0 and the tested `@vitejs/devtools` 0.4.8 host. Start with [source installation](../docs/02_vite-plugin.md#installation). The 0.2.x packages are not published to npm.
 
 ## Build and run the maintained tests
 
