@@ -40,6 +40,19 @@ describe('explicit SQLite tracing', () => {
     expect(result).toBe(value);
     expect(events[0].data.rowCount).toBeUndefined();
   });
+  it('reads array row counts without invoking a value get trap and preserves results when descriptor inspection fails', () => {
+    let valueReads = 0;
+    const rows = new Proxy([{}, {}], { get() { valueReads++; throw new Error('Unexpected value read'); } });
+    const observedRows = observed(() => traceSqliteQuery({ ...options, operation: 'all' }, () => rows));
+    expect(observedRows.result).toBe(rows);
+    expect(valueReads).toBe(0);
+    expect(observedRows.events[0].data.rowCount).toBe(2);
+
+    const opaqueRows = new Proxy([], { getOwnPropertyDescriptor() { throw new Error('Opaque result'); } });
+    const opaque = observed(() => traceSqliteQuery({ ...options, operation: 'all' }, () => opaqueRows));
+    expect(opaque.result).toBe(opaqueRows);
+    expect(opaque.events).toEqual([]);
+  });
   it('is inert when disabled or outside a request and tolerates a failing observer', () => {
     expect(observed(() => traceSqliteQuery({ ...options, enabled: false }, () => 7))).toEqual({ result: 7, events: [] });
     expect(traceSqliteQuery(options, () => 8)).toBe(8);

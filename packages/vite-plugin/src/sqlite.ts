@@ -43,7 +43,12 @@ export function traceSqliteQuery<T>(options: SqliteTraceOptions, execute: () => 
         ? options.statement : undefined;
       let rowCount: number | undefined;
       if (!failed) {
-        if (options.operation === 'all' && Array.isArray(value)) rowCount = value.length;
+        if (options.operation === 'all' && Array.isArray(value)) {
+          // Avoid value getters. A Proxy can still trap descriptor inspection;
+          // the surrounding catch keeps a failed observation from changing the result.
+          const length = Object.getOwnPropertyDescriptor(value, 'length');
+          if (length && 'value' in length && typeof length.value === 'number' && Number.isFinite(length.value)) rowCount = length.value;
+        }
         else if (options.operation === 'get') rowCount = value === undefined ? 0 : 1;
         else if (options.operation === 'run' && value && typeof value === 'object') {
           const changes = Object.getOwnPropertyDescriptor(value, 'changes');
