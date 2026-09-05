@@ -1,3 +1,6 @@
+/** Release identity shared by the runtime and HTTP API. The pack gate checks it. */
+export const DEVTOOLS_VERSION = '0.2.1';
+
 /**
  * Centralized constants for Svelte DevTools
  * Eliminates magic strings throughout the codebase

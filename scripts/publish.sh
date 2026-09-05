@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 PUBLISH=false
-PUBLISH_ARGS=(--access public)
+PUBLISH_ARGS=(--access public --registry https://registry.npmjs.org/)
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --publish) PUBLISH=true; shift ;;
@@ -26,6 +26,7 @@ npm run build --prefix tests/apps/svelte-kit
 TODO_SQLITE_DB_PATH="$(mktemp -d)/todos.db" npm run build --prefix tests/apps/todo-sqlite
 node scripts/verify-production.mjs
 npm run release:check
+node scripts/verify-package-consumer.mjs
 
 if [[ "$PUBLISH" != true ]]; then
   echo "Release validation passed. No packages published. Use --publish to publish."
@@ -33,6 +34,11 @@ if [[ "$PUBLISH" != true ]]; then
 fi
 # The same manifest graph drives the pack gate and publishing order.
 # Manifests must already use registry-safe versions; never rewrite dependencies.
+STAGING="$(mktemp -d)"
+trap 'rm -rf "$STAGING"' EXIT
 while IFS= read -r package; do
-  npm publish --workspace "$package" "${PUBLISH_ARGS[@]}"
+  npm pack --workspace "$package" --pack-destination "$STAGING" --json > "$STAGING/pack.json"
+  TARBALL="$(node -e 'const fs=require("node:fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))[0].filename)' "$STAGING/pack.json")"
+  # Publish the verified contents without inheriting project-level npm credentials.
+  (cd "$STAGING" && npm publish "$TARBALL" "${PUBLISH_ARGS[@]}")
 done < <(node scripts/release-check.mjs --list)

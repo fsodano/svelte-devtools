@@ -1,0 +1,30 @@
+{
+  "fixture": "tests/apps/todo-sqlite",
+  "isolatedDatabase": true,
+  "authenticationExcluded": true,
+  "start": 1.398,
+  "duration": 9.285,
+  "assertions": [
+    "Actual form creates persisted todo",
+    "POST create root owns INSERT SQL span",
+    "SELECT load query observed",
+    "Per-span measured durations visible",
+    "SQL template contains no bound title"
+  ],
+  "spans": [
+    {
+      "type": "server:ssr",
+      "duration": 2.739166999999725,
+      "traceId": "3d56ee5d-4b8e-4c75-9fff-53aaf1f1fefa",
+      "spanId": "396ca316-415c-41dd-8377-5a8271c9ba69"
+    },
+    {
+      "type": "server:sql",
+      "duration": 1.1128340000004755,
+      "traceId": "3d56ee5d-4b8e-4c75-9fff-53aaf1f1fefa",
+      "spanId": "ad92f4ac-7db1-4515-8ca7-2fab80129832",
+      "parentSpanId": "396ca316-415c-41dd-8377-5a8271c9ba69",
+      "statement": "INSERT INTO todos (title) VALUES (@title) RETURNING *"
+    }
+  ]
+}

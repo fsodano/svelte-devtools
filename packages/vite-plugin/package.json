@@ -1,22 +1,22 @@
 {
   "name": "@fsodano/vite-plugin-svelte-devtools",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
-  "description": "Professional Vite plugin for Svelte 5 DevTools",
+  "description": "Svelte 5 and SvelteKit DevTools for Vite: component inspection, state replay, fetch mocks, server and SQLite traces, and MCP support",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./sveltekit": {
-      "import": "./dist/sveltekit.js",
-      "types": "./dist/sveltekit.d.ts"
+      "types": "./dist/sveltekit.d.ts",
+      "import": "./dist/sveltekit.js"
     },
     "./sqlite": {
-      "import": "./dist/sqlite.js",
-      "types": "./dist/sqlite.d.ts"
+      "types": "./dist/sqlite.d.ts",
+      "import": "./dist/sqlite.js"
     }
   },
   "scripts": {
@@ -27,9 +27,9 @@
   "dependencies": {
     "@babel/parser": "^7.26.0",
     "@babel/types": "^7.26.0",
-    "@fsodano/svelte-devtools-client": "^0.2.0",
-    "@fsodano/svelte-devtools-runtime": "^0.2.0",
-    "@fsodano/svelte-devtools-types": "^0.2.0",
+    "@fsodano/svelte-devtools-client": "^0.2.1",
+    "@fsodano/svelte-devtools-runtime": "^0.2.1",
+    "@fsodano/svelte-devtools-types": "^0.2.1",
     "@vitejs/devtools-kit": "^0.4.0",
     "launch-editor": "^2.14.1",
     "magic-string": "^0.30.0",
@@ -49,9 +49,36 @@
     "access": "public"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "devDependencies": {
     "@sveltejs/kit": "^2.70.3"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fsodano/svelte-devtools.git",
+    "directory": "packages/vite-plugin"
+  },
+  "homepage": "https://github.com/fsodano/svelte-devtools#readme",
+  "bugs": {
+    "url": "https://github.com/fsodano/svelte-devtools/issues"
+  },
+  "keywords": [
+    "svelte",
+    "svelte5",
+    "sveltekit",
+    "vite",
+    "devtools",
+    "debugging",
+    "mcp",
+    "sqlite",
+    "observability",
+    "rolldown"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

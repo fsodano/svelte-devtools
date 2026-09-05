@@ -1,14 +1,14 @@
 {
   "name": "@fsodano/svelte-devtools-runtime",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "scripts": {
@@ -17,9 +17,31 @@
     "prepublishOnly": "npm run build"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fsodano/svelte-devtools.git",
+    "directory": "packages/runtime"
+  },
+  "homepage": "https://github.com/fsodano/svelte-devtools#readme",
+  "bugs": {
+    "url": "https://github.com/fsodano/svelte-devtools/issues"
+  },
+  "description": "Development runtime for Svelte DevTools component inspection, state observation, and browser fetch tracing",
+  "keywords": [
+    "svelte",
+    "svelte5",
+    "sveltekit",
+    "vite",
+    "devtools",
+    "debugging",
+    "mcp"
+  ]
 }

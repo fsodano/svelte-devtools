@@ -2,9 +2,9 @@
 
 ## Status
 
-Proposed (2026-09-05)
+Accepted (2026-09-05)
 
-> Implementation note (2026-09-05): `packages/mcp/src/index.ts` provides eight read-only stdio tools and one session-targeted state-edit tool over the HTTP API. The completion plan records a real stdio inspection test. The adapter and acknowledged command channel are implemented. Final integrated regression is tracked in the completion plan; panel-independent collection remains unsupported.
+> Acceptance note (2026-09-05): Implemented and verified in the completed DevTools work. See the [completion audit](../validation/devtools-completion-audit.md) for browser, runtime, API, and MCP evidence and remaining boundaries.
 
 ## Context
 

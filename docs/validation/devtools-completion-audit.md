@@ -1,19 +1,9 @@
-# Svelte DevTools completion plan
+# Historical verification record: DevTools completion
+
+This report preserves the original audit findings and test evidence from 2026-09-05. Statuses and release notes below describe those runs; they are not a current work queue or a claim about later releases. Durable design choices are recorded in the architecture decisions.
+
 
 Audit date: 2026-09-05. Scope: Svelte 5 components and SvelteKit applications on Vite 8, with a useful browser panel and reliable agent access.
-
-This is the active discrepancy register. It replaces the implementation queue in [inspiration.md](../../inspiration.md). The Vue DevTools comparison describes product inspiration, not a promise to reproduce Vue-specific features. A feature is complete only when its behavior works against an instrumented application. Source inspection and tests of copied logic do not establish that result.
-
-## Execution order
-
-1. Establish the build, unit, type-check, and real-browser baseline.
-2. Fix component identity, source navigation, state editing, request-to-mock workflows, interception, settings, and resizable layouts in parallel. Assign separate file ownership to reduce conflicts.
-3. Exercise the plain Svelte, SvelteKit, Pokédex, and Todo SQLite applications. Compare rendered state with API data.
-4. Verify undo and redo after application changes and inspector edits. Verify repeated instances independently.
-5. Rebuild the distributed panel, restart the servers, and repeat API and UI checks.
-6. Update this register with results. Keep unresolved limits visible in the public documentation.
-
-Priorities: P0 means incorrect application or debugger state; P1 means a broken core workflow; P2 means an incomplete supported workflow or validation gap. “Implemented; verify” means code exists but the final integrated check is pending. “Open” means the discrepancy remains. These labels are not release approval.
 
 ## Observed discrepancies
 
@@ -72,10 +62,6 @@ The initial repository baseline reported 455 unit tests passing, a successful bu
 
 Real-app observations include the Pokédex instance collapse and the Todo fixture integration failures. The MCP adapter has been exercised through real stdio against the plain Svelte application. The final build passes all five workspaces. The integrated validation below uses those built artifacts.
 
-## Release boundary
-
-Do not close this plan solely because unit tests pass. D01–D04 and D11 require application DOM, authenticated API, and panel verification. Keep open items visible. The user authorized branches, commits, pushes and PRs. Publish no npm release without a release instruction. Do not declare full Vue DevTools parity. Keep deferred capability boundaries distinct from unfinished fixes.
-
 ### Measured large-tree workflow
 
 The real Vite fixture mounts 1,000 instrumented `StressItem` components. Chromium opens the authorized panel, searches the tree, selects a component with the keyboard, updates every prop, and removes every instance. Runtime, HTTP cache, and panel all end with zero fixture instances. The metadata response contains 187,035 bytes. The accepted run measured 3,552 ms for mount/authorization/panel/sync, 1,992 ms for update/sync, 35 ms for keyboard selection, and 1,193 ms for unmount/sync. Before the tree index fix, the same teardown took 53,279 ms. These are local observations, including automation and sync overhead. They are not a cross-machine performance budget.
@@ -86,7 +72,7 @@ Run `node scripts/verify-stress.mjs` after building packages. The script uses po
 
 After the user approved the final review, the official `@sveltejs/mcp` 0.1.26 analyzer checked all 27 changed Svelte components and rune modules. Source analysis ran locally inside the network-restricted sandbox, using a cached public documentation catalog. No source was uploaded. This corrects the earlier assumption that the analyzer required external source transmission.
 
-The review reports two contextual lint issues and 46 advisory suggestions, not an issue-free report. An independent reviewer checked the affected code. The review also found unbounded Network client history and clear markers; 0.1.1 fixes that retention gap. See the [review decisions and raw results](../../validation/svelte-autofixer-review.md).
+The review reports two contextual lint issues and 46 advisory suggestions, not an issue-free report. An independent reviewer checked the affected code. The review also found unbounded Network client history and clear markers; 0.1.1 fixes that retention gap. See the [review decisions and raw results](./svelte-autofixer-review.md).
 
 ### Final integrated validation
 
@@ -100,7 +86,7 @@ The review reports two contextual lint issues and 46 advisory suggestions, not a
 - Todo SQLite acceptance: create, toggle, edit, and delete a test todo; confirm its cleanup; verify component/timeline/server-event/route APIs; inspect ten panels at 1,440- and 650-pixel browser widths with large fonts and resizable details. The three-call read-only MCP guide trial selects an explicit session and mounted instance.
 - Consumer production builds: plain Svelte and SvelteKit outputs exclude injected runtime/dock artifacts. Kit development routes return 404 in production. The no-op server import preserves global fetch.
 
-Compatibility evidence covers the current fixture runtime and Svelte 5.20 client/SSR compilation. It does not establish a full minimum-version runtime matrix, Safari/Firefox support, standalone rune-module instrumentation, or Vue DevTools feature parity. Keep D08 and D14 as explicit future capability boundaries. This register remains at the requested pending-plan path so those boundaries remain discoverable.
+Compatibility evidence covers the current fixture runtime and Svelte 5.20 client/SSR compilation. It does not establish a full minimum-version runtime matrix, Safari/Firefox support, standalone rune-module instrumentation, or Vue DevTools feature parity. Keep D08 and D14 as explicit future capability boundaries. These capability boundaries remain part of the historical audit.
 
 The final post-cleanup stress run also passes with the original five-second lifecycle assertion: 3,560 ms mount/authorization/sync, 1,077 ms update/sync, 31 ms keyboard selection, and 2,031 ms unmount/sync. The difference from the 1,193 ms causal comparison includes the periodic sync interval. No fixture instances remain in the runtime, API, or panel.
 
@@ -110,8 +96,8 @@ The final post-cleanup stress run also passes with the original five-second life
 
 Captured from the final built panel against the Pokédex fixture:
 
-- [Component graph with layout/page ancestry and 20 cards](../../images/0.1.0/component-graph.png)
-- [Narrow Network view with resizable request detail and mock action](../../images/0.1.0/network-narrow.png)
+- [Component graph with layout/page ancestry and 20 cards](../images/0.1.0/component-graph.png)
+- [Narrow Network view with resizable request detail and mock action](../images/0.1.0/network-narrow.png)
 
 ### Follow-up discrepancy D46
 

@@ -11,6 +11,8 @@
  *   Phase 3 (activate): Full runtime loads, drains queue, overrides methods.
  */
 
+import { DEVTOOLS_VERSION } from '@fsodano/svelte-devtools-types';
+
 import type {
   ComponentInstance,
   SvelteDevToolsAPI,
@@ -100,7 +102,7 @@ export function createPassiveRuntime(): GlobalRuntime {
     endInspectBatch: makePlaceholder('endInspectBatch') as GlobalRuntime['endInspectBatch'],
     flushAllEffects: makePlaceholder('flushAllEffects') as GlobalRuntime['flushAllEffects'],
 
-    version: '0.1.1',
+    version: DEVTOOLS_VERSION,
     init: () => {},
     emit: () => {},
     getState: () => ({ registry: null, connected: false, components: new Map() }),
@@ -195,7 +197,7 @@ export function getInitScript(): string {
     setComponentState:_b('setComponentState'),
     reportError:_b('reportError'),
     refresh:_b('refresh'),
-    version:'0.1.1',
+    version:${JSON.stringify(DEVTOOLS_VERSION)},
     init:function(){},
     emit:function(){},
     getState:function(){return{registry:null,connected:false,components:new Map()};},

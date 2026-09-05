@@ -1,5 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { readFileSync } from 'node:fs';
+const packageVersion: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 export interface DevtoolsMcpOptions {
   url: string;
@@ -19,7 +21,7 @@ export function createDevtoolsMcpServer(options: DevtoolsMcpOptions): McpServer 
     throw new Error('SVELTE_DEVTOOLS_URL must be an HTTP(S) origin without credentials, path, query, or fragment.');
   }
   if (!options.token.trim()) throw new Error('Set SVELTE_DEVTOOLS_TOKEN to the token used by the Vite dev server.');
-  const server = new McpServer({ name: 'svelte-devtools', version: '0.1.1' }, { instructions });
+  const server = new McpServer({ name: 'svelte-devtools', version: packageVersion }, { instructions });
   const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
   async function request(path: string, query: Record<string, string> = {}, body?: unknown): Promise<Record<string, unknown>> {

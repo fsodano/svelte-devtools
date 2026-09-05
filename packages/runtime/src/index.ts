@@ -1,6 +1,6 @@
 import { installNetworkTools } from './network-bridge.js';
 import {ComponentRegistry} from './instrumentation/registry.js';
-import { LIMITS, isJsonEditable, toDisplayValue, type TimelineEntry } from '@fsodano/svelte-devtools-types';
+import { DEVTOOLS_VERSION, LIMITS, isJsonEditable, toDisplayValue, type TimelineEntry } from '@fsodano/svelte-devtools-types';
 import type {ComponentInstance, SvelteDevToolsAPI} from '@fsodano/svelte-devtools-types';
 export { getInitScript } from './init.js';
 
@@ -57,7 +57,7 @@ function clearEventObservers(): void {
 }
 
 export const runtime = {
-    version: '0.1.1',
+    version: DEVTOOLS_VERSION,
     init(): void {
         if (state.connected) return;
         state.connected = true;

@@ -6,6 +6,16 @@ The Vite plugin (`packages/vite-plugin`) is the build-time entry point for Svelt
 
 ## Installation
 
+Install the plugin and the tested DevTools host in your existing Svelte application:
+
+```bash
+npm install -D @fsodano/vite-plugin-svelte-devtools@0.2.1 @vitejs/devtools@0.4.8
+```
+
+Use the normal Svelte integration for your application: `@sveltejs/vite-plugin-svelte@^7` for plain Vite, or SvelteKit's `sveltekit()` plugin. The configurations below show both.
+
+### Source development
+
 These instructions describe the current source, including correlated SQL tracing. Build the checkout before using the plugin or MCP server. Do not substitute the older npm packages for this implementation.
 
 ```bash
@@ -26,7 +36,7 @@ For an existing project, keep the built checkout available and install its plugi
 npm install --save-dev /absolute/path/to/svelte-devtools/packages/vite-plugin @vitejs/devtools@0.4.8
 ```
 
-The fixtures use this local-package arrangement. Do not install an individual unpublished workspace package from the registry. Rebuild the checkout after changes; restart the application server so it serves the new client and runtime artifacts.
+The fixtures use this local-package arrangement. Rebuild the checkout after changes; restart the application server so it serves the new client and runtime artifacts.
 
 The declared minimums are Node.js 20.19+, Vite 8.0.3+, and Svelte 5.20+. The tested fixtures use Vite 8.2.2 and the pinned `@vitejs/devtools` 0.4.8 host. Svelte 5.20 compiler checks cover client and SSR transforms; they are not a complete minimum-version browser matrix.
 

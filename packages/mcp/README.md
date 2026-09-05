@@ -2,27 +2,23 @@
 
 Inspect Svelte 5 applications from an MCP client. The server provides eight read-only tools and one acknowledged state-edit tool over stdio. It uses the authenticated DevTools HTTP API as its data transport.
 
-## Run from this repository
+## Connect to your running app
 
-Build the workspaces with `npm install && npm run build`. Start an instrumented app with a fixed token:
+Install [Svelte DevTools](https://www.npmjs.com/package/@fsodano/vite-plugin-svelte-devtools) in your Svelte application. In that application's directory, start its development script with a local API token:
 
 ```sh
-SVELTE_DEVTOOLS_TOKEN=your-local-token npm run dev
+export SVELTE_DEVTOOLS_TOKEN=your-local-token
+npm run dev
 ```
 
-Configure your MCP client to run `node` with the absolute path to `packages/mcp/dist/cli.js`. Pass these environment variables to that process:
-
-- `SVELTE_DEVTOOLS_URL`: Vite origin, such as `http://localhost:5173`.
-- `SVELTE_DEVTOOLS_TOKEN`: the same token used by the Vite server.
-
-Example MCP client configuration (replace the absolute path and token):
+Open the app, authorize the Vite dock, and keep the Svelte panel open. Configure your MCP client:
 
 ```json
 {
   "mcpServers": {
     "svelte-devtools": {
-      "command": "node",
-      "args": ["/absolute/path/to/svelte-dev-extension/packages/mcp/dist/cli.js"],
+      "command": "npx",
+      "args": ["-y", "@fsodano/svelte-devtools-mcp@0.2.1"],
       "env": {
         "SVELTE_DEVTOOLS_URL": "http://localhost:5173",
         "SVELTE_DEVTOOLS_TOKEN": "your-local-token"
@@ -32,7 +28,9 @@ Example MCP client configuration (replace the absolute path and token):
 }
 ```
 
-The package is not published by this change. Use the local executable until a release is available. Do not commit real tokens.
+Replace the URL and token. Dock authorization uses a separate six-digit code. Do not commit real tokens. For source development, build the root workspaces and replace the npx command with `node /absolute/path/to/packages/mcp/dist/cli.js`.
+
+[![Agent state editing and panel undo](https://raw.githubusercontent.com/fsodano/svelte-devtools/main/docs/media/agent-state-edit.gif)](https://github.com/fsodano/svelte-devtools/blob/main/docs/media/agent-state-edit.mp4)
 
 ## Workflow
 
@@ -51,7 +49,7 @@ The package is not published by this change. Use the local executable until a re
 | `svelte_snapshots` | Snapshot and branch metadata; no restore |
 | `svelte_routes` | Route inventory from the resolved SvelteKit routes directory |
 | `svelte_migration` | Migration analysis of transformed files |
-| `svelte_server_events` | Recent server traces, optionally after an event ID |
+| `svelte_server_events` | Correlated HTTP and SQLite spans, optionally after an event ID |
 | `svelte_source` | Source excerpts within the Vite project root |
 | `svelte_set_state` | Live state edit in an explicit panel session |
 
@@ -73,3 +71,7 @@ Runtime tools reject data that has never synced or is older than `maxAgeMs` (def
 An in-memory SDK test with a mocked paginated API used 1,000 components with 64 KiB of state each. A 100-component metadata page transferred 6,277 HTTP bytes and produced 13,962 result bytes. This checks bounded output, not live-app performance.
 
 The implementation uses the [official MCP TypeScript SDK](https://ts.sdk.modelcontextprotocol.io/server).
+
+SQLite spans come from explicit synchronous instrumentation, not automatic database discovery. They carry the same IDs as Network and HTTP. Use `last` between 1 and 500, then follow `traceId` and `parentSpanId`. State time travel does not roll back database writes.
+
+See the [MCP guide](https://github.com/fsodano/svelte-devtools/blob/main/docs/07_mcp.md) and [sample applications](https://github.com/fsodano/svelte-devtools#sample-apps). Independent community project; early development. [MIT](https://github.com/fsodano/svelte-devtools/blob/main/LICENSE).

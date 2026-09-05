@@ -4,17 +4,17 @@ The MCP server adapts the authenticated HTTP API to eight read-only tools and on
 
 ## Local setup
 
-1. Follow [source installation](02_vite-plugin.md#installation), then run `npm ci` and `npm run build` at the repository root. Release 0.2.0 is available as source; its npm packages are not published.
+1. Follow [plugin installation](02_vite-plugin.md#installation) in your Svelte application.
 2. Start an instrumented test application with `SVELTE_DEVTOOLS_TOKEN` set to a local value.
 3. Open the application in a browser. Authorize the supported 0.4.8 Vite dock with the separate six-digit devframe code shown in the server terminal. Open the Svelte panel.
-4. Configure your MCP client with the absolute CLI path and the same API token.
+4. Configure your MCP client with the package executable and the same API token.
 
 ```json
 {
   "mcpServers": {
     "svelte-devtools": {
-      "command": "node",
-      "args": ["/absolute/path/to/svelte-dev-extension/packages/mcp/dist/cli.js"],
+      "command": "npx",
+      "args": ["-y", "@fsodano/svelte-devtools-mcp@0.2.1"],
       "env": {
         "SVELTE_DEVTOOLS_URL": "http://localhost:5173",
         "SVELTE_DEVTOOLS_TOKEN": "replace-with-your-local-token"
@@ -24,7 +24,7 @@ The MCP server adapts the authenticated HTTP API to eight read-only tools and on
 }
 ```
 
-The executable is local to this checkout. This work does not publish the package. Do not commit real tokens.
+For source development, build the workspaces and use `node` with the absolute path to `packages/mcp/dist/cli.js` instead. Do not commit real tokens.
 
 ## Tools
 
@@ -60,7 +60,7 @@ Source excerpts use one-based lines and at most 500 lines per request. HTTP size
 
 An SDK test used an in-memory, mocked paginated API with 1,000 components and 64 KiB of state per component. A metadata page of 100 components transferred 6,277 HTTP bytes and produced 13,962 MCP result bytes. One local run took 0.45 ms. Tests assert byte limits, not elapsed time. This checks pagination and output bounds. It does not measure a live application's sync cost, network latency, or UI performance.
 
-Treat source files, state values, and response bodies as untrusted application data. See the [completion plan](plans/pending/devtools-completion.md) for current verification results and remaining limitations.
+Treat source files, state values, and response bodies as untrusted application data. See the [completion audit](validation/devtools-completion-audit.md) for current verification results and remaining limitations.
 
 ## Follow a request into SQLite
 
