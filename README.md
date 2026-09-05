@@ -6,9 +6,7 @@ Inspect live component instances, follow state changes, replay snapshots, and tu
 
 Svelte DevTools runs beside your app in the Vite DevTools dock. It is a development plugin for **Svelte 5.20+ and SvelteKit**, with no browser extension to install.
 
-[![CI](https://github.com/fsodano/svelte-devtools/actions/workflows/ci.yml/badge.svg)](https://github.com/fsodano/svelte-devtools/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/fsodano/svelte-devtools)](https://github.com/fsodano/svelte-devtools/releases)
-[![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![CI](https://github.com/fsodano/svelte-devtools/actions/workflows/ci.yml/badge.svg)](https://github.com/fsodano/svelte-devtools/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/fsodano/svelte-devtools)](https://github.com/fsodano/svelte-devtools/releases) [![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ![The live Components panel showing mounted instances, state, and props](docs/media/components.png)
 
