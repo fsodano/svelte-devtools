@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { serverEntries, traceRows, startServerTracePoll } from '../../packages/client/src/lib/server-traces.js';
+import { serverEntries, traceRows, startServerTracePoll, formatTraceDuration } from '../../packages/client/src/lib/server-traces.js';
 import { NetworkHistory } from '../../packages/client/src/lib/network-history.js';
 
 describe('production server trace adapter', () => {
@@ -93,4 +93,13 @@ describe('production server polling lifecycle', () => {
       expect(errors).toHaveBeenLastCalledWith('');
     } finally { stop(); vi.useRealTimers(); }
   });
+});
+
+
+it('formats sub-millisecond SQL durations without treating zero as missing', () => {
+  expect(formatTraceDuration(0.023, 'server:sql')).toBe('0.023 ms');
+  expect(formatTraceDuration(0.0001, 'server:sql')).toBe('<0.001 ms');
+  expect(formatTraceDuration(0, 'server:sql')).toBe('0.0 ms');
+  expect(formatTraceDuration(1, 'server:sql')).toBe('1.0 ms');
+  expect(formatTraceDuration(12.34, 'server:ssr')).toBe('12.3 ms');
 });

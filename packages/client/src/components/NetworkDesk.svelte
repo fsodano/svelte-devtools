@@ -5,7 +5,7 @@
   import { apiFetch } from '../lib/api.js';
   import { NetworkHistory } from '../lib/network-history.js';
 
-  import { startServerTracePoll, type NetworkEntry } from '../lib/server-traces.js';
+  import { startServerTracePoll, formatTraceDuration, type NetworkEntry } from '../lib/server-traces.js';
   import ServerTraceDetail from './ServerTraceDetail.svelte';
 
   interface MockRule {
@@ -248,7 +248,7 @@
                 <span class="request-url" title={entry.statement || entry.url}>{entry.statement || entry.url || entry.routeId || entry.type}</span>
                 <span class="entry-time">{formatTime(entry.timestamp)}</span>
                 {#if entry.duration !== undefined}
-                  <span class="duration">{entry.duration.toFixed(1)}ms</span>
+                  <span class="duration">{formatTraceDuration(entry.duration, entry.type)}</span>
                 {/if}
               </button>
             {/each}
@@ -286,7 +286,7 @@
             {/if}
             <div class="detail-row"><span class="label">Time</span><span class="value">{new Date(selectedEntry.timestamp).toLocaleString()}</span></div>
             {#if selectedEntry.duration !== undefined}
-              <div class="detail-row"><span class="label">Duration</span><span class="value">{selectedEntry.duration.toFixed(1)}ms</span></div>
+              <div class="detail-row"><span class="label">Duration</span><span class="value">{formatTraceDuration(selectedEntry.duration, selectedEntry.type)}</span></div>
             {/if}
             {#if selectedEntry.contentType}
               <div class="detail-row"><span class="label">Type</span><span class="value">{selectedEntry.contentType}</span></div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { traceRows, type NetworkEntry } from '../lib/server-traces.js';
+  import { traceRows, formatTraceDuration, type NetworkEntry } from '../lib/server-traces.js';
   let { entry, entries, onselect }: { entry: NetworkEntry; entries: NetworkEntry[]; onselect: (entry: NetworkEntry) => void } = $props();
   const spans = $derived(traceRows(entries, entry));
   let copyStatus = $state('');
@@ -30,12 +30,12 @@
   </dl>
   {#if entry.traceId}
     <div class="sql-heading"><strong>Trace waterfall</strong><span>{spans.length} spans</span></div>
-    <p class="note">Offsets from the earliest retained span. HTTP timing ends at response headers; SQL timing covers execution.</p>
+    <p class="note">Offsets from the earliest retained span. HTTP duration covers the server handler; SQL duration covers execution.</p>
     <div class="waterfall">
       {#each spans as span (span.entry.id)}
         <button class="span-row" class:active={span.entry.id === entry.id} onclick={() => onselect(span.entry)} aria-label={`Inspect ${span.entry.operation || span.entry.method || span.entry.type} span`}>
           <span class="span-label" style:padding-left={`${span.depth * 8}px`}>{span.entry.operation || span.entry.method || span.entry.type} · {span.entry.statement || span.entry.url || span.entry.database || 'Span'}</span>
-          <span class="timing">+{span.offset.toFixed(1)} ms · {(span.entry.duration ?? 0).toFixed(1)} ms</span>
+          <span class="timing">+{span.offset.toFixed(1)} ms · {formatTraceDuration(span.entry.duration ?? 0, span.entry.type)}</span>
           <span class="track"><span class="bar" class:sql-bar={span.entry.type === 'server:sql'} style:left={`${span.left}%`} style:width={`${Math.min(span.width, 100 - span.left)}%`}></span></span>
           {#if span.missingParent}<span class="note">Parent not retained in this buffer.</span>{/if}
         </button>

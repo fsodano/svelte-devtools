@@ -69,3 +69,9 @@ export function startServerTracePoll(
   const timer = setInterval(() => void poll(), 1000);
   return () => { disposed = true; pending?.abort(); clearInterval(timer); };
 }
+
+/** Preserve useful precision for synchronous queries, including valid zero durations. */
+export function formatTraceDuration(duration: number, type: string): string {
+  if (type === 'server:sql' && duration > 0 && duration < 0.001) return '<0.001 ms';
+  return `${duration.toFixed(type === 'server:sql' && duration > 0 && duration < 1 ? 3 : 1)} ms`;
+}
