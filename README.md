@@ -149,9 +149,9 @@ Events shows mounts, unmounts, state updates, and effects with details you can i
 
 These are development traces. Explicit SQLite spans include a bounded statement template, operation, duration, row count, and direct request parent. Statement capture is opt-in; bindings and result rows are omitted. See [SQLite setup and limits](docs/05_server.md#observe-a-sqlite-query).
 
-![SQLite query details and correlated request waterfall](docs/media/sql-traces.png)
+[![Save a Todo and inspect its SSR request and executed SQL](docs/media/todo-save-trace.gif)](docs/media/todo-save-trace.mp4)
 
-*Captured from the included Todo app during real SQLite CRUD.*
+*[Watch the save-to-SQL walkthrough](docs/media/todo-save-trace.mp4): create a real Todo, open its POST request, and inspect the executed INSERT with each span's measured duration. [View the detailed screenshot](docs/media/todo-save-trace.png).*
 
 ### Keep the workspace comfortable
 

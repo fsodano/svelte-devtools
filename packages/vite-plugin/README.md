@@ -106,9 +106,9 @@ Inspect the resulting span in Network's SQL filter, through HTTP, or with `svelt
 
 The wrapper requires an active traced request and measures synchronous execution. It does not automatically trace transactions, lazy iterators, or asynchronous database calls. State time travel does not roll back database writes. Browser fetch mocks do not affect SQL, server fetch, or XMLHttpRequest.
 
-![SQLite query and request waterfall](https://raw.githubusercontent.com/fsodano/svelte-devtools/main/docs/media/sql-traces.png)
+[![Save a Todo and follow the request into SQLite](https://raw.githubusercontent.com/fsodano/svelte-devtools/main/docs/media/todo-save-trace.gif)](https://github.com/fsodano/svelte-devtools/blob/main/docs/media/todo-save-trace.mp4)
 
-*Recorded against the included SQLite Todo application.*
+*Actual Todo save, SSR POST request, executed INSERT, and measured per-span timings. [Detailed screenshot](https://raw.githubusercontent.com/fsodano/svelte-devtools/main/docs/media/todo-save-trace.png).*
 
 ## Examples and contribution
 
