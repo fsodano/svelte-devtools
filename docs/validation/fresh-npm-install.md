@@ -31,6 +31,16 @@ The package README and installation guide now start with the setup command. They
 - The packed consumer test installed real tarballs outside the workspace. It ran the shipped setup executable twice for plain Svelte and SvelteKit. It verified assets, imports, types, MCP, SQLite exports, and production builds.
 - A second `sv create` application used those tarballs. Setup preserved its generated inline options. Type checking and production build passed.
 
+## Public registry retest
+
+All five 0.2.2 packages were published to npm. The registry initially delayed availability of the client package while processing it. After processing completed, all five registry checksums matched the validated tarballs.
+
+Recreated `~/fibradev/svelte-tests/full-sample` with `sv create`. Installed only the published plugin and host, then ran `npx svelte-devtools init`. Repeating setup added no duplicate edits. A clean `npm ci`, type check, and production build passed. The lockfile resolves every DevTools dependency to a registry tarball at version 0.2.2; none is a symlink or local dependency.
+
+The browser and authenticated API check passed with two components, seven timeline events, one route, and two server events. Incrementing the sample produced `count: 1` and `doubled: 2`. The dashboard showed the updated agent text. The component tree rendered correctly. No browser errors occurred.
+
+GitHub CI also passed the full release checks for implementation commit `c8669a1`.
+
 ## Reproduce the browser and API check
 
 Create an application and install the release:
