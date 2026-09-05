@@ -18,7 +18,7 @@
 
 **Svelte DevTools** is a Vite plugin that brings a standalone Svelte 5 DevTools panel directly into your browser during development. It hooks into the Vite dev server, injects `$inspect` calls at build time, and renders a live, interactive debugging panel — no browser extension required.
 
-**Status:** v0.0.1 — Early development. APIs may change. The [completion plan](docs/plans/pending/devtools-completion.md) records observed gaps and verification status.
+**Status:** v0.1.0 — Early development. APIs may change. The [completion plan](docs/plans/pending/devtools-completion.md) records observed gaps and verification status.
 
 ---
 
@@ -34,7 +34,7 @@
 - **Router Inspector** — Route inventory from the resolved SvelteKit routes directory, with route groups, parameter metadata, and navigation for static pages.
 - **Asset Timings** — Performance resource timing list for loaded assets.
 - **Migration Scoring** — Automatic Svelte 4 → 5 migration analysis per file, flagging legacy patterns that remain.
-- **Open in Editor** — Click any component in the tree to jump to its `.svelte` file in your IDE.
+- **Open in Editor** — Use a component's source action to open its `.svelte` file in your IDE.
 - **Agent Access** — Eight read-only MCP tools expose state, snapshots, source, routes, and migration data. A ninth tool edits writable state in an explicit live panel session. Authenticated HTTP endpoints remain available. See [MCP setup](docs/07_mcp.md).
 - **Development only** — The Vite plugin uses `apply: 'serve'`. Configure the SvelteKit hook with the `dev` guard shown below.
 
@@ -45,10 +45,10 @@
 | Requirement | Version |
 |---|---|
 | [Node.js](https://nodejs.org) | 20.19+ |
-| [Vite](https://vite.dev) | 8.0+ |
-| [Svelte](https://svelte.dev) | 5 (runes mode) |
+| [Vite](https://vite.dev) | 8.0.3+ (fixtures pinned to 8.2.2) |
+| [Svelte](https://svelte.dev) | 5.20+ (runes mode) |
 | [SvelteKit](https://kit.svelte.dev) | 2.55+ (optional — for SSR tracing) |
-| [Vite DevTools Kit](https://github.com/vitejs/devtools) | latest (`@vitejs/devtools`) |
+| [Vite DevTools host](https://github.com/vitejs/devtools) | `@vitejs/devtools@0.4.8` (tested) |
 
 - **SvelteKit** is supported out of the box — see the [SvelteKit setup](#sveltekit) below. The extra `hooks.server.ts` step enables SSR injection and server request tracing.
 - **Dev mode only.** The plugin is applied with `apply: 'serve'`, so it never runs during `vite build`. Svelte apps need `compilerOptions: { dev: true }` for full instrumentation — `@sveltejs/vite-plugin-svelte` and SvelteKit enable this automatically during development.
@@ -62,13 +62,13 @@ Add the plugin and the Vite DevTools Kit peer dependency to your dev dependencie
 
 ```bash
 # npm
-npm install -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools
+npm install -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools@0.4.8
 
 # pnpm
-pnpm add -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools
+pnpm add -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools@0.4.8
 
 # yarn
-yarn add -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools
+yarn add -D @fsodano/vite-plugin-svelte-devtools @vitejs/devtools@0.4.8
 ```
 
 > `@vitejs/devtools` provides the dock/host panel that Svelte DevTools registers into. If your package manager does not auto-install peer dependencies, install it manually — the plugin will not show up without it.
@@ -151,8 +151,8 @@ svelteDevTools({
   // File patterns to exclude from transformation (default: [/node_modules/])
   exclude: [/node_modules/, /\.svelte-kit/],
 
-  // Reserved: enable $inspect injection (default: true).
-  // Accepted for API compatibility; injection currently always runs.
+  // Enable $inspect injection (default: true).
+  // Set false to disable state inspection.
   enableStateInspection: true
 });
 ```
@@ -161,7 +161,7 @@ svelteDevTools({
 |---|---|---|---|
 | `include` | `RegExp[]` | `[/\.svelte$/]` | Which files the build-time transform processes. |
 | `exclude` | `RegExp[]` | `[/node_modules/]` | Files to skip. `.svelte-kit/generated/` files are always skipped. |
-| `enableStateInspection` | `boolean` | `true` | Reserved option — accepted, but `$inspect` injection is currently unconditional. |
+| `enableStateInspection` | `boolean` | `true` | Enable injected state inspection. Set `false` to disable it. |
 
 Debug logging is toggled with an environment variable:
 
@@ -179,6 +179,8 @@ SVELTE_DEVTOOLS_DEBUG=true npm run dev
 - **Vite DevTools authorization** — Each browser session must be authorized once against the dev server. The supported host uses a devframe authorization code. Older host versions use a single-use Manual Auth Token that can change on new connections.
 - **Time travel requires recording** — The Time Travel panel starts "Paused". Click the Record button before interacting with your app, or no snapshots are captured.
 - **Multiple Svelte apps on one page** — The runtime tracks components via a single `window.__SVELTE_DEVTOOLS_RUNTIME__` global and `data-svelte-devtools-id` attributes; multiple independent Svelte apps mounted on the same page are supported as long as each is transformed by the plugin.
+- **Mock scope** — Rules intercept browser fetch only. They do not intercept server fetch, and the live bridge preserves native XMLHttpRequest.
+- **State edits** — Writable JSON-compatible state supports inspector and session-targeted agent edits. Derived values and non-JSON values remain read-only.
 - **Pre-built libraries** — State in `.svelte` components compiled *before* the plugin was added (e.g. published component libraries) cannot be instrumented; only source files the plugin transforms are tracked.
 
 ---
@@ -205,7 +207,7 @@ Svelte 5 runes are compile-time transforms that do not exist at runtime. `$inspe
 
 ## Agent API
 
-For an MCP client, use the [local stdio server](docs/07_mcp.md). Start with `svelte_status`. Runtime inspection requires an open, authorized Svelte panel. HTTP responses carry a cache timestamp; MCP rejects missing or stale runtime data. Use `svelte_set_state` with an explicit session from status for acknowledged live edits. Remote snapshot restore is not implemented.
+For an MCP client, use the [local stdio server](docs/07_mcp.md). Start with `svelte_status`, choose a panel session, then use `svelte_components` with `includeState: false` for metadata discovery. Runtime inspection requires an open, authorized Svelte panel. HTTP responses carry a cache timestamp; MCP rejects missing or stale runtime data. Use `svelte_set_state` with an explicit session from status for acknowledged live edits. Remote snapshot restore is not implemented.
 
 AI coding assistants and automation can inspect a running app through typed RPC methods registered on the Vite DevTools context, or through plain HTTP endpoints. All RPC responses follow the `AgentResponse<T>` schema:
 
@@ -231,7 +233,7 @@ interface AgentResponse<T> {
 
 ### HTTP API
 
-Everything is also exposed as JSON at `/__svelte-devtools/api/` on the dev server. Every request requires the per-run token: send it as an `Authorization: Bearer <token>` header, or as a `?token=<token>` query parameter for `navigator.sendBeacon` calls, which cannot set headers. Requests without a valid token get `401`. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server to fix the token for scripts, or copy the token printed in the server terminal.
+Everything is also exposed as JSON at `/__svelte-devtools/api/` on the dev server. Every request requires the per-run token: send it as an `Authorization: Bearer <token>` header. The panel uses periodic authenticated `fetch` for sync. Query-token compatibility is available for clients that cannot set headers. Requests without a valid token get `401`. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server to fix the token for scripts, or copy the token printed in the server terminal.
 
 CORS is allow-listed, not wildcard. The API reflects an origin only for `http://localhost:*`, `http://127.0.0.1:*`, and any origin you configure (see `SVELTE_DEVTOOLS_ALLOWED_ORIGINS`). Requests without an `Origin` header get no CORS header at all.
 
@@ -306,17 +308,19 @@ npm run build:mcp          # @fsodano/svelte-devtools-mcp
 
 ### Internal dependencies are plain semver
 
-This monorepo uses npm workspaces. Publishable packages reference sibling packages with **plain semver ranges** — e.g. `"@fsodano/svelte-devtools-types": "^0.0.1"` — never `file:` or `workspace:` specifiers. npm is the package manager: it does not support the `workspace:` protocol, and `file:` paths would be packed verbatim into published manifests, breaking consumer installs.
+This monorepo uses npm workspaces. Publishable packages reference sibling packages with **plain semver ranges** — e.g. `"@fsodano/svelte-devtools-types": "^0.1.0"` — never `file:` or `workspace:` specifiers. npm is the package manager: it does not support the `workspace:` protocol, and `file:` paths would be packed verbatim into published manifests, breaking consumer installs.
 
 During development, npm resolves those ranges against the local workspace copies (the workspace versions satisfy the ranges), so builds keep using freshly compiled siblings. Published tarballs carry the same registry-safe ranges with no rewrite step.
 
-Before publishing, run the release gate:
+Run the full release validation without publishing:
 
 ```bash
-npm run release:check
+bash scripts/publish.sh --dry-run
 ```
 
-It fails with a non-zero exit code if any publishable package manifest contains a `file:` or `workspace:` specifier, and it dry-runs `npm pack` for every publishable workspace to prove the tarballs are pack-safe. See [ADR-0014](docs/adr/ADR-0014-publish-safe-workspace-dependencies.md) for the full decision.
+The script builds all packages, checks types, runs unit and browser tests, then checks every package with `npm pack --dry-run`. The package check rejects `file:` and `workspace:` dependency ranges and missing built entry points. For a package-only check after a build, run `npm run release:check`.
+
+When an npm release is intended, `bash scripts/publish.sh --publish` runs the same gates before publishing in dependency order. It accepts optional `--tag TAG` and `--otp CODE` arguments. `scripts/release.sh` delegates to the same workflow. Validation is the default when no publish flag is supplied. See [ADR-0014](docs/adr/ADR-0014-publish-safe-workspace-dependencies.md) for the full decision.
 
 ---
 

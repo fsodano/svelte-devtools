@@ -1,7 +1,7 @@
 # Svelte DevTools Developer Documentation
 
 ## Overview
-Svelte DevTools is an npm-workspaces monorepo with 5 packages. This documentation is for developers CONTRIBUTING to the devtools themselves.
+Svelte DevTools 0.1.0 is an early-development npm-workspaces monorepo with 5 packages. This documentation is for developers CONTRIBUTING to the devtools themselves.
 
 ## Getting Started
 
@@ -67,7 +67,7 @@ npm run test:e2e           # Playwright; starts plain and SvelteKit fixtures
 | 0007 | Network interception architecture | 🚧 Partial (mock-rules UI + interceptor class) |
 | 0008 | State reconstruction via surgical JSON diff | ✅ Implemented (per-key restore + diff view) |
 | 0009 | Secure the Agent HTTP API (token, CORS allow-list, Host check) | ✅ Implemented (2026-08-12) |
-| 0010 | Agent HTTP API Must Report Live Truth (honest migration and acknowledged mutation) | ✅ Implemented (2026-08-12) |
+| 0010 | Agent HTTP API Must Report Live Truth | Historical decision; 0.1.0 adds acknowledged session-targeted edits. See [current API](06_api.md). |
 | 0011 | Remove Dead Code, Plugin Decomposition and Bridge Package | ✅ Implemented (2026-08-12) |
 | 0012 | Stop Stubbing SvelteKit App Navigation | ✅ Implemented (2026-08-12) |
 | 0013 | Restore E2E Testing Integrity (real Playwright suite) | ✅ Implemented (2026-08-12) |
@@ -104,7 +104,7 @@ Build-time $inspect injection → Runtime state tracking → postMessage → Cli
 ### Communication
 - Runtime → Client: `postMessage` via `window-bridge.ts` (`{ source: 'svelte-devtools', type, payload }`)
 - Client → Runtime: direct calls on `window.parent.__SVELTE_DEVTOOLS__` (setComponentState, refresh, enableInspector)
-- Client → Server: HTTP API at `/__svelte-devtools/api/*` (token-authenticated polling + sendBeacon sync)
+- Client → Server: HTTP API at `/__svelte-devtools/api/*` (token-authenticated polling + fetch sync)
 - Plugin ↔ DevTools Kit: `ctx.docks` / `ctx.rpc` / `ctx.logs`
 
 ## Development Tips

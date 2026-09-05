@@ -73,6 +73,8 @@ interface SvelteDevToolsAPI {
   getComponentTree(): ComponentInstance[];            // nested by parentId
   getAllComponents(): ComponentInstance[];            // flat
   getComponentById(id: string): ComponentInstance | undefined;
+  getWritableStateKeys?(id: string): string[];         // safe JSON-edit targets
+  editComponentState?(id: string, key: string, value: unknown): void;
   getTimeline(): TimelineEntry[];                     // newest 1000 runtime events, returned as a copy
   subscribe(callback): () => void;                    // returns an unsubscribe function
   trace(name, dependencies): void;                    // emits a manual trace event
@@ -308,20 +310,20 @@ Registered in `devtools.setup` via `ctx.rpc.register`:
 
 ## HTTP API (token-authenticated)
 
-All endpoints at `/__svelte-devtools/api/` require the per-run bearer token. The token is generated once per dev-server run, printed in the terminal, and read from `SVELTE_DEVTOOLS_TOKEN` when set. Send it as an `Authorization: Bearer <token>` header, or as a `?token=<token>` query parameter for `navigator.sendBeacon` calls, which cannot set headers. Requests without a valid token get `401` with no data in the body.
+All endpoints at `/__svelte-devtools/api/` require the per-run bearer token. The token is generated once per dev-server run, printed in the terminal, and read from `SVELTE_DEVTOOLS_TOKEN` when set. Send it as an `Authorization: Bearer <token>` header. The panel uses periodic authenticated fetch for sync. Query-token compatibility remains available for clients that cannot set headers. Requests without a valid token get `401` with a JSON error and no application data.
 
 CORS is allow-listed, not wildcard. The API reflects an origin only for `http://localhost:*`, `http://127.0.0.1:*`, and origins you configure (see `SVELTE_DEVTOOLS_ALLOWED_ORIGINS`). Responses always carry `Vary: Origin`. Requests with no `Origin` header (curl, server-to-server) get no CORS header at all.
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/` or `/api/status` | Plugin status, version, endpoint list |
-| `GET` | `/api/components` | Components + state, `{count, components, cachedAt}` |
-| `GET` | `/api/timeline` | Timeline entries, `{count, entries, cachedAt}` |
+| `GET` | `/api/components` | Session-scoped component page, `{count, total, offset, components, cachedAt, sessionId}` |
+| `GET` | `/api/timeline` | Session-scoped event page, `{count, total, offset, entries, cachedAt, sessionId}` |
 | `GET` | `/api/remote` | Remote-debugging payload |
 | `GET` | `/api/server-events` | Server traces (`?last=N`, `?sinceId=X`) |
 | `DELETE` | `/api/server-events` | Clear server event buffer |
 | `GET` | `/api/migration` | Migration scores, `{overall, totalFiles, perFile}`; `overall` is `null` until components are scored |
-| `GET` | `/api/snapshots` | `{snapshots, branches, count, cachedAt}` |
+| `GET` | `/api/snapshots` | `{snapshots, branches, count, total, offset, cachedAt, sessionId}` |
 | `POST` | `/api/set-state` | Acknowledged live edit; body `{sessionId, componentId, key, value}` |
 | `GET` | `/api/source?file=<path>` | Source code with line numbers (403 outside project) |
 | `GET` | `/api/commands?sessionId=<id>&url=<url>` | Internal panel registration and command polling |
@@ -330,6 +332,8 @@ CORS is allow-listed, not wildcard. The API reflects an origin only for `http://
 | `GET` | `/api/routes` | SvelteKit route inventory from the resolved routes directory |
 
 Also available (legacy paths): `/__svelte-devtools/server-events` (GET/DELETE), `/__svelte-devtools/open-in-editor` (POST), `/__svelte-devtools/migration-score` (GET). The legacy endpoints require the same bearer token.
+
+Components, timeline, and snapshots accept `sessionId`, `offset`, and `limit`. Components also accept `id`, `name`, and `includeState=false` for metadata-only discovery. Timeline accepts `type`. Filtering and pagination run before the HTTP response is serialized. Pass an explicit session when multiple panels are open. MCP rejects a response that does not match an explicit session selection.
 
 ### Example: authenticated request
 
@@ -351,7 +355,7 @@ First read `/api/` and select a session from `capabilities.sessions`. The server
 
 A `409` response includes the failure reason. `COMMAND_NOT_DELIVERED` means the panel did not receive the command. `OUTCOME_UNKNOWN` means delivery occurred without acknowledgement; inspect live state before retrying. The broker does not automatically repeat mutations. Remote snapshot restore is not exposed.
 
-> Component/timeline/snapshot data is cached via periodic sync from the panel. If the panel has not been opened, the cache may be empty (`cachedAt: 0`). Server events are computed server-side and always available. Migration scores come from the live build-time registry: with no scored components, `overall` is `null` and `totalFiles` is `0` (ADR-0010).
+> Component/timeline/snapshot data is cached via periodic sync from the panel. If the panel has not been opened, the cache may be empty (`cachedAt: 0`). Server events require tracing integration and observed requests. Migration scores come from the live build-time registry: with no scored components, `overall` is `null` and `totalFiles` is `0` (ADR-0010).
 
 ## Store API
 
@@ -406,6 +410,6 @@ import type {
 
 See [Agent access with MCP](07_mcp.md) for the stdio setup, eight read-only tools, and one acknowledged state-edit tool. The adapter uses this HTTP API. State edits use the acknowledged panel command channel.
 
-The API root reports `apiVersion`, `capabilities`, and `operations`. Check `capabilities.runtimeData.requiresOpenPanel`, `hasSynced`, `cachedAt`, and `ageMs` before interpreting component or snapshot data. Use `capabilities.sessions` to select the target panel for state edits. `operations.setState.supported` reports the command capability; an available session is still required. Server availability alone does not establish that runtime state is live.
+The API root reports `apiVersion`, `capabilities`, and `operations`. Check `capabilities.runtimeData.requiresOpenPanel`, `hasSynced`, `cachedAt`, and `ageMs` before interpreting component or snapshot data. Use `capabilities.sessions` to select the target panel for runtime reads and state edits. `operations.setState.supported` reports the command capability; an available session is still required. Server availability alone does not establish that runtime state is live.
 
 MCP runtime tools reject missing or stale cache data. Direct HTTP clients must inspect the cache metadata themselves. Route results use the resolved SvelteKit routes directory, with `src/routes` as the fallback when configuration is unavailable; migration results cover transformed files. Neither endpoint is a full-project semantic analysis.
