@@ -58,7 +58,7 @@ flowchart TB
 
 ### 1. Install the Plugin
 
-Follow the [source installation steps](02_vite-plugin.md#installation) for GitHub release 0.2.0. Build the checkout, then use the fixture or install the built local plugin directory into your project. The 0.2.x packages are not published to npm.
+Install `@fsodano/vite-plugin-svelte-devtools@0.2.1` and the tested `@vitejs/devtools@0.4.8` host as development dependencies. Follow the [installation guide](02_vite-plugin.md#installation) for package and source workflows.
 
 ### 2. Configure Vite
 
@@ -122,7 +122,7 @@ npm run dev
 | 6 | [API Reference](./06_api.md) | Public API and type definitions |
 | — | [Vite 8 Guide](./VITE.md) | Vite 8 / Rolldown internals for plugin development |
 | — | [Agent MCP](./07_mcp.md) | Setup, tools, and runtime data limits |
-| — | [Completion plan](./plans/pending/devtools-completion.md) | Current discrepancies and verification status |
+| — | [Completion audit](./validation/devtools-completion-audit.md) | Historical findings and verification evidence |
 | — | [Inspiration](./inspiration.md) | Vue DevTools feature comparison |
 | — | [ADR](./adr/README.md) | Architecture Decision Records and historical context |
 
@@ -189,4 +189,4 @@ MIT
 
 ## Current coverage
 
-Instrumentation covers transformed component `.svelte` source. It does not instrument standalone `.svelte.ts` or `.svelte.js` rune modules or precompiled libraries. Migration results include files encountered by the transform, not a full-project audit. Browser mocks intercept client fetch requests; they do not mock SSR requests. The route endpoint is a filesystem inventory. It reads SvelteKit plugin configuration when available and otherwise uses `src/routes`. Route groups and parameter metadata are preserved. Dynamic templates require concrete parameter values before navigation. See the [completion plan](./plans/pending/devtools-completion.md) before relying on broad feature claims.
+Instrumentation covers transformed component `.svelte` source. It does not instrument standalone `.svelte.ts` or `.svelte.js` rune modules or precompiled libraries. Migration results include files encountered by the transform, not a full-project audit. Browser mocks intercept client fetch requests; they do not mock SSR requests. The route endpoint is a filesystem inventory. It reads SvelteKit plugin configuration when available and otherwise uses `src/routes`. Route groups and parameter metadata are preserved. Dynamic templates require concrete parameter values before navigation. See the [completion audit](./validation/devtools-completion-audit.md) before relying on broad feature claims.
