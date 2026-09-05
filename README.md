@@ -18,7 +18,7 @@
 
 **Svelte DevTools** is a Vite plugin that brings a standalone Svelte 5 DevTools panel directly into your browser during development. It hooks into the Vite dev server, injects `$inspect` calls at build time, and renders a live, interactive debugging panel — no browser extension required.
 
-**Status:** v0.0.1 — Early development. APIs may change.
+**Status:** v0.0.1 — Early development. APIs may change. The [completion plan](docs/plans/pending/devtools-completion.md) records observed gaps and verification status.
 
 ---
 
@@ -31,12 +31,12 @@
 - **Element Inspector** — Hover mode highlights Svelte components on the page with an overlay; click to jump to the component in the tree.
 - **Component Graph** — Force-directed graph of the component hierarchy (vis-network).
 - **Network Traces** — Server request traces (SSR + load functions, with `routeId`), client-side fetch calls, and a **mock rules** editor to stub endpoints.
-- **Router Inspector** — Live SvelteKit route map scanned from `src/routes` (params, route groups, layouts/pages/APIs) with click-to-navigate.
+- **Router Inspector** — Route inventory from the resolved SvelteKit routes directory, with route groups, parameter metadata, and navigation for static pages.
 - **Asset Timings** — Performance resource timing list for loaded assets.
 - **Migration Scoring** — Automatic Svelte 4 → 5 migration analysis per file, flagging legacy patterns that remain.
 - **Open in Editor** — Click any component in the tree to jump to its `.svelte` file in your IDE.
-- **Agent API** — AI assistants and scripts can query state, snapshots, and migration data over a typed RPC API or plain HTTP endpoints.
-- **Zero Production Impact** — All code is dev-only (`apply: 'serve'`) and stripped from production builds.
+- **Agent Access** — Eight read-only MCP tools expose state, snapshots, source, routes, and migration data. A ninth tool edits writable state in an explicit live panel session. Authenticated HTTP endpoints remain available. See [MCP setup](docs/07_mcp.md).
+- **Development only** — The Vite plugin uses `apply: 'serve'`. Configure the SvelteKit hook with the `dev` guard shown below.
 
 ---
 
@@ -132,7 +132,7 @@ The `svelteDevToolsHandle()` helper injects both the Vite DevTools client and th
 
 1. Start the dev server (`npm run dev`).
 2. Click the **Vite** floating button in the bottom-right corner of your page.
-3. Authorize the session (the dev server terminal prints a one-time Manual Auth Token).
+3. Authorize the session with the code shown by the installed DevTools host.
 4. Select the **Svelte** entry in the dock — the DevTools panel opens.
 
 ---
@@ -176,7 +176,7 @@ SVELTE_DEVTOOLS_DEBUG=true npm run dev
 - **Production safety** — The plugin has `apply: 'serve'`, so it is completely absent from `vite build` output. Your end-user bundle is untouched.
 - **SSR / SvelteKit** — DevTools instrumentation runs on the client. In SvelteKit you *must* add the `hooks.server.ts` handle (see above) or the panel will not appear in SSR responses.
 - **Client is served from `dist/`** — The DevTools panel at `/__svelte-devtools/` is pre-built; changes to the client source require `npm run build` in `packages/client` (monorepo contributors) before they appear.
-- **Vite DevTools authorization** — Each browser session must be authorized once against the dev server. The terminal prints a single-use Manual Auth Token; new WebSocket connections can invalidate the previous token.
+- **Vite DevTools authorization** — Each browser session must be authorized once against the dev server. The supported host uses a devframe authorization code. Older host versions use a single-use Manual Auth Token that can change on new connections.
 - **Time travel requires recording** — The Time Travel panel starts "Paused". Click the Record button before interacting with your app, or no snapshots are captured.
 - **Multiple Svelte apps on one page** — The runtime tracks components via a single `window.__SVELTE_DEVTOOLS_RUNTIME__` global and `data-svelte-devtools-id` attributes; multiple independent Svelte apps mounted on the same page are supported as long as each is transformed by the plugin.
 - **Pre-built libraries** — State in `.svelte` components compiled *before* the plugin was added (e.g. published component libraries) cannot be instrumented; only source files the plugin transforms are tracked.
@@ -204,6 +204,8 @@ Svelte 5 runes are compile-time transforms that do not exist at runtime. `$inspe
 ---
 
 ## Agent API
+
+For an MCP client, use the [local stdio server](docs/07_mcp.md). Start with `svelte_status`. Runtime inspection requires an open, authorized Svelte panel. HTTP responses carry a cache timestamp; MCP rejects missing or stale runtime data. Use `svelte_set_state` with an explicit session from status for acknowledged live edits. Remote snapshot restore is not implemented.
 
 AI coding assistants and automation can inspect a running app through typed RPC methods registered on the Vite DevTools context, or through plain HTTP endpoints. All RPC responses follow the `AgentResponse<T>` schema:
 
@@ -241,10 +243,10 @@ CORS is allow-listed, not wildcard. The API reflects an origin only for `http://
 | `GET` | `/api/server-events` | Server request traces with response previews. |
 | `GET` | `/api/migration` | Svelte 4→5 migration scores; `overall` is `null` until components are scored. |
 | `GET` | `/api/snapshots` | Snapshot branch tree (`parentId`, `branchId`, timestamps). |
-| `GET` | `/api/routes` | SvelteKit route map scanned from `src/routes`. |
+| `GET` | `/api/routes` | SvelteKit route inventory from the resolved routes directory. |
 | `GET` | `/api/remote` | Remote-debugging payload synced from the panel. |
 | `GET` | `/api/source?file=<path>` | Source file lookup with line numbers. |
-| `POST` | `/api/set-state` | Not implemented: returns `501`. Reserved for live state editing. |
+| `POST` | `/api/set-state` | Acknowledged live edit of `{sessionId, componentId, key, value}`. |
 | `POST` | `/api/sync` | (internal) The panel syncs runtime state here every 2s. |
 
 ```bash
@@ -267,6 +269,7 @@ packages/
   runtime/       Browser runtime: $inspect handling, component registry, postMessage, inspector
   client/        DevTools panel UI (Svelte 5, 10 tabs, built with Vite → dist/)
   types/         Shared TypeScript types and constants
+  mcp/           Stdio MCP server over the authenticated HTTP API
 ```
 
 ---
@@ -296,6 +299,7 @@ npm run build:types        # @fsodano/svelte-devtools-types
 npm run build:runtime      # @fsodano/svelte-devtools-runtime
 npm run build:vite-plugin  # @fsodano/vite-plugin-svelte-devtools
 npm run build:client       # @fsodano/svelte-devtools-client
+npm run build:mcp          # @fsodano/svelte-devtools-mcp
 ```
 
 **Important for contributors:** the DevTools panel is served from `packages/client/dist/`, not compiled on demand. After changing `packages/client/src/`, rebuild with `npm run build:client` (or `npm run build`), then restart the dev server. See [docs/00_index.md](docs/00_index.md) for the quick start and [docs/INDEX.md](docs/INDEX.md) for the developer workflow.

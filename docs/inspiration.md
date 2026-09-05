@@ -4,6 +4,8 @@
 > Source: https://github.com/vuejs/devtools
 > Status update: 2026-08-04 — adaptation status refreshed against the current `packages/client` source.
 
+> Current status: use the [completion plan](plans/pending/devtools-completion.md). The feature statuses below are a historical comparison and are not current validation results.
+
 ## 1. Architecture Overview
 
 Vue DevTools is structured across these packages:

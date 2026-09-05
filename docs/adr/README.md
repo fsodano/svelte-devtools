@@ -22,6 +22,9 @@ ADRs are for developers contributing to this repo. They are the history of the d
 | [ADR-0012](./ADR-0012-stop-stubbing-app-navigation.md) | Stop Stubbing SvelteKit App Navigation | Accepted (2026-08-12) |
 | [ADR-0013](./ADR-0013-restore-e2e-testing-integrity.md) | Restore E2E Testing Integrity | Accepted (2026-08-12) |
 | [ADR-0014](./ADR-0014-publish-safe-workspace-dependencies.md) | Publish-Safe Workspace Dependencies | Accepted (2026-08-12) |
+| [ADR-0015](./proposed/ADR-0015-shared-resizable-inspection-layouts.md) | Shared resizable inspection layouts | Proposed (2026-09-05) |
+| [ADR-0016](./proposed/ADR-0016-mcp-adapter-over-authenticated-http.md) | MCP adapter over authenticated HTTP | Proposed (2026-09-05) |
+| [ADR-0017](./proposed/ADR-0017-instance-safe-state-mutation.md) | Instance-safe state mutation | Proposed (2026-09-05) |
 
 ## Lifecycle
 
@@ -37,7 +40,7 @@ Proposed → Accepted
 
 A new ADR starts as a proposal in `docs/adr/proposed/`. It stays there until it is accepted. The `proposed/` directory is created on demand when the first proposal is added.
 
-- Proposal filename: `ADR-000N-<slug>.md`, where `N` is the next free number (see [Numbering](#numbering)) and `<slug>` is a kebab-case summary of the title. Proposals are numbered up front so they can be referenced during discussion. The next number after the current accepted set is `ADR-0015`.
+- Proposal filename: `ADR-000N-<slug>.md`, where `N` is the next free number (see [Numbering](#numbering)) and `<slug>` is a kebab-case summary of the title. Proposals are numbered up front so they can be referenced during discussion. The next available number is `ADR-0018`; proposed records also reserve numbers.
 - A proposal is a living document. Edit it freely while it is under discussion. Keep the discussion outcome in the record: add a short note about what changed and why, or fold it into the Context.
 - Acceptance is not a vote count. A proposal is accepted when it describes the decision the team is actually going to implement, and the implementation owner signs off.
 - A proposal can be rejected without ever being accepted; see [Rejected](#rejected).
@@ -66,7 +69,7 @@ A proposal that is explicitly declined gets `Status: Rejected`, with a one or tw
 
 ## Numbering
 
-- Sequential, zero-padded to four digits: `ADR-0001`, `ADR-0002`, `ADR-0008`, next is `ADR-0015`.
+- Sequential, zero-padded to four digits: `ADR-0001`, `ADR-0002`, `ADR-0008`, next is `ADR-0018`.
 - The number is assigned when the proposal file is created in `docs/adr/proposed/`, so it can be referenced during discussion. It carries through acceptance unchanged.
 - Numbers are never reused and never renumbered. A superseded record keeps its number; the gap in the sequence after a deleted rejected proposal is fine.
 - The next number is always `max(existing) + 1`. Proposals in `docs/adr/proposed/` count toward the max, so two proposals can never claim the same number.

@@ -25,45 +25,39 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packagesDir = join(root, 'packages');
 
-// Publishable workspaces, listed in dependency order.
-const PUBLISHABLE = [
-  '@fsodano/svelte-devtools-types',
-  '@fsodano/svelte-devtools-runtime',
-  '@fsodano/svelte-devtools-client',
-  '@fsodano/vite-plugin-svelte-devtools',
-];
-
 const DEP_SECTIONS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
 const UNSAFE_SPEC = /^(file:|workspace:)/;
-
-function findPackageDir(name) {
-  for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const manifestPath = join(packagesDir, entry.name, 'package.json');
-    let manifest;
-    try {
-      manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-    } catch {
-      continue; // Not a package directory.
-    }
-    if (manifest.name === name) return entry.name;
+const manifests = new Map();
+for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue;
+  try {
+    const manifest = JSON.parse(readFileSync(join(packagesDir, entry.name, 'package.json'), 'utf8'));
+    if (!manifest.private) manifests.set(manifest.name, { dir: entry.name, manifest });
+  } catch { /* Ignore directories without package manifests. */ }
+}
+const PUBLISHABLE = [];
+const visiting = new Set();
+function visit(name) {
+  if (PUBLISHABLE.includes(name)) return;
+  if (visiting.has(name)) throw new Error(`Circular publish dependency: ${name}`);
+  visiting.add(name);
+  const { manifest } = manifests.get(name);
+  for (const dependency of Object.keys({ ...manifest.dependencies, ...manifest.devDependencies, ...manifest.optionalDependencies, ...manifest.peerDependencies })) {
+    if (manifests.has(dependency)) visit(dependency);
   }
-  return null;
+  visiting.delete(name);
+  PUBLISHABLE.push(name);
+}
+for (const name of manifests.keys()) visit(name);
+if (process.argv.includes('--list')) {
+  console.log(PUBLISHABLE.join('\n'));
+  process.exit(0);
 }
 
 let failed = false;
 
 for (const name of PUBLISHABLE) {
-  const dir = findPackageDir(name);
-  if (dir === null) {
-    console.error(`✗ ${name}: publishable workspace not found under packages/`);
-    failed = true;
-    continue;
-  }
-
-  const manifest = JSON.parse(
-    readFileSync(join(packagesDir, dir, 'package.json'), 'utf8'),
-  );
+  const { manifest } = manifests.get(name);
 
   // Step 1 — manifest scan for file:/workspace: specifiers.
   const unsafe = [];
@@ -84,11 +78,19 @@ for (const name of PUBLISHABLE) {
 
   // Step 2 — prove the workspace packs cleanly. Non-interactive; no tarball written.
   try {
-    execFileSync('npm', ['pack', '--dry-run', '--workspace', name, '--json'], {
+    const packed = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--workspace', name, '--json'], {
       cwd: root,
       stdio: ['ignore', 'pipe', 'pipe'],
       encoding: 'utf8',
-    });
+    }))[0];
+    const files = new Set(packed.files.map(file => file.path));
+    const exportTargets = value => typeof value === 'string' ? [value]
+      : value && typeof value === 'object' ? Object.values(value).flatMap(exportTargets) : [];
+    const entries = [manifest.main, manifest.types, ...exportTargets(manifest.exports), ...Object.values(typeof manifest.bin === 'object' ? manifest.bin : { bin: manifest.bin })].filter(Boolean);
+    for (const entry of entries) {
+      if (!files.has(entry.replace(/^\.\//, ''))) throw new Error(`Packed entry point is missing: ${entry}`);
+    }
+    if (!packed.files.some(file => file.path.startsWith('dist/'))) throw new Error('Package contains no built dist files');
     console.log(`✓ ${name}: npm pack --dry-run passed`);
   } catch (err) {
     console.error(`✗ ${name}: npm pack --dry-run failed`);

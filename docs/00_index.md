@@ -15,9 +15,9 @@ Svelte DevTools provides real-time component inspection, state tracking, timelin
 - **Timeline**: Chronological event history (mounts, updates, effects, network) with filters
 - **Component Graph**: Force-directed graph of the component hierarchy
 - **Network Tracing**: SSR request traces (with `routeId`), client-side fetch calls, and mock rules
-- **Router Inspector**: Live SvelteKit route map scanned from `src/routes`
+- **Router Inspector**: SvelteKit route inventory from the resolved routes directory
 - **Migration Scoring**: Svelte 4 → 5 migration analysis per file
-- **Agent API**: RPC methods + HTTP endpoints for AI assistants and automation
+- **Agent Access**: MCP inspection and acknowledged state edits plus authenticated HTTP endpoints. Runtime data requires an open Svelte panel.
 - **Zero Production Impact**: All dev tools code is dev-only (`apply: 'serve'`)
 
 ## Architecture
@@ -137,6 +137,8 @@ npm run dev
 | 5 | [Server Integration](./05_server.md) | SvelteKit request tracing |
 | 6 | [API Reference](./06_api.md) | Public API and type definitions |
 | — | [Vite 8 Guide](./VITE.md) | Vite 8 / Rolldown internals for plugin development |
+| — | [Agent MCP](./07_mcp.md) | Setup, tools, and runtime data limits |
+| — | [Completion plan](./plans/pending/devtools-completion.md) | Current discrepancies and verification status |
 | — | [Inspiration](./inspiration.md) | Vue DevTools feature comparison |
 | — | [ADR](./adr/README.md) | Architecture Decision Records (8 accepted, 6 proposed) |
 
@@ -147,6 +149,7 @@ packages/
 ├── vite-plugin/       - Build-time transforms, SvelteKit hooks, server tracing, HTTP API
 ├── runtime/           - Browser runtime: state handling, component registry, inspector
 ├── client/            - DevTools panel UI (iframe, served from dist/)
+├── mcp/               - Stdio MCP adapter over the HTTP API
 └── types/             - Shared TypeScript types and constants
 ```
 
@@ -199,3 +202,7 @@ Svelte 5's runes (`$state`, `$derived`, `$effect`) are **compile-time transforms
 ## License
 
 MIT
+
+## Current coverage
+
+Instrumentation covers transformed component `.svelte` source. It does not instrument standalone `.svelte.ts` or `.svelte.js` rune modules or precompiled libraries. Migration results include files encountered by the transform, not a full-project audit. Browser mocks intercept client fetch requests; they do not mock SSR requests. The route endpoint is a filesystem inventory. It reads SvelteKit plugin configuration when available and otherwise uses `src/routes`. Route groups and parameter metadata are preserved. Dynamic templates require concrete parameter values before navigation. See the [completion plan](./plans/pending/devtools-completion.md) before relying on broad feature claims.

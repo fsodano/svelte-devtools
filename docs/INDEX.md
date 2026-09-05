@@ -1,7 +1,7 @@
 # Svelte DevTools Developer Documentation
 
 ## Overview
-Svelte DevTools is an npm-workspaces monorepo with 4 packages. This documentation is for developers CONTRIBUTING to the devtools themselves.
+Svelte DevTools is an npm-workspaces monorepo with 5 packages. This documentation is for developers CONTRIBUTING to the devtools themselves.
 
 ## Getting Started
 
@@ -22,6 +22,7 @@ npm run build:types        # Shared types
 npm run build:runtime      # Browser runtime (tsc + rolldown)
 npm run build:vite-plugin  # Vite plugin (tsc)
 npm run build:client       # DevTools UI (vite build → client/dist/)
+npm run build:mcp          # Agent MCP server (stdio)
 
 # Or all at once:
 npm run build
@@ -34,7 +35,7 @@ npm test                   # Builds everything then runs vitest
 npx vitest run tests/vite-plugin/
 npx vitest run tests/runtime/
 npx vitest run tests/client/
-npx vitest run tests/e2e/
+npm run test:e2e           # Playwright; starts plain and SvelteKit fixtures
 ```
 
 ## Documentation Structure
@@ -48,6 +49,9 @@ npx vitest run tests/e2e/
 | 04_client.md | Client UI development (Svelte 5 components, runes stores, bridge) |
 | 05_server.md | Server-side tracing (SvelteKit hooks, fetch interceptor) |
 | 06_api.md | Full API reference for all packages |
+| [Agent MCP](./07_mcp.md) | Setup, tools, freshness, and current limits |
+| [Design guidelines](./design-guidelines.md) | Visual system, resizing, settings, mutation, and agent contracts |
+| [Completion plan](./plans/pending/devtools-completion.md) | Active discrepancy register and validation status |
 | VITE.md | Vite 8 / Rolldown internals and compatibility audit |
 
 ## Architecture Decision Records
@@ -63,11 +67,14 @@ npx vitest run tests/e2e/
 | 0007 | Network interception architecture | 🚧 Partial (mock-rules UI + interceptor class) |
 | 0008 | State reconstruction via surgical JSON diff | ✅ Implemented (per-key restore + diff view) |
 | 0009 | Secure the Agent HTTP API (token, CORS allow-list, Host check) | ✅ Implemented (2026-08-12) |
-| 0010 | Agent HTTP API Must Report Live Truth (honest migration, 501 set-state) | ✅ Implemented (2026-08-12) |
+| 0010 | Agent HTTP API Must Report Live Truth (honest migration and acknowledged mutation) | ✅ Implemented (2026-08-12) |
 | 0011 | Remove Dead Code, Plugin Decomposition and Bridge Package | ✅ Implemented (2026-08-12) |
 | 0012 | Stop Stubbing SvelteKit App Navigation | ✅ Implemented (2026-08-12) |
 | 0013 | Restore E2E Testing Integrity (real Playwright suite) | ✅ Implemented (2026-08-12) |
 | 0014 | Publish-safe workspace dependencies (plain semver, release gate) | ✅ Implemented |
+| [0015](./adr/proposed/ADR-0015-shared-resizable-inspection-layouts.md) | Shared resizable inspection layouts | Proposed; integrated verification pending |
+| [0016](./adr/proposed/ADR-0016-mcp-adapter-over-authenticated-http.md) | MCP adapter over authenticated HTTP | Proposed; adapter and acknowledged edits implemented; final regression tracked in plan |
+| [0017](./adr/proposed/ADR-0017-instance-safe-state-mutation.md) | Instance-safe state mutation | Proposed; implementation and production regressions complete; final browser run tracked in plan |
 
 ## Package Architecture
 
@@ -105,4 +112,4 @@ Build-time $inspect injection → Runtime state tracking → postMessage → Cli
 - Use `curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" localhost:5173/__svelte-devtools/api/` for HTTP API verification (every endpoint requires the per-run token)
 - **Client changes require a rebuild**: the panel is served from `packages/client/dist/` — run `npm run build:client` and restart the dev server
 - The runtime builds with `tsc && rolldown` (ESM), not tsc alone
-- Vite/rolldown auto-detects source changes in workspace packages
+- Rebuild affected workspace packages before testing their distributed output; client source is not compiled on demand.

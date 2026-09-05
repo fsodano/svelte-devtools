@@ -129,9 +129,33 @@ The plugin registers its dock entry as `type: 'iframe'` (`DOCK_CONFIG` in `packa
 
 ### Authorization (Vite DevTools)
 
+**Host version matters:** The supported `@vitejs/devtools` 0.4.8 host uses a six-digit devframe authorization code. The Manual Auth Token examples below describe older hosts and must not be applied blindly to 0.4.8. Use the current browser regression helper for the installed host. Keep the API bearer token separate from dock authorization. The current workflow is verified in `tests/e2e/panel-helpers.mjs` and used by both browser tests and `scripts/verify-time-travel.mjs`.
+
+For the supported host, use this sequence:
+
+1. Read the six-digit `devframe auth code` from the server log. Remove ANSI color codes before matching it.
+2. Click the dock's `Unauthorized` button.
+3. Find the authorization frame with the textbox named `Digit 1 of 6`.
+4. Fill the six textboxes named `Digit 1 of 6` through `Digit 6 of 6`. The last digit submits the form automatically.
+5. Wait until `Unauthorized` disappears.
+6. Find `.vite-devtools-dock-entry` elements. Trigger `pointerenter`, check the `.z-floating-tooltip` text for `Svelte`, and click that entry's button. Version 0.4.8 does not put the entry name in the button's `title` attribute.
+7. Find the frame whose URL contains `__svelte-devtools`.
+
+For a runnable example from the repository root:
+
+```js
+import { openDevToolsPanel } from './tests/e2e/panel-helpers.mjs';
+const frame = await openDevToolsPanel(page, 'http://localhost:5174/', readLatestCode);
+```
+
+`readLatestCode` must return the latest six-digit code from the server log. See `scripts/verify-pokedex.mjs` for a log-file implementation. Do not wait for a new code on each browser connection: current hosts can print the code before the browser connects.
+
+#### Legacy host reference
+
+
 Vite DevTools requires authorization on each new browser session. The terminal running the Vite dev server displays a **Manual Auth Token**.
 
-**⚠️ Important timing caveat:** The Manual Auth Token is **single-use** and is **invalidated** whenever a new WebSocket connection is established from the same origin. The `auth-verify` HTTP endpoint returns `403` with plain text `"Invalid or expired auth token"` on failure (not JSON), making `res.json()` fragile. **Use the manual dialog method below — it is the only reliably working approach.**
+**⚠️ Important timing caveat:** The Manual Auth Token is **single-use** and is **invalidated** whenever a new WebSocket connection is established from the same origin. The `auth-verify` HTTP endpoint returns `403` with plain text `"Invalid or expired auth token"` on failure (not JSON), making `res.json()` fragile. **For these legacy hosts, use the manual dialog method below.**
 
 **Reliable method (Playwright — manual dialog):**
 
