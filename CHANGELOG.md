@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 — 2026-09-05
+
+- Bound Network panel history to 500 requests across client and server events. Prune clear-history markers so long sessions do not retain unbounded request data.
+- Complete the official Svelte analyzer review locally and record contextual findings and their disposition.
+
 ## 0.1.0 — 2026-09-05
 
 This is an early-development release for Svelte 5.20+ and Vite 8. APIs and behavior may change before 1.0.

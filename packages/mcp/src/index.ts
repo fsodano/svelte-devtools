@@ -19,7 +19,7 @@ export function createDevtoolsMcpServer(options: DevtoolsMcpOptions): McpServer 
     throw new Error('SVELTE_DEVTOOLS_URL must be an HTTP(S) origin without credentials, path, query, or fragment.');
   }
   if (!options.token.trim()) throw new Error('Set SVELTE_DEVTOOLS_TOKEN to the token used by the Vite dev server.');
-  const server = new McpServer({ name: 'svelte-devtools', version: '0.1.0' }, { instructions });
+  const server = new McpServer({ name: 'svelte-devtools', version: '0.1.1' }, { instructions });
   const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
   async function request(path: string, query: Record<string, string> = {}, body?: unknown): Promise<Record<string, unknown>> {

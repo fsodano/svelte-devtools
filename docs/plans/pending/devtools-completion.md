@@ -82,9 +82,11 @@ The real Vite fixture mounts 1,000 instrumented `StressItem` components. Chromiu
 
 Run `node scripts/verify-stress.mjs` after building packages. The script uses port 5180 and cleans up its own server.
 
-### Analyzer limitation
+### Analyzer review completed
 
-The local agent's Svelte code-writer skill requires: “Run `svelte-autofixer` before finalizing any Svelte component.” Automatic approval review rejected the external analyzer call because it would send local source to an external service without sufficient authorization. The analyzer was not run successfully. Local Svelte compiler checks, Svelte check, production-code regressions, and real-browser checks provide the recorded validation. This is an additional validation limitation, not a passing analyzer result.
+After the user approved the final review, the official `@sveltejs/mcp` 0.1.26 analyzer checked all 27 changed Svelte components and rune modules. Source analysis ran locally inside the network-restricted sandbox, using a cached public documentation catalog. No source was uploaded. This corrects the earlier assumption that the analyzer required external source transmission.
+
+The review reports two contextual lint issues and 46 advisory suggestions, not an issue-free report. An independent reviewer checked the affected code. The review also found unbounded Network client history and clear markers; 0.1.1 fixes that retention gap. See the [review decisions and raw results](../../validation/svelte-autofixer-review.md).
 
 ### Final integrated validation
 
@@ -110,3 +112,9 @@ Captured from the final built panel against the Pokédex fixture:
 
 - [Component graph with layout/page ancestry and 20 cards](../../images/0.1.0/component-graph.png)
 - [Narrow Network view with resizable request detail and mock action](../../images/0.1.0/network-narrow.png)
+
+### Follow-up discrepancy D46
+
+NetworkDesk appended client requests without applying the server path's 500-row cap. Clear-history markers could also accumulate forever. Version 0.1.1 uses a shared bounded history for client and server requests. It expires dismissed IDs when they leave retained source buffers and prevents overlapping server polls. Production regressions exercise client-only, server-only, mixed, and repeated-clear workloads.
+
+Follow-up validation: all five workspace builds pass; Svelte check reports zero errors and warnings; 532 tests pass in 34 files with `npx vitest run --maxWorkers=2`; all 12 browser tests pass. The new browser regression makes 525 real requests, confirms a 500-row cap and authenticated API visibility, clears the panel across two polls, and verifies only the subsequent new request appears. All five package dry runs pass. The first concurrent analyzer/unit/check run caused two existing large-store tests to exceed their five-second limit; the bounded-worker rerun passes without changing timeouts. CI uses the same worker bound.

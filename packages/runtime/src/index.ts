@@ -57,7 +57,7 @@ function clearEventObservers(): void {
 }
 
 export const runtime = {
-    version: '0.1.0',
+    version: '0.1.1',
     init(): void {
         if (state.connected) return;
         state.connected = true;

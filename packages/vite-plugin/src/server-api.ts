@@ -152,7 +152,7 @@ export async function handleApiRequest(
                 json(req, res, {
                     ok: true,
                     name: '@fsodano/vite-plugin-svelte-devtools',
-                    version: '0.1.0',
+                    version: '0.1.1',
                     endpoints: [
                         '/__svelte-devtools/api/',
                         '/__svelte-devtools/api/components',

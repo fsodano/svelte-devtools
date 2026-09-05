@@ -235,3 +235,50 @@ test('continues recording after a Spring component unmounts during motion', asyn
   await frame.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(page.getByTestId('survivor-count')).toHaveText('0');
 });
+
+test('bounds real network history at 500 and keeps cleared requests dismissed across polls', async ({ page, request }) => {
+  const frame = await openPanel(page);
+  await frame.locator('.sidebar button[title="Network"]').click();
+  const rows = frame.locator('.entry-row');
+  const clear = frame.getByRole('button', { name: 'Clear', exact: true });
+  if (await clear.isEnabled()) await clear.click();
+  await expect(rows).toHaveCount(0);
+
+  // Stay below the producer's rolling 50-event buffer per batch, and observe every batch.
+  for (let start = 0; start < 525; start += 25) {
+    const responses = await page.evaluate(async (offset) => Promise.all(
+      Array.from({ length: 25 }, async (_, index) => {
+        const response = await fetch(`/test-mock-resource.json?history=${offset + index}`, { cache: 'no-store' });
+        return { status: response.status, body: await response.text() };
+      }),
+    ), start);
+    expect(responses.every(response => response.status === 200 && response.body === '{"mocked":false}')).toBe(true);
+    await expect(frame.locator(`.request-url[title$="?history=${start + 24}"]`)).toHaveCount(1);
+  }
+  await expect(rows).toHaveCount(500);
+  await expect(frame.locator('.request-url[title$="?history=0"]')).toHaveCount(0);
+  await expect.poll(async () => {
+    const response = await request.get(`${BASE_URL}/__svelte-devtools/api/timeline?type=client:request`, {
+      headers: { Authorization: `Bearer ${API_TOKEN}` },
+    });
+    expect(response.ok()).toBe(true);
+    const data = await response.json();
+    return data.entries.some((entry: { data?: { url?: string } }) => entry.data?.url?.endsWith('?history=524'));
+  }).toBe(true);
+
+  await clear.click();
+  await expect(rows).toHaveCount(0);
+  const nextServerPoll = () => page.waitForResponse(response => response.url().includes('/__svelte-devtools/server-events?last=50'));
+  await nextServerPoll();
+  await nextServerPoll();
+  await expect(rows).toHaveCount(0);
+  await page.evaluate(async () => {
+    const response = await fetch('/test-mock-resource.json?after-clear=true', { cache: 'no-store' });
+    await response.text();
+  });
+  await expect(rows).toHaveCount(1);
+  await expect(frame.locator('.request-url[title$="?after-clear=true"]')).toHaveCount(1);
+  await nextServerPoll();
+  await expect(rows).toHaveCount(1);
+  await expect(frame.locator('.request-url[title*="?history="]')).toHaveCount(0);
+});
