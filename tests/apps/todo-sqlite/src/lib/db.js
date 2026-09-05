@@ -1,16 +1,18 @@
+import { dev } from '$app/environment';
+import { traceSqliteQuery } from '@fsodano/vite-plugin-svelte-devtools/sqlite';
 import Database from 'better-sqlite3';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, mkdirSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dataDir = join(__dirname, '../../data');
+const dbPath = process.env.TODO_SQLITE_DB_PATH || join(__dirname, '../../data/todos.db');
+const dataDir = dirname(dbPath);
 
 if (!existsSync(dataDir)) {
 	mkdirSync(dataDir, { recursive: true });
 }
 
-const dbPath = join(dataDir, 'todos.db');
 const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
@@ -51,28 +53,33 @@ const getStmt = db.prepare(
 );
 
 export function listTodos() {
-	return listStmt.all();
+	return query(listStmt, 'all', () => listStmt.all());
 }
 
 export function getTodo(id) {
-	return getStmt.get({ id });
+	return query(getStmt, 'get', () => getStmt.get({ id }));
 }
 
 export function createTodo(title) {
-	return insertStmt.get({ title: title.trim() });
+	return query(insertStmt, 'get', () => insertStmt.get({ title: title.trim() }));
 }
 
 export function toggleTodo(id) {
 	const todo = getTodo(id);
 	if (!todo) return null;
-	return toggleStmt.get({ id, completed: todo.completed ? 0 : 1 });
+	return query(toggleStmt, 'get', () => toggleStmt.get({ id, completed: todo.completed ? 0 : 1 }));
 }
 
 export function updateTodo(id, title) {
-	return updateStmt.get({ id, title: title.trim() });
+	return query(updateStmt, 'get', () => updateStmt.get({ id, title: title.trim() }));
 }
 
 export function deleteTodo(id) {
-	removeStmt.run({ id });
-	return true;
+	return query(removeStmt, 'run', () => removeStmt.run({ id })).changes > 0;
+}
+
+// These fixed templates contain no user values. Bindings and result rows are never captured.
+function query(statement, operation, execute) {
+	return traceSqliteQuery({ enabled: dev, database: 'todos', operation,
+		statement: statement.source, captureStatement: true }, execute);
 }
