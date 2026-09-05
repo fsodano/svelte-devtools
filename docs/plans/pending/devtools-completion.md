@@ -103,3 +103,10 @@ Compatibility evidence covers the current fixture runtime and Svelte 5.20 client
 The final post-cleanup stress run also passes with the original five-second lifecycle assertion: 3,560 ms mount/authorization/sync, 1,077 ms update/sync, 31 ms keyboard selection, and 2,031 ms unmount/sync. The difference from the 1,193 ms causal comparison includes the periodic sync interval. No fixture instances remain in the runtime, API, or panel.
 
 `node scripts/verify-time-travel.mjs` passes against the final build and the actual SvelteKit Spring counter: record 2/2 at 1; undo 1/2 at 0; redo 2/2 at 1. The required settlement waits are unchanged and no phantom snapshot appears.
+
+### Visual review evidence
+
+Captured from the final built panel against the Pokédex fixture:
+
+- [Component graph with layout/page ancestry and 20 cards](../../images/0.1.0/component-graph.png)
+- [Narrow Network view with resizable request detail and mock action](../../images/0.1.0/network-narrow.png)
