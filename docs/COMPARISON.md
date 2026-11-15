@@ -13,7 +13,7 @@ Scope: `packages/client` UI behavior in this workspace, with practical parity ch
 | Area | React/Vite-like expectation | Svelte DevTools behavior in this repo | Status | Evidence |
 |---|---|---|---|---|
 | Component tree | Show mounted instances, hierarchy, per-instance selection | Tree lists component instances with parent/child relationship, render duration, and detail selection. | ✅ Implemented | `packages/client/src/components/ComponentTree.svelte` |
-| Search across components | Fast text search by component name/type/fields | Built-in search field in Components tab filters by name, filename, and state keys. | ⚠️ Partial | `packages/client/src/components/ComponentTree.svelte` |
+| Search across components | Fast text search by component name/type/fields | Built-in search field in Components tab filters by name, filename, state key, and state value. Press Escape to clear the query. | ⚠️ Partial | `packages/client/src/components/ComponentTree.svelte`, `packages/client/src/lib/component-search.ts` |
 | Per-instance inspection and state | Click/select one instance and inspect live state/props | `ComponentDetail` renders props/state/DOM/source for the selected component ID. | ✅ Implemented | `packages/client/src/components/ComponentDetail.svelte`, `packages/client/src/lib/stores/devtools-store.svelte.ts` |
 | Source navigation | Open source location from component tree | Source action opens a configured local editor and reports launch errors. | ✅ Implemented | `packages/client/src/lib/open-in-editor.ts` |
 | Timeline/insight events | Show commits and render/state events | Event stream supports filtered categories and detail JSON panels. | ✅ Implemented | `packages/client/src/components/Timeline.svelte` |
@@ -47,8 +47,8 @@ Scope: `packages/client` UI behavior in this workspace, with practical parity ch
 
 ### Fixes left (explicitly deferred)
 1. **Search field coverage**
-   - The Components tab filters by component name, file name, and state key. The filter lives in `ComponentTree.svelte`.
-   - State values are not searched, and props are not searched.
+   - The Components tab filters by component name, file name, state key, and state value. The filter lives in `ComponentTree.svelte` and uses `packages/client/src/lib/component-search.ts`.
+   - Props are not searched, and state values are searched two levels deep.
 2. **React-like profiler mode**
    - Not yet implemented because the request is scoped to practical parity only, not a full profiler feature rewrite.
 3. **Store inspector panel**

@@ -62,56 +62,72 @@
   <div class="main">
     <Sidebar bind:activeTab />
     <div class="content">
-      {#if activeTab === "info"}
-        <Dashboard navigate={(tab: string) => activeTab = tab} />
-      {:else if activeTab === "components"}
-        <SplitPane label="Resize component tree and details" initial={36}>
-          {#snippet first()}
-          <ComponentTree
-            {components}
-            onSelect={(id) => (selectedComponent = id)}
-            selectedId={selectedComponent}
+      <svelte:boundary>
+        {#if activeTab === "info"}
+          <Dashboard navigate={(tab: string) => activeTab = tab} />
+        {:else if activeTab === "components"}
+          <SplitPane label="Resize component tree and details" initial={36}>
+            {#snippet first()}
+            <ComponentTree
+              {components}
+              onSelect={(id) => (selectedComponent = id)}
+              selectedId={selectedComponent}
+            />
+            {/snippet}
+            {#snippet second()}
+            {#if selectedComponent}
+              <ComponentDetail componentId={selectedComponent} />
+            {:else}
+              <div class="empty">
+                {#if components.length === 0}
+                  <span>No components found.</span>
+                  <button class="refresh-btn" onclick={() => devtoolsStore.refresh()}>
+                    Refresh
+                  </button>
+                {:else}
+                  Select a component
+                {/if}
+              </div>
+            {/if}
+            {/snippet}
+          </SplitPane>
+        {:else if activeTab === "timeline"}
+          <Timeline />
+        {:else if activeTab === "timetravel"}
+          <TimeTravelConsole />
+        {:else if activeTab === "graph"}
+          <ComponentGraph
+            onSelect={(id) => {
+              activeTab = 'components';
+              selectedComponent = id;
+            }}
           />
-          {/snippet}
-          {#snippet second()}
-          {#if selectedComponent}
-            <ComponentDetail componentId={selectedComponent} />
-          {:else}
-            <div class="empty">
-              {#if components.length === 0}
-                <span>No components found.</span>
-                <button class="refresh-btn" onclick={() => devtoolsStore.refresh()}>
-                  Refresh
-                </button>
-              {:else}
-                Select a component
-              {/if}
+        {:else if activeTab === "network"}
+          <NetworkDesk />
+        {:else if activeTab === "router"}
+          <RouterHub />
+        {:else if activeTab === "assets"}
+          <Assets />
+        {:else if activeTab === "migration"}
+          <MigrationScore />
+        {:else if activeTab === "settings"}
+          <Settings />
+        {/if}
+
+        {#snippet failed(error: unknown, reset: () => void)}
+          <div class="panel-error" role="alert">
+            <div class="error-card">
+              <h2 class="error-title">This panel hit an error</h2>
+              <p class="error-message">{error instanceof Error ? error.message : String(error)}</p>
+              <button type="button" class="retry-btn" onclick={reset}>Try again</button>
+              <details class="error-details">
+                <summary>Stack trace</summary>
+                <pre class="error-stack">{error instanceof Error && error.stack ? error.stack : "No stack trace is available."}</pre>
+              </details>
             </div>
-          {/if}
-          {/snippet}
-        </SplitPane>
-      {:else if activeTab === "timeline"}
-        <Timeline />
-      {:else if activeTab === "timetravel"}
-        <TimeTravelConsole />
-      {:else if activeTab === "graph"}
-        <ComponentGraph
-          onSelect={(id) => {
-            activeTab = 'components';
-            selectedComponent = id;
-          }}
-        />
-      {:else if activeTab === "network"}
-        <NetworkDesk />
-      {:else if activeTab === "router"}
-        <RouterHub />
-      {:else if activeTab === "assets"}
-        <Assets />
-      {:else if activeTab === "migration"}
-        <MigrationScore />
-      {:else if activeTab === "settings"}
-        <Settings />
-      {/if}
+          </div>
+        {/snippet}
+      </svelte:boundary>
     </div>
   </div>
 </div>
@@ -132,6 +148,15 @@
   .status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
   .main { display: flex; flex: 1; overflow: hidden; }
   .content { flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg-base); }
+  .panel-error { height: 100%; overflow: auto; padding: var(--space-6); background: var(--bg-base); }
+  .error-card { max-width: 640px; padding: var(--space-5); background: var(--bg-surface); border: 1px solid var(--border-default); border-left: 3px solid var(--text-error); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+  .error-title { margin: 0 0 var(--space-2); color: var(--text-primary); font-size: 16px; font-weight: 600; }
+  .error-message { margin: 0; color: var(--text-error); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+  .retry-btn { margin-top: var(--space-4); padding: var(--space-2) var(--space-3); border: 1px solid var(--accent-primary); border-radius: var(--radius-sm); background: var(--accent-primary); color: var(--text-inverse); font-size: 12px; font-weight: 600; cursor: pointer; transition: background var(--transition-fast); }
+  .retry-btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .error-details { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--border-default); }
+  .error-details summary { color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+  .error-stack { max-height: 240px; overflow: auto; margin: var(--space-3) 0 0; padding: var(--space-3); background: var(--bg-inset); border-radius: var(--radius-sm); color: var(--text-secondary); font-family: var(--font-mono); font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
   .empty { height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-surface); color: var(--text-muted); font-size: 13px; }
   .refresh-btn { margin-left: var(--space-2); padding: var(--space-1) var(--space-2); font-size: 11px; }
 </style>
