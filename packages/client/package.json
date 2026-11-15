@@ -10,11 +10,11 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "vis-network": "^9.1.9"
+    "vis-network": "^10.1.5"
   },
   "devDependencies": {
-    "@phosphor-icons/core": "^2.1.1",
     "@fsodano/svelte-devtools-types": "^0.4.0",
+    "@phosphor-icons/core": "^2.1.1",
     "@sveltejs/vite-plugin-svelte": "^7.0.0"
   },
   "publishConfig": {

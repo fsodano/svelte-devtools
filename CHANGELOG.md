@@ -15,6 +15,11 @@
 
 - CI now runs on Node.js 24. The build, type check, unit test, and package gate jobs run on Node.js 22 and Node.js 24, so a change cannot break the declared minimum. The browser suite runs on Node.js 24.
 - The documented Node.js workflow is Node.js 24. The declared minimums are unchanged.
+- The dependencies move to their latest releases. `@babel/parser` and `@babel/types` move to 8, `magic-string` to 1, `vis-network` to 10, and `happy-dom` to 21. The rest move to their latest patch or minor release.
+
+### Security
+
+- The `happy-dom` advisory for parsing untrusted HTML is resolved by the major update. Four low severity advisories remain in the SvelteKit 2 dependency chain (`cookie`, `deepmerge`, `@sveltejs/kit`, `@sveltejs/vite-plugin-svelte`). They live in SvelteKit itself, so they affect a consumer only while that consumer runs SvelteKit 2. The plugin declares `peerDependencies: "@sveltejs/kit": "^2.55.0"` and the fixtures test that line. SvelteKit 3 moved the `Handle` type to `@sveltejs/kit/hooks`, so supporting it changes the public type surface and the peer range. That belongs in its own change, not in a dependency refresh.
 
 ## 0.3.5 — 2026-11-15
 
