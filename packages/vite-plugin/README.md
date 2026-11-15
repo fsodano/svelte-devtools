@@ -13,7 +13,7 @@ Inspect live component instances, edit state, replay snapshots, and follow reque
 - Connect an agent through nine MCP tools, including acknowledged state edits in a selected live session.
 - Resize detail panes and choose theme, text size, and motion settings.
 
-Independent community project. Early development; APIs may change. Requires Svelte 5.20+, Vite 8, and a supported Node.js release. Use Node.js 22.12+ for the documented workflow. The tested Vite DevTools host is 0.4.8; Chromium is the tested browser.
+Independent community project. Early development; APIs may change. Requires Svelte 5.20+, Vite 8, and a supported Node.js release. Use Node.js 22.12+ or newer. The documented workflow and CI use Node.js 24. The tested Vite DevTools host is 0.4.8; Chromium is the tested browser.
 
 ## Install
 

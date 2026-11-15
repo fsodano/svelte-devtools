@@ -11,6 +11,11 @@
 - The runtime guide described a "Phase 1 — passive buffer" that the plugin did not implement. It now describes the real loading and queueing behavior.
 - The `window.__SVELTE_DEVTOOLS_RUNTIME__` type described the placeholder runtime. It now describes the live runtime, so the type no longer lists members the runtime does not have.
 
+### Changed
+
+- CI now runs on Node.js 24. The build, type check, unit test, and package gate jobs run on Node.js 22 and Node.js 24, so a change cannot break the declared minimum. The browser suite runs on Node.js 24.
+- The documented Node.js workflow is Node.js 24. The declared minimums are unchanged.
+
 ## 0.3.5 — 2026-11-15
 
 ### Fixed

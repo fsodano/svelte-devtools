@@ -64,7 +64,15 @@ describe('explicit SQLite tracing', () => {
 import { createRequire } from 'node:module';
 const fixtureRequire = createRequire(new URL('../apps/todo-sqlite/package.json', import.meta.url));
 let Database: any;
-try { Database = fixtureRequire('better-sqlite3'); } catch { /* Install the Todo fixture to run native coverage. */ }
+try {
+  Database = fixtureRequire('better-sqlite3');
+  // The binding must match the running Node version. A fixture installed under
+  // another Node version still loads but cannot open a database, so probe it.
+  new Database(':memory:').close();
+} catch {
+  // Install the Todo fixture, or rebuild it for the running Node version.
+  Database = undefined;
+}
 it.skipIf(!Database)('preserves native SQLite bindings, fluent configuration, changes, and transaction rollback', () => {
   const db = new Database(':memory:');
   try {

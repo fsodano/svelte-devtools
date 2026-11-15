@@ -6,7 +6,7 @@ Svelte DevTools 0.4.0 is an early-development npm-workspaces monorepo with 5 pac
 ## Getting Started
 
 ### Prerequisites
-- Node.js 20.19+
+- Node.js 22.12+ (CI uses Node.js 22 and Node.js 24)
 - npm workspaces
 - Vite 8.0.3+ (fixtures test 8.2.2 with the 0.4.8 DevTools host)
 
