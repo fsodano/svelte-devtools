@@ -3,6 +3,7 @@ import { startCommandClient } from '../command-client.js';
 import { createWindowBridge } from '../bridge/window-bridge.js';
 import { createTimeTravelStore } from './time-travel-store.svelte.js';
 import { apiFetch } from '../api.js';
+import { matchesComponentQuery } from '../component-search.js';
 import type {
   ComponentNode,
   TimelineEntry,
@@ -470,16 +471,11 @@ function createDevtoolsStore() {
       return; // Skip writing searchResults when query is empty — nothing reads it
     }
 
-    const lowerQuery = query.toLowerCase();
-    searchResults = allComponents.filter(comp => {
-      if (comp.name.toLowerCase().includes(lowerQuery)) return true;
-      if (comp.filename?.toLowerCase().includes(lowerQuery)) return true;
-      const stateKeys = Object.keys(comp.state || {});
-      if (stateKeys.some(key => key.toLowerCase().includes(lowerQuery))) return true;
-      const stateValues = Object.values(comp.state || {});
-      if (stateValues.some(val => String(val).toLowerCase().includes(lowerQuery))) return true;
-      return false;
-    });
+    // Use the shared predicate. State values reach the client through
+    // toDisplayValue, which returns objects with a null prototype. Calling
+    // String() on such an object throws, so the filter must not stringify
+    // state values directly.
+    searchResults = allComponents.filter(comp => matchesComponentQuery(comp, query));
   }
 
   function getFilteredComponents(allComponents: ComponentNode[]): ComponentNode[] {

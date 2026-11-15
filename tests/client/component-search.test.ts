@@ -62,6 +62,25 @@ describe('matchesComponentQuery', () => {
     const sparse: SearchableComponent = { id: 's', name: 'Sparse', state: { a: null, b: undefined } };
     expect(matchesComponentQuery(sparse, 'null')).toBe(false);
   });
+
+  it('matches a value in an object with a null prototype', () => {
+    // toDisplayValue returns objects with a null prototype. String() throws on
+    // them, so the filter must not stringify a state value directly.
+    const nested = Object.create(null) as Record<string, unknown>;
+    nested.id = 1;
+    nested.name = 'Alice';
+    const component: SearchableComponent = { id: 'n', name: 'Nested', state: { user: nested } };
+    expect(matchesComponentQuery(component, 'alice')).toBe(true);
+    expect(matchesComponentQuery(component, 'nobody')).toBe(false);
+  });
+
+  it('matches when the whole state record has a null prototype', () => {
+    const state = Object.create(null) as Record<string, unknown>;
+    state.label = 'Clicks';
+    const component: SearchableComponent = { id: 'p', name: 'Bare', state };
+    expect(matchesComponentQuery(component, 'clicks')).toBe(true);
+    expect(matchesComponentQuery(component, 'nothing')).toBe(false);
+  });
 });
 
 describe('filterEntriesByQuery', () => {

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.5 — 2026-11-15
+
+### Fixed
+
+- Searching the Components tab no longer takes down the panel. A query that matched no component threw `TypeError: Cannot convert object to primitive value` and left the panel blank. State values reach the panel through `toDisplayValue`, which returns objects with a null prototype, and the filter called `String()` on them.
+- The component search filter and the tree filter now use one shared predicate. They had drifted apart, and only the tree filter matched state values.
+- The JSON tree no longer calls `String()` on a symbol, which throws.
+
+### Added
+
+- A browser test for the component search. It covers a match on a state value, a query with no match, and clearing the query with Escape.
+- A browser test for the component graph. It finds a node on the canvas and checks that a double-click opens the component in the tree.
+
 ## 0.3.4 — 2026-11-15
 
 ### Fixed

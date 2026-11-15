@@ -9,7 +9,7 @@ The Vite plugin (`packages/vite-plugin`) is the build-time entry point for Svelt
 Install the plugin and the tested DevTools host in your existing Svelte application:
 
 ```bash
-npm install -D @fsodano/vite-plugin-svelte-devtools@0.3.4 @vitejs/devtools@0.4.8
+npm install -D @fsodano/vite-plugin-svelte-devtools@0.3.5 @vitejs/devtools@0.4.8
 npx svelte-devtools init
 npm run dev
 ```

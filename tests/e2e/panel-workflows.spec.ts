@@ -1,5 +1,5 @@
 import { expect, test, type Frame, type Page } from '@playwright/test';
-import { openDevToolsPanel } from './panel-helpers.mjs';
+import { openDevToolsPanel, findGraphNodePoint } from './panel-helpers.mjs';
 import { readFileSync } from 'node:fs';
 import { API_TOKEN, BASE_URL, TOKEN_FILE } from './constants';
 
@@ -98,6 +98,48 @@ test('resizes network and component panes with keyboard and resets their size', 
   }
 });
 
+
+test('searches components by state value, reports no match, and clears with Escape', async ({ page }) => {
+  const frame = await openPanel(page);
+  await frame.locator('.sidebar button[title="Components"]').click();
+  const search = frame.getByLabel('Search components', { exact: true });
+  await expect(search).toBeVisible();
+
+  // "world" is the value of a $state variable in the kitchen sink fixture. It
+  // appears in no component name, file name, or state key.
+  await search.fill('world');
+  await expect(frame.locator('.match-count')).toHaveText('1 match');
+  await expect(frame.locator('.component-row .name')).toHaveText(['TestAllCases']);
+
+  // A query that matches nothing must show the empty state. This used to
+  // throw while stringifying a state value and take the whole panel down.
+  await search.fill('zzz-no-such-component');
+  await expect(frame.locator('.empty-search')).toBeVisible();
+  await expect(frame.locator('.empty-search-text')).toContainText('No components match');
+  await expect(frame.locator('.panel-error')).toHaveCount(0);
+  await expect(frame.locator('.search-input')).toBeVisible();
+
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+  await expect(frame.locator('.match-count')).toHaveCount(0);
+  await expect(frame.locator('.component-row')).toHaveCount(3);
+});
+
+test('opens the component under a graph node and selects it in the tree', async ({ page }) => {
+  const frame = await openPanel(page);
+  await frame.locator('.sidebar button[title="Graph"]').click();
+  await frame.locator('.graph-container canvas').waitFor();
+  await expect(frame.locator('.graph-hint')).toContainText('Double-click a node');
+
+  // The graph draws its nodes on a canvas, so the test locates one by pixel.
+  await expect.poll(async () => (await findGraphNodePoint(frame, page)) !== null, { timeout: 20_000 }).toBe(true);
+  const point = await findGraphNodePoint(frame, page);
+  await page.mouse.dblclick(point!.x, point!.y);
+
+  await expect(frame.locator('.sidebar button[title="Components"]')).toHaveClass(/active/);
+  await expect(frame.locator('.component-row.selected')).toHaveCount(1);
+  await expect(frame.locator('.panel-error')).toHaveCount(0);
+});
 
 test('edits repeated component state with validation, sibling isolation, and undo/redo', async ({ page }) => {
   const frame = await openPanel(page, '/state-edit.html');

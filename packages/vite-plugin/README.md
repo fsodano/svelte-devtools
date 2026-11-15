@@ -20,7 +20,7 @@ Independent community project. Early development; APIs may change. Requires Svel
 For an existing Vite + Svelte project:
 
 ```bash
-npm install -D @fsodano/vite-plugin-svelte-devtools@0.3.4 @vitejs/devtools@0.4.8
+npm install -D @fsodano/vite-plugin-svelte-devtools@0.3.5 @vitejs/devtools@0.4.8
 npx svelte-devtools init
 npm run dev
 ```
@@ -79,7 +79,7 @@ Keep the authorized Svelte panel open. Configure an MCP-compatible client with t
   "mcpServers": {
     "svelte-devtools": {
       "command": "npx",
-      "args": ["-y", "@fsodano/svelte-devtools-mcp@0.3.4"],
+      "args": ["-y", "@fsodano/svelte-devtools-mcp@0.3.5"],
       "env": {
         "SVELTE_DEVTOOLS_URL": "http://localhost:5173",
         "SVELTE_DEVTOOLS_TOKEN": "replace-with-your-local-token"
