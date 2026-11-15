@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { indexComponentTree, flattenComponentTree } from '../lib/component-tree.js';
+  import { filterEntriesByQuery } from '../lib/component-search.js';
   import { getSourceLocation, formatSourceLocation, openInEditor } from '../lib/open-in-editor.js';
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte';
 
@@ -69,20 +70,7 @@
 
   const flatList = $derived(flattenComponentTree(treeIndex, expanded));
 
-  const filteredList = $derived.by(() => {
-    if (!searchTerm.trim()) return flatList;
-    const lowerTerm = searchTerm.toLowerCase();
-    return flatList.filter(
-      ({ component }) =>
-        component.name.toLowerCase().includes(lowerTerm) ||
-        (component.filename &&
-          component.filename.toLowerCase().includes(lowerTerm)) ||
-        (component.state &&
-          Object.keys(component.state).some((key) =>
-            key.toLowerCase().includes(lowerTerm),
-          )),
-    );
-  });
+  const filteredList = $derived(filterEntriesByQuery(flatList, searchTerm));
 
   const matchCount = $derived(filteredList.length);
 
@@ -153,8 +141,15 @@
       <input
         type="text"
         placeholder="Search components..."
+        aria-label="Search components"
         bind:value={searchTerm}
         class="search-input"
+        onkeydown={(e) => {
+          if (e.key === 'Escape' && searchTerm) {
+            e.preventDefault();
+            searchTerm = '';
+          }
+        }}
       />
       {#if searchTerm.trim()}
         <span class="match-count">
@@ -190,7 +185,7 @@
         <span class="empty-search-text">
           No components match "<strong>{searchTerm}</strong>"
         </span>
-        <span class="empty-search-hint">Try a different name, filename, or state key</span>
+        <span class="empty-search-hint">Try a different name, filename, state key, or value</span>
       </div>
     {:else}
       <div class="tree-content" style="height: {filteredList.length * 32}px">

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2 — 2026-11-15
+
+### Added
+
+- A Svelte error boundary around the panel views. When a view throws, the panel shows the error message and a retry button instead of going blank. The header and sidebar stay usable.
+- The Components tab search matches state values, not only state keys. Press Escape to clear the query.
+
+### Changed
+
+- The search filter moved to `packages/client/src/lib/component-search.ts` with unit tests. State values are searched two levels deep, so a large nested object cannot stall the filter.
+
 ## 0.3.1 — 2026-11-15
 
 ### Removed
