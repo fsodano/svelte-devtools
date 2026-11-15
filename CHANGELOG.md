@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.1 — 2026-11-15
+
+### Removed
+
+- Unused panel code. `packages/client/src/panel.ts` was a second, older panel bootstrap with no entry point. `ServerView.svelte` was superseded by the Network panel. `SearchBox.svelte` and `ErrorBoundary.svelte` were never imported.
+- The unused `beaconUrl` helper in the client API module. The panel sends every request with `apiFetch`, which sets an `Authorization` header.
+- `scripts/release.sh`, a wrapper that only ran `scripts/publish.sh`. The publish script remains the entry point.
+
+### Changed
+
+- The Settings scale list comes from the shared `UI_SCALES` value. The two lists can no longer drift apart.
+
 ## 0.3.0 — 2026-11-15
 
 ### Added
