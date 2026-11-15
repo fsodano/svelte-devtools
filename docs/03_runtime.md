@@ -4,10 +4,10 @@ The runtime package (`packages/runtime`) receives state changes from injected `$
 
 ## Loading
 
-The runtime loads in two phases (see `src/init.ts`):
+The runtime loads as a module (see `src/index.ts`):
 
-1. **Phase 1 — passive buffer**: The Vite plugin injects a tiny inline `<script id="__svelte-devtools-init">` (from `getInitScript()`) into the HTML `<head>`. It creates a placeholder `window.__SVELTE_DEVTOOLS_RUNTIME__` whose methods buffer calls into a `_queue` until the real runtime activates — so injected `$inspect` hooks never crash, even if components mount before the runtime loads.
-2. **Phase 2 — full runtime**: The real runtime module is loaded as `<script type="module" src="/__svelte-devtools/svelte-runtime.js">` (plain Vite, via `transformIndexHtml`) or injected through `svelteDevToolsHandle()` (SvelteKit, via `transformPageChunk`). It binds its implementations onto the global, drains the buffered queue FIFO, and calls `init()`.
+- **Loading**: The runtime module is loaded as `<script type="module" src="/__svelte-devtools/svelte-runtime.js">` (plain Vite, via `transformIndexHtml`) or injected through `svelteDevToolsHandle()` (SvelteKit, via `transformPageChunk`). It publishes `window.__SVELTE_DEVTOOLS_RUNTIME__` and calls `init()`.
+- **Calls made before it loads**: The Vite transform injects the calls that need the runtime. While the runtime is not there yet, the injected code pushes a callback into `window.__SVELTE_DEVTOOLS_QUEUE__`. The runtime drains that queue in order when it loads. No placeholder runtime takes part in this.
 
 For SvelteKit SSR apps, use the exported helper in `hooks.server.ts`:
 
@@ -183,8 +183,7 @@ The runtime provides the write-back channel for time travel; all snapshot logic 
 
 ## Queue Mechanisms
 
-1. **`__SVELTE_DEVTOOLS_QUEUE__`** (src/index.ts:604-616) — an array of `(runtime) => void` callbacks pushed by the Vite transform for `_registerState` calls that fired before the runtime loaded; drained FIFO on activation, then emptied.
-2. **Passive runtime buffer** (src/init.ts) — the Phase-1 placeholder buffers `{method, args}` calls until `_activate(realRuntime)` swaps in real implementations and drains.
+1. **`__SVELTE_DEVTOOLS_QUEUE__`** (src/index.ts:604-616) — an array of `(runtime) => void` callbacks pushed by the Vite transform for calls that fired before the runtime loaded; drained FIFO on activation, then emptied.
 
 ## Serialization
 

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LIMITS, type SvelteDevToolsAPI } from '@fsodano/svelte-devtools-types';
+import { DEVTOOLS_VERSION } from '../../packages/types/src/constants.js';
 import { runtime } from '../../packages/runtime/src/index.js';
 
 const api = (window as unknown as { __SVELTE_DEVTOOLS__: SvelteDevToolsAPI }).__SVELTE_DEVTOOLS__;
@@ -77,5 +78,22 @@ describe('production public event API', () => {
     const value: { self?: unknown } = {}; value.self = value;
     expect(() => runtime.emit({ type: 'state', timestamp: 1, value })).not.toThrow();
     expect(api.getTimeline().at(-1)?.data).toMatchObject({ value: { self: '[Circular]' } });
+  });
+});
+
+describe('runtime global', () => {
+  it('reports the shared release version', () => {
+    expect(runtime.version).toBe(DEVTOOLS_VERSION);
+  });
+
+  it('exposes the live runtime, not a placeholder', () => {
+    const global = (window as unknown as { __SVELTE_DEVTOOLS_RUNTIME__?: Record<string, unknown> })
+      .__SVELTE_DEVTOOLS_RUNTIME__;
+    expect(global).toBeDefined();
+    expect(global).toBe(runtime);
+    // The placeholder runtime that used to ship with the package is gone.
+    expect(global).not.toHaveProperty('_queue');
+    expect(global).not.toHaveProperty('_active');
+    expect(global).not.toHaveProperty('_activate');
   });
 });

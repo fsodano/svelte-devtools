@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 — 2026-11-15
+
+### Removed
+
+- The passive runtime placeholder. `getInitScript()` and `createPassiveRuntime()` shipped in the runtime package, but the Vite plugin never injected them. The plugin loads the runtime module directly and buffers early calls in `window.__SVELTE_DEVTOOLS_QUEUE__`. The unused `getInitScript` export is gone.
+
+### Fixed
+
+- The runtime guide described a "Phase 1 — passive buffer" that the plugin did not implement. It now describes the real loading and queueing behavior.
+- The `window.__SVELTE_DEVTOOLS_RUNTIME__` type described the placeholder runtime. It now describes the live runtime, so the type no longer lists members the runtime does not have.
+
 ## 0.3.5 — 2026-11-15
 
 ### Fixed

@@ -12,7 +12,7 @@ Svelte DevTools runs beside your app in the Vite DevTools dock. It is a developm
 
 *Captured from the included plain Svelte app. The panel runs beside the application in the Vite DevTools dock.*
 
-**Early development · v0.3.5.** APIs may change. This is an independent community project, inspired by Vue DevTools; it is not an official Svelte project.
+**Early development · v0.4.0.** APIs may change. This is an independent community project, inspired by Vue DevTools; it is not an official Svelte project.
 
 [Try it locally](#try-it-locally) · [Connect your agent](#connect-your-agent) · [Explore the tools](#explore-the-tools) · [Sample apps](#sample-apps) · [Contribute](#develop-locally)
 
@@ -32,7 +32,7 @@ The tool runs during development. Runtime agent inspection requires an open, aut
 Use **Node.js 22.12+**, Svelte 5.20+, and Vite 8. In an existing Svelte application:
 
 ```bash
-npm install -D @fsodano/vite-plugin-svelte-devtools@0.3.5 @vitejs/devtools@0.4.8
+npm install -D @fsodano/vite-plugin-svelte-devtools@0.4.0 @vitejs/devtools@0.4.8
 npx svelte-devtools init
 npm run dev
 ```
@@ -49,7 +49,7 @@ To start from an empty directory:
 ```bash
 npx sv create my-app --template minimal --types ts --no-add-ons --install npm
 cd my-app
-npm install -D @fsodano/vite-plugin-svelte-devtools@0.3.5 @vitejs/devtools@0.4.8
+npm install -D @fsodano/vite-plugin-svelte-devtools@0.4.0 @vitejs/devtools@0.4.8
 npx svelte-devtools init
 npm run dev
 ```
@@ -78,7 +78,7 @@ Add this server to an MCP-compatible client. Replace the app URL and token:
   "mcpServers": {
     "svelte-devtools": {
       "command": "npx",
-      "args": ["-y", "@fsodano/svelte-devtools-mcp@0.3.5"],
+      "args": ["-y", "@fsodano/svelte-devtools-mcp@0.4.0"],
       "env": {
         "SVELTE_DEVTOOLS_URL": "http://localhost:5173",
         "SVELTE_DEVTOOLS_TOKEN": "replace-with-your-local-token"

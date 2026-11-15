@@ -2,7 +2,6 @@ import { installNetworkTools } from './network-bridge.js';
 import {ComponentRegistry} from './instrumentation/registry.js';
 import { DEVTOOLS_VERSION, LIMITS, isJsonEditable, toDisplayValue, type TimelineEntry } from '@fsodano/svelte-devtools-types';
 import type {ComponentInstance, SvelteDevToolsAPI} from '@fsodano/svelte-devtools-types';
-export { getInitScript } from './init.js';
 
 type ComponentState = ComponentInstance;
 
@@ -12,7 +11,7 @@ interface DevToolsState {
     components: Map<string, ComponentState>;
 }
 
-import type { GlobalRuntime } from './init.js';
+import type { GlobalRuntime } from './runtime-global.js';
 
 interface SvelteDevToolsRuntimeWindow extends Window {
     __SVELTE_DEVTOOLS_RUNTIME__: GlobalRuntime;
