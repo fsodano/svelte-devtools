@@ -20,6 +20,28 @@ npx playwright install chromium
 
 On Linux, use `npx playwright install --with-deps chromium` if browser system dependencies are missing. The build compiles the packages in dependency order. The client is served from `packages/client/dist/`; editing its source does not update the running panel until it is rebuilt and the fixture server is restarted.
 
+### Regenerate a lockfile with npm 12
+
+The lockfiles are generated with **npm 12**. npm 11 leaves out the optional wasm dependencies that the `@rolldown/binding-wasm32-wasi` entry needs, so `npm ci` then fails with:
+
+```
+npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync.
+npm error Missing: @emnapi/core@2.0.0-beta.2 from lock file
+```
+
+Install npm 12 and regenerate the lockfile for the root and for each fixture:
+
+```sh
+npm install -g npm@12
+npm install
+npm install --prefix tests/apps/svelte
+npm install --prefix tests/apps/svelte-kit
+npm install --prefix tests/apps/todo-sqlite
+npm install --prefix tests/apps/pokedex
+```
+
+npm 12 does not run dependency install scripts unless they are approved. The Todo SQLite fixture approves `better-sqlite3`, which builds the native driver. Review the pending list with `npm install-scripts ls`.
+
 ## Choose the right test application
 
 | Application | Install | Use it to verify |

@@ -25,14 +25,14 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@babel/parser": "^7.26.0",
-    "@babel/types": "^7.26.0",
+    "@babel/parser": "^8.1.2",
+    "@babel/types": "^8.1.2",
     "@fsodano/svelte-devtools-client": "^0.4.0",
     "@fsodano/svelte-devtools-runtime": "^0.4.0",
     "@fsodano/svelte-devtools-types": "^0.4.0",
     "@vitejs/devtools-kit": "^0.4.0",
     "launch-editor": "^2.14.1",
-    "magic-string": "^0.30.0",
+    "magic-string": "^1.4.5",
     "sirv": "^3.0.2"
   },
   "peerDependencies": {
@@ -55,7 +55,7 @@
     "bin"
   ],
   "devDependencies": {
-    "@sveltejs/kit": "^2.70.3"
+    "@sveltejs/kit": "^2.70.4"
   },
   "license": "MIT",
   "repository": {
