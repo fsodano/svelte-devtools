@@ -1,7 +1,7 @@
 # Svelte DevTools Developer Documentation
 
 ## Overview
-Svelte DevTools 0.2.2 is an early-development npm-workspaces monorepo with 5 packages. This documentation is for developers CONTRIBUTING to the devtools themselves.
+Svelte DevTools 0.3.0 is an early-development npm-workspaces monorepo with 5 packages. This documentation is for developers CONTRIBUTING to the devtools themselves.
 
 ## Getting Started
 
@@ -53,6 +53,7 @@ npm run test:e2e           # Playwright; starts plain and SvelteKit fixtures
 | 06_api.md | Full API reference for all packages |
 | [Agent MCP](./07_mcp.md) | Setup, tools, freshness, and current limits |
 | [Design guidelines](./design-guidelines.md) | Visual system, resizing, settings, mutation, and agent contracts |
+| [Feature comparison](./COMPARISON.md) | Panel capabilities against React/Vite-like DevTools, with file-level evidence |
 | [Completion audit](./validation/devtools-completion-audit.md) | Historical audit and verified release evidence |
 | VITE.md | Vite 8 / Rolldown internals and compatibility audit |
 

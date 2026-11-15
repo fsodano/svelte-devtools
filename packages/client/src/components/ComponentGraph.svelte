@@ -7,8 +7,30 @@
   let network: Network | null = null;
   let selectedNodeId: string | null = null;
 
+  let { onSelect }: { onSelect?: (componentId: string) => void } = $props();
+
   const components = $derived(devtoolsStore.components);
   const graphKey = $derived(components.map(c => `${c.id}:${c.parentId}`).join('|'));
+
+  function openInComponentPanel(componentId: string): void {
+    onSelect?.(componentId);
+
+    const target = window.top || window.parent || window;
+    try {
+      const el = target.document.querySelector(`[data-svelte-devtools-id="${componentId}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (el) {
+        (el as HTMLElement).style.outline = '2px solid #FF3E00';
+        setTimeout(() => {
+          if (el) {
+            (el as HTMLElement).style.outline = '';
+          }
+        }, 1500);
+      }
+    } catch {
+      // Element highlight is optional and can fail in non-app frames.
+    }
+  }
 
   interface VisNode {
     id: string;
@@ -106,15 +128,12 @@
       selectedNodeId = params.nodes.length > 0 ? params.nodes[0] : null;
     });
 
-    network.on('doubleClick', () => {
-      if (selectedNodeId) {
-        const target = window.top || window.parent || window;
-        try {
-          const el = target.document.querySelector(`[data-svelte-devtools-id="${selectedNodeId}"]`);
-          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          if (el) (el as HTMLElement).style.outline = '2px solid #FF3E00';
-          setTimeout(() => { if (el) (el as HTMLElement).style.outline = ''; }, 1500);
-        } catch {}
+    network.on('doubleClick', (params) => {
+      // Use the node from the double-click event. The single-click selection can
+      // be stale when the pointer never produced a separate click event.
+      const nodeId = params?.nodes?.length > 0 ? params.nodes[0] : selectedNodeId;
+      if (nodeId) {
+        openInComponentPanel(nodeId);
       }
     });
   }
@@ -141,6 +160,7 @@
   <div class="graph-header">
     <span class="graph-title">Component Graph</span>
     <span class="graph-count">{components.length} component{components.length !== 1 ? 's' : ''}</span>
+    <span class="graph-hint">Double-click a node to open it in Components</span>
     <div class="graph-controls">
       <button class="tool-btn" onclick={zoomIn} title="Zoom in">+</button>
       <button class="tool-btn" onclick={zoomOut} title="Zoom out">−</button>
@@ -161,6 +181,7 @@
   .graph-header { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-default); flex-shrink: 0; }
   .graph-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
   .graph-count { font-size: 10px; color: var(--text-muted); flex: 1; }
+  .graph-hint { font-size: 10px; color: var(--text-muted); opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .graph-controls { display: flex; gap: 2px; }
   .tool-btn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--border-default); background: var(--bg-surface); color: var(--text-secondary); cursor: pointer; border-radius: var(--radius-sm); font-size: 13px; }
   .tool-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
