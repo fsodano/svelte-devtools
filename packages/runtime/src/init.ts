@@ -180,7 +180,14 @@ export function createPassiveRuntime(): GlobalRuntime {
 
 /**
  * Serialize the init script as a minified inline string for HTML injection.
- * This is what the Vite plugin injects into the page head.
+ *
+ * The Vite plugin injects the full runtime module instead, so this script
+ * ships as a public helper for consumers that want a runtime placeholder
+ * before their own bundle loads. The plugin's own pre-load buffering uses
+ * `__SVELTE_DEVTOOLS_QUEUE__`.
+ *
+ * Keep this script and `createPassiveRuntime()` in step. A test asserts
+ * that both expose the same methods.
  */
 export function getInitScript(): string {
   return `<script id="__svelte-devtools-init">
@@ -190,6 +197,7 @@ export function getInitScript(): string {
   function _b(m){return function(){if(_active)return;_q.push({method:m,args:Array.from(arguments)});};}
   window.__SVELTE_DEVTOOLS_RUNTIME__={
     _queue:_q,_active:_active,
+    unregisterComponent:_b('unregisterComponent'),
     registerComponent:_b('registerComponent'),
     handleState:_b('handleState'),
     handleEffect:_b('handleEffect'),
@@ -197,6 +205,9 @@ export function getInitScript(): string {
     setComponentState:_b('setComponentState'),
     reportError:_b('reportError'),
     refresh:_b('refresh'),
+    startInspectBatch:_b('startInspectBatch'),
+    endInspectBatch:_b('endInspectBatch'),
+    flushAllEffects:_b('flushAllEffects'),
     version:${JSON.stringify(DEVTOOLS_VERSION)},
     init:function(){},
     emit:function(){},
@@ -207,9 +218,10 @@ export function getInitScript(): string {
       if(_active)return;
       _active=true;this._active=true;
       var q=_q;_q=[];
-      var methods=['registerComponent','handleState','handleEffect','_registerState','setComponentState','reportError','refresh','startInspectBatch','endInspectBatch','flushAllEffects'];
-      for(var i=0;i<methods.length;i++){var m=methods[i];this[m]=real[m].bind(real);}
+      var methods=['unregisterComponent','registerComponent','handleState','handleEffect','_registerState','setComponentState','reportError','refresh','startInspectBatch','endInspectBatch','flushAllEffects'];
+      for(var i=0;i<methods.length;i++){var m=methods[i];this[m]=real[m]?real[m].bind(real):function(){};}
       for(var j=0;j<q.length;j++){try{var c=q[j];switch(c.method){
+        case'unregisterComponent':this.unregisterComponent(c.args[0]);break;
         case'registerComponent':this.registerComponent(c.args[0],c.args[1],c.args[2],c.args[3]);break;
         case'handleState':this.handleState(c.args[0],c.args[1],c.args[2],c.args[3]);break;
         case'handleEffect':this.handleEffect(c.args[0],c.args[1],c.args[2],c.args[3]);break;

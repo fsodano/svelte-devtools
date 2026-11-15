@@ -17,6 +17,7 @@ import { DEVTOOLS_VERSION } from '../../packages/types/src/constants.js';
  */
 function createMockRealRuntime() {
   return {
+    unregisterComponent: vi.fn(),
     registerComponent: vi.fn(),
     handleState: vi.fn(),
     handleEffect: vi.fn(),
@@ -403,6 +404,36 @@ describe('init script runtime behavior', () => {
       method: 'handleState',
       args: ['test', 'x', 'init', 42],
     });
+  });
+
+  it('exposes the same method names as the TypeScript passive runtime', () => {
+    evalInitScript();
+
+    const methodNames = (value: object) =>
+      Object.keys(value)
+        .filter(key => typeof (value as Record<string, unknown>)[key] === 'function')
+        .sort();
+
+    expect(methodNames(window.__SVELTE_DEVTOOLS_RUNTIME__)).toEqual(
+      methodNames(createPassiveRuntime()),
+    );
+  });
+
+  it('queues and drains unregisterComponent', () => {
+    evalInitScript();
+
+    const rt = window.__SVELTE_DEVTOOLS_RUNTIME__;
+    loose(rt).unregisterComponent('gone');
+
+    expect(rt._queue[0]).toEqual({
+      method: 'unregisterComponent',
+      args: ['gone'],
+    });
+
+    const real = createMockRealRuntime();
+    rt._activate(real as Parameters<GlobalRuntime['_activate']>[0]);
+
+    expect(real.unregisterComponent).toHaveBeenCalledWith('gone');
   });
 
   it('after activation, queued calls drain and execute', () => {

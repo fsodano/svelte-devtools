@@ -14,7 +14,7 @@ The MCP server adapts the authenticated HTTP API to eight read-only tools and on
   "mcpServers": {
     "svelte-devtools": {
       "command": "npx",
-      "args": ["-y", "@fsodano/svelte-devtools-mcp@0.3.3"],
+      "args": ["-y", "@fsodano/svelte-devtools-mcp@0.3.4"],
       "env": {
         "SVELTE_DEVTOOLS_URL": "http://localhost:5173",
         "SVELTE_DEVTOOLS_TOKEN": "replace-with-your-local-token"

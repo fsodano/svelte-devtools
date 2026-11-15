@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.4 — 2026-11-15
+
+### Fixed
+
+- The inline runtime init script and the TypeScript passive runtime now expose the same methods. The script was missing `unregisterComponent`, `startInspectBatch`, `endInspectBatch`, and `flushAllEffects`, and its drain loop had no `unregisterComponent` case. A call to one of those methods before activation was dropped instead of queued.
+
+### Changed
+
+- The init script binds a missing runtime method to a no-op instead of throwing during activation.
+
 ## 0.3.3 — 2026-11-15
 
 ### Added
