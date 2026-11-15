@@ -6,7 +6,7 @@ Svelte DevTools is an independent project. The [Svelte contribution guide](https
 
 ## Set up the repository
 
-Use Node.js 20.19 or newer and npm. CI uses Node.js 22. This repository has five npm workspaces: types, runtime, client, Vite plugin, and MCP. Test applications have their own lockfiles and are not root workspaces.
+Use Node.js 20.19 or newer and npm. CI uses Node.js 22 and Node.js 24. This repository has five npm workspaces: types, runtime, client, Vite plugin, and MCP. Test applications have their own lockfiles and are not root workspaces.
 
 Run from the repository root:
 

@@ -12,7 +12,7 @@ For application setup, install the [Vite plugin](https://www.npmjs.com/package/@
 npm install -D @fsodano/vite-plugin-svelte-devtools@0.4.0 @vitejs/devtools@0.4.8
 ```
 
-Follow the [configuration guide](https://github.com/fsodano/svelte-devtools#integrate-with-your-app). SvelteKit also needs a development-only handle hook. Requirements: Svelte 5.20+, Vite 8, and a supported Node.js version; Node.js 22.12+ is the documented workflow.
+Follow the [configuration guide](https://github.com/fsodano/svelte-devtools#integrate-with-your-app). SvelteKit also needs a development-only handle hook. Requirements: Svelte 5.20+, Vite 8, and a supported Node.js version; Node.js 22.12+ is the minimum and Node.js 24 is the documented workflow.
 
 ## Developer and agent workflows
 

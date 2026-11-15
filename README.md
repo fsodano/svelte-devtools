@@ -29,7 +29,7 @@ The tool runs during development. Runtime agent inspection requires an open, aut
 
 ## Try it locally
 
-Use **Node.js 22.12+**, Svelte 5.20+, and Vite 8. In an existing Svelte application:
+Use **Node.js 22.12+**, Svelte 5.20+, and Vite 8. The documented workflow and CI use Node.js 24. In an existing Svelte application:
 
 ```bash
 npm install -D @fsodano/vite-plugin-svelte-devtools@0.4.0 @vitejs/devtools@0.4.8

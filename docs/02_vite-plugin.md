@@ -45,7 +45,7 @@ npm install --save-dev /absolute/path/to/svelte-devtools/packages/vite-plugin @v
 
 The fixtures use this local-package arrangement. Rebuild the checkout after changes; restart the application server so it serves the new client and runtime artifacts.
 
-The declared minimums are Node.js 20.19+, Vite 8.0.3+, and Svelte 5.20+. The tested fixtures use Vite 8.2.2 and the pinned `@vitejs/devtools` 0.4.8 host. Svelte 5.20 compiler checks cover client and SSR transforms; they are not a complete minimum-version browser matrix.
+The declared minimums are Node.js 20.19+, Vite 8.0.3+, and Svelte 5.20+. The documented workflow and CI use Node.js 24. The tested fixtures use Vite 8.2.2 and the pinned `@vitejs/devtools` 0.4.8 host. Svelte 5.20 compiler checks cover client and SSR transforms; they are not a complete minimum-version browser matrix.
 
 ## Usage
 
