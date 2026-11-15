@@ -33,6 +33,14 @@
     return 0;
   }
 
+  /** String() throws on a symbol, so the "unknown" branch formats by type. */
+  function formatUnknown(val: unknown): string {
+    if (typeof val === "function") return "[Function]";
+    if (typeof val === "symbol") return "[Symbol]";
+    if (typeof val === "bigint") return `${val}n`;
+    return String(val);
+  }
+
   function toggle(): void {
     expanded = !expanded;
   }
@@ -133,7 +141,7 @@
       {:else if type === "undefined"}
         <span class="undefined">undefined</span>
       {:else}
-        <span class="unknown">{typeof val === "function" ? "[Function]" : String(val)}</span>
+        <span class="unknown">{formatUnknown(val)}</span>
       {/if}
     </span>
   {/if}

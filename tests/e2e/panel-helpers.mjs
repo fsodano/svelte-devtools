@@ -40,3 +40,57 @@ export async function openDevToolsPanel(page, url, capturedToken) {
   return frame;
 }
 
+/**
+ * Find a node in the component graph and return its centre in page coordinates.
+ *
+ * vis-network draws the nodes on a canvas, so there is no DOM element to
+ * select. The nodes use the Svelte brand color, so the test finds them by
+ * pixel and returns the centre of the largest cluster. Returns null when the
+ * graph has no node yet.
+ */
+export async function findGraphNodePoint(frame, page) {
+  const canvas = frame.locator('.graph-container canvas');
+  if (!(await canvas.count())) return null;
+  const box = await canvas.boundingBox();
+  if (!box) return null;
+
+  const point = await canvas.evaluate((element) => {
+    const context = element.getContext('2d');
+    const { width, height } = element;
+    const data = context.getImageData(0, 0, width, height).data;
+    const pixels = [];
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const offset = (y * width + x) * 4;
+        const red = data[offset], green = data[offset + 1], blue = data[offset + 2], alpha = data[offset + 3];
+        if (alpha > 200 && red > 230 && green > 40 && green < 90 && blue < 40) pixels.push([x, y]);
+      }
+    }
+    if (!pixels.length) return null;
+
+    // Group the node pixels into clusters, then use the biggest one.
+    const radius = 26;
+    const groups = [];
+    for (const pixel of pixels) {
+      let group = groups.find((candidate) =>
+        candidate.some((other) => Math.hypot(other[0] - pixel[0], other[1] - pixel[1]) <= radius));
+      if (!group) { group = []; groups.push(group); }
+      group.push(pixel);
+    }
+    groups.sort((a, b) => b.length - a.length);
+    const largest = groups[0];
+    return {
+      x: largest.reduce((sum, pixel) => sum + pixel[0], 0) / largest.length,
+      y: largest.reduce((sum, pixel) => sum + pixel[1], 0) / largest.length,
+      width,
+      height,
+    };
+  });
+
+  if (!point) return null;
+  return {
+    x: box.x + point.x * (box.width / point.width),
+    y: box.y + point.y * (box.height / point.height),
+  };
+}
+

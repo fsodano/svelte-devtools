@@ -82,6 +82,24 @@ describe('production devtools store and window bridge', () => {
     expect(store.getFilteredComponents(store.components)).toHaveLength(2);
   });
 
+  it('searches state values without throwing on objects with a null prototype', () => {
+    mount('counter:a');
+    // toDisplayValue returns objects with a null prototype. String() throws on
+    // them, so a query that matched nothing crashed the whole panel.
+    const nested = Object.create(null) as Record<string, unknown>;
+    nested.label = 'Clicks';
+    const components = store.components.map(component => ({
+      ...component,
+      state: { user: nested },
+    }));
+
+    expect(() => store.setSearchQuery('nothing-matches-this', components)).not.toThrow();
+    expect(store.getFilteredComponents(components)).toEqual([]);
+
+    store.setSearchQuery('clicks', components);
+    expect(store.getFilteredComponents(components).map(c => c.id)).toEqual(['counter:a']);
+  });
+
   it('mounts live snippet, BigInt, and cyclic state as JSON-safe inspection data', () => {
     const snippet = () => {};
     snippet.toString = () => { throw new Error('Do not stringify snippets'); };

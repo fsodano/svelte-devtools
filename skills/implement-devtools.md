@@ -20,7 +20,7 @@ Use Svelte 5 runes in application components. Keep the generated compiler option
 
 ## Installation
 
-Install `@fsodano/vite-plugin-svelte-devtools@0.3.4` and `@vitejs/devtools@0.4.8` with `npm install -D`. Keep the application's normal Svelte compiler integration. The [installation guide](../docs/02_vite-plugin.md#installation) also covers source development and local fixtures.
+Install `@fsodano/vite-plugin-svelte-devtools@0.3.5` and `@vitejs/devtools@0.4.8` with `npm install -D`. Keep the application's normal Svelte compiler integration. The [installation guide](../docs/02_vite-plugin.md#installation) also covers source development and local fixtures.
 
 Run `npx svelte-devtools init` in the application directory, then `npm run dev`. The command preserves the generated config and adds the SvelteKit hook. Use `--dry-run` to preview edits. Existing custom hooks and dynamic configs require the manual setup below.
 

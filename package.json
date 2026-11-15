@@ -1,6 +1,6 @@
 {
   "name": "svelte-devtools",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "type": "module",
   "description": "Full-stack debugging for Svelte 5 and SvelteKit",
