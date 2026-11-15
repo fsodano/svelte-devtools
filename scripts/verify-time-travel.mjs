@@ -3,11 +3,13 @@ import { chromium } from 'playwright-core';
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 
-// Requires a built client and the SvelteKit app in tmux session `svelte-kit`, port 5174.
+// Requires a built client and the SvelteKit app in tmux session `svelte-kit`.
+// The port follows SVELTE_E2E_KIT_PORT, and defaults to 5174.
+const KIT_URL = `http://localhost:${process.env.SVELTE_E2E_KIT_PORT ?? 5174}`;
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
 try {
-  const frame = await openDevToolsPanel(page, 'http://localhost:5174/', () => {
+  const frame = await openDevToolsPanel(page, `${KIT_URL}/`, () => {
     const log = execFileSync('tmux', ['capture-pane', '-t', 'svelte-kit', '-p', '-S', '-200'], { encoding: 'utf8' });
     return [...log.matchAll(/devframe auth code\s*(\d{6})/g)].at(-1)?.[1] ?? '';
   });
