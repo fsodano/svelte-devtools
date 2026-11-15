@@ -4,6 +4,7 @@ import {
   getInitScript,
 } from '../../packages/runtime/src/init.js';
 import type { GlobalRuntime } from '../../packages/runtime/src/init.js';
+import { DEVTOOLS_VERSION } from '../../packages/types/src/constants.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -99,8 +100,8 @@ describe('createPassiveRuntime', () => {
       expect(runtime._queue).toEqual([]);
     });
 
-    it('has version "0.2.2"', () => {
-      expect(runtime.version).toBe('0.2.2');
+    it('reports the shared release version', () => {
+      expect(runtime.version).toBe(DEVTOOLS_VERSION);
     });
 
     it('getAllComponents() returns []', () => {
@@ -383,7 +384,7 @@ describe('init script runtime behavior', () => {
     expect(rt._active).toBe(false);
     expect(Array.isArray(rt._queue)).toBe(true);
     expect(rt._queue).toHaveLength(0);
-    expect(rt.version).toBe('0.2.2');
+    expect(rt.version).toBe(DEVTOOLS_VERSION);
   });
 
   it('before activation, method calls queue up', () => {

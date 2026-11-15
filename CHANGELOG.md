@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 — 2026-11-15
+
+### Added
+
+- Open a component instance from the graph. Double-clicking a node switches the panel to the Components tab and selects that instance. The graph header states the shortcut.
+- A feature comparison document that maps panel behavior against React and Vite-like DevTools, with file-level evidence for every row.
+
+### Fixed
+
+- The graph double-click handler reads the node from the double-click event. A stale single-click selection can no longer open the wrong instance.
+
+### Changed
+
+- Release version references now come from the shared `DEVTOOLS_VERSION` constant in tests. A version bump no longer requires editing test expectations.
+
 ## 0.1.1 — 2026-09-05
 
 - Bound Network panel history to 500 requests across client and server events. Prune clear-history markers so long sessions do not retain unbounded request data.

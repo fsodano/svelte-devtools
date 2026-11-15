@@ -95,7 +95,12 @@
       {:else if activeTab === "timetravel"}
         <TimeTravelConsole />
       {:else if activeTab === "graph"}
-        <ComponentGraph />
+        <ComponentGraph
+          onSelect={(id) => {
+            activeTab = 'components';
+            selectedComponent = id;
+          }}
+        />
       {:else if activeTab === "network"}
         <NetworkDesk />
       {:else if activeTab === "router"}

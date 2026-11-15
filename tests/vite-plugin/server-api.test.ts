@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import type { ViteDevServer } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { DEVTOOLS_VERSION } from '../../packages/types/src/constants.js';
 
 // ============================================================================
 // Test fixtures
@@ -316,7 +317,7 @@ describe('handleApiRequest', () => {
             expect(body).toMatchObject({
                 ok: true,
                 name: '@fsodano/vite-plugin-svelte-devtools',
-                version: '0.2.2',
+                version: DEVTOOLS_VERSION,
             });
             expect(body.endpoints).toBeInstanceOf(Array);
             expect((body.endpoints as string[]).length).toBeGreaterThan(0);
