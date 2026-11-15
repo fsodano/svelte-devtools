@@ -83,14 +83,17 @@ The DevTools exposes a REST API at `/__svelte-devtools/api/` that agents can use
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/` | Plugin status, available endpoints |
+| `GET` | `/api/` or `/api/status` | Plugin status, version, available endpoints |
 | `GET` | `/api/components` | All registered components with state |
 | `GET` | `/api/timeline` | Timeline events (mounts, state changes, effects) |
 | `GET` | `/api/server-events` | Server request traces with response bodies |
+| `DELETE` | `/api/server-events` | Clear the server event buffer |
 | `GET` | `/api/migration` | Svelte 4→5 migration scores; `overall` is `null` until components are scored |
 | `GET` | `/api/snapshots` | Snapshot branch tree (parentId, branchId, timestamps) |
 | `GET` | `/api/routes` | SvelteKit route inventory from the resolved routes directory (`src/routes` fallback) |
 | `GET` | `/api/remote` | Remote-debugging payload synced from the panel |
+| `GET` | `/api/commands?sessionId=<id>&url=<url>` | (internal) Panel command polling |
+| `POST` | `/api/commands/result` | (internal) Panel command acknowledgement |
 | `POST` | `/api/set-state` | Acknowledged live edit (`{sessionId, componentId, key, value}`); select a session from API status |
 | `GET` | `/api/source?file=<path>` | Source code file lookup |
 | `POST` | `/api/sync` | (internal) Client syncs runtime state here |

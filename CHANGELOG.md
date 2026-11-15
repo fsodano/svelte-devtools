@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.3 — 2026-11-15
+
+### Added
+
+- The changelog entries for releases 0.2.0, 0.2.1, and 0.2.2. The three releases shipped without a changelog entry.
+
+### Fixed
+
+- The API endpoint table in `AGENTS.md` listed four implemented endpoints as missing: `GET /api/status`, `DELETE /api/server-events`, `GET /api/commands`, and `POST /api/commands/result`.
+- The release context in `docs/VITE.md` and `docs/inspiration.md` named an old release.
+
 ## 0.3.2 — 2026-11-15
 
 ### Added
@@ -37,6 +48,44 @@
 ### Changed
 
 - Release version references now come from the shared `DEVTOOLS_VERSION` constant in tests. A version bump no longer requires editing test expectations.
+
+## 0.2.2 — 2026-09-05
+
+### Added
+
+- `npx svelte-devtools init` configures a standard Vite or SvelteKit app. The command adds the host and plugin calls and creates a development-only SvelteKit hook. It preserves generated options and does not evaluate application configuration. Use `--dry-run` to inspect the edits. Repeating the setup does not add duplicate imports.
+- A fresh installation verification script checks a new project against the published packages.
+
+## 0.2.1 — 2026-09-05
+
+### Fixed
+
+- The published packages ship the assets a consumer needs. A clean install no longer fails on a missing client build.
+- Isolated consumer projects are verified against the packed tarballs.
+
+### Changed
+
+- Each package carries a `LICENSE` file and the publish metadata the npm registry needs.
+- Release evidence and the accepted architecture decisions are preserved in `docs/`.
+
+## 0.2.0 — 2026-09-05
+
+### Added
+
+- SQLite query tracing in the server adapter. The panel shows the statement, the database, the row count, and the execution time for each query.
+- A correlated server and SQLite trace view. A server request shows its child SQL spans as a waterfall, with trace ID, span ID, and parent span ID.
+- A Todo fixture app with SQLite, used to verify the tracing end to end.
+
+### Fixed
+
+- Server traces correlate to the request that produced them. Streaming responses return without waiting for the trace preview.
+- Simultaneous trace parents sort before their children.
+- SQL execution timings keep their precision.
+- SQLite row counts are read without reading value getters.
+
+### Changed
+
+- Release validation covers real SSR and SQLite workflows, bounded mixed client and server history, and production preview isolation.
 
 ## 0.1.1 — 2026-09-05
 
