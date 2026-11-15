@@ -33,7 +33,7 @@ Scope: `packages/client` UI behavior in this workspace, with practical parity ch
 - Mocking is browser-`fetch` only; native `XMLHttpRequest` and server fetches are not mocked by panel rules.
 - Time travel updates component state only; it intentionally does not undo database or side effects.
 - SvelteKit route and server-event tools are extra context, but not equivalent to React app profiler coverage.
-- Some files in this matrix (for example `ServerView.svelte`) are currently not mounted by `App.svelte`.
+- Every panel view listed in this matrix is mounted by `App.svelte`. The panel has no unmounted view and no unreferenced component.
 
 ## Evidence-backed gap list from this checkpoint
 
@@ -47,8 +47,8 @@ Scope: `packages/client` UI behavior in this workspace, with practical parity ch
 
 ### Fixes left (explicitly deferred)
 1. **Search field coverage**
-   - The Components tab filters by component name, file name, and state key.
-   - State values are not searched, and props are not searched. The panel has no dedicated search component.
+   - The Components tab filters by component name, file name, and state key. The filter lives in `ComponentTree.svelte`.
+   - State values are not searched, and props are not searched.
 2. **React-like profiler mode**
    - Not yet implemented because the request is scoped to practical parity only, not a full profiler feature rewrite.
 3. **Store inspector panel**

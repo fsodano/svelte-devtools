@@ -1,7 +1,7 @@
 <script lang="ts">
   import { devtoolsStore } from '../lib/stores/devtools-store.svelte.js';
 
-  import { DEFAULT_PREFERENCES, readPreferences, resetPreferences, savePreferences, type Preferences } from '../lib/preferences';
+  import { DEFAULT_PREFERENCES, readPreferences, resetPreferences, savePreferences, UI_SCALES, type Preferences } from '../lib/preferences';
 
   let preferences = $state(readPreferences());
   let notice = $state('');
@@ -11,13 +11,18 @@
     notice = savePreferences(preferences) ? 'Settings saved.' : 'Settings applied. Browser storage is unavailable; changes will not persist after reload.';
   }
 
-  const scaleOptions = [
-    { label: 'Tiny', value: 0.8 },
-    { label: 'Small', value: 0.9 },
-    { label: 'Normal', value: 1 },
-    { label: 'Large', value: 1.15 },
-    { label: 'Huge', value: 1.3 },
-  ];
+  const scaleLabels: Record<number, string> = {
+    0.8: 'Tiny',
+    0.9: 'Small',
+    1: 'Normal',
+    1.15: 'Large',
+    1.3: 'Huge',
+  };
+
+  const scaleOptions = UI_SCALES.map((value) => ({
+    label: scaleLabels[value] ?? `${value}x`,
+    value,
+  }));
 
   function resetSettings() {
     preferences = { ...DEFAULT_PREFERENCES };

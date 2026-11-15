@@ -4,7 +4,6 @@ import { devtoolsStore as store } from '../../packages/client/src/lib/stores/dev
 
 vi.mock('../../packages/client/src/lib/api.js', () => ({
   apiFetch: vi.fn(async () => ({ ok: true, json: async () => [] })),
-  beaconUrl: vi.fn(() => '/test-sync'),
 }));
 
 vi.mock('../../packages/client/src/lib/command-client.js', () => ({ startCommandClient: vi.fn(() => () => {}) }));
