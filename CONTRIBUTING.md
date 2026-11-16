@@ -86,6 +86,8 @@ npm run release:check
 
 Stop your own fixture processes on ports 5173 and 5174 before E2E tests. Do not terminate another developer's processes. Global setup starts plain Svelte on 5173 and captures the dock token. Playwright starts SvelteKit on 5174. Both reject busy ports. The suite runs serially in Chromium and retains failure traces in `test-results/`.
 
+Set `SVELTE_E2E_PORT` and `SVELTE_E2E_KIT_PORT` to move the two servers when the defaults are busy. Both ports must be free.
+
 Build, API, and real UI checks are required for runtime, transform, and panel changes. Compare the application DOM, API response, and panel result. For a regression, test production code or a compiled fixture. A copied implementation in a test does not protect the production behavior.
 
 For identity, capture, or restore changes, follow the exact time-travel procedure in `AGENTS.md`. The separate `scripts/verify-time-travel.mjs` currently expects a running SvelteKit app on port 5174 in the `svelte-kit` tmux session. It is not part of `npm run test:e2e`. A green default browser suite does not prove this regression passed.

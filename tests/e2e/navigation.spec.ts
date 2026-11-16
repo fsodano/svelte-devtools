@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { KIT_BASE_URL } from './constants.js';
 
-const APP_URL = 'http://localhost:5174';
+const APP_URL = KIT_BASE_URL;
 
 // These tests exercise app navigation. Dock authorization is covered by devtools.spec.ts.
 test.beforeEach(async ({ page }) => {

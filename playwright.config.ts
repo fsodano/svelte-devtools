@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { BASE_URL, KIT_BASE_URL, KIT_PORT } from './tests/e2e/constants.js';
 
 /**
  * Real-browser E2E suite (ADR-0013).
@@ -23,16 +24,16 @@ export default defineConfig({
 	expect: { timeout: 10_000 },
 	globalSetup: './tests/e2e/global-setup.ts',
 	webServer: {
-		command: 'npm run dev -- --port 5174 --strictPort',
+		command: `npm run dev -- --port ${KIT_PORT} --strictPort`,
 		cwd: 'tests/apps/svelte-kit',
-		url: 'http://localhost:5174/navigation-test',
+		url: `${KIT_BASE_URL}/navigation-test`,
 		reuseExistingServer: false,
 		timeout: 60_000,
 	},
 	reporter: [['list']],
 	outputDir: 'test-results',
 	use: {
-		baseURL: 'http://localhost:5173',
+		baseURL: BASE_URL,
 		// Headless keeps the dock in embedded-iframe mode (no DocumentPictureInPicture),
 		// so the DevTools panel frame is reachable via page.frames().
 		headless: true,

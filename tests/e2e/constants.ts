@@ -9,8 +9,18 @@ import * as path from 'node:path';
  * processes (which read the captured token). A deterministic path in the OS
  * temp dir keeps the suite out of the repository.
  */
-export const PORT = 5173;
+/**
+ * Ports for the two dev servers the browser suite starts.
+ *
+ * The defaults match the ports the documentation uses. Set
+ * `SVELTE_E2E_PORT` and `SVELTE_E2E_KIT_PORT` to move them when the
+ * defaults are busy. Both must stay free, because the servers use strict
+ * ports and fail loudly instead of drifting to another port.
+ */
+export const PORT = Number(process.env.SVELTE_E2E_PORT ?? 5173);
+export const KIT_PORT = Number(process.env.SVELTE_E2E_KIT_PORT ?? 5174);
 export const BASE_URL = `http://localhost:${PORT}`;
+export const KIT_BASE_URL = `http://localhost:${KIT_PORT}`;
 export const BASE_DIR = path.dirname(
 	new URL(import.meta.url).pathname,
 );
