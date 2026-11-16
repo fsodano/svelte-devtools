@@ -46,7 +46,7 @@ while IFS= read -r package; do
     continue
   fi
   npm pack --workspace "$package" --pack-destination "$STAGING" --json > "$STAGING/pack.json"
-  TARBALL="$(node -e 'const fs=require("node:fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))[0].filename)' "$STAGING/pack.json")"
+  TARBALL="$(node -e 'import("./scripts/npm-pack-output.mjs").then((m)=>{process.stdout.write(m.packFilenameFromFile(process.argv[1]))})' "$STAGING/pack.json")"
   # Publish the verified contents without inheriting project-level npm credentials.
   (cd "$STAGING" && npm publish "$TARBALL" "${PUBLISH_ARGS[@]}")
 done < <(node scripts/release-check.mjs --list)

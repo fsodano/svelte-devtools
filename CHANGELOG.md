@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- The release scripts read `npm pack --json` correctly under npm 12. npm 12 returns an object keyed by package name where npm 11 returned an array, so the package gate, the publish script, and the consumer check failed to read the tarball. The three now normalize the output and run under both versions.
+- CI runs the release scripts under npm 12 as well, so a change to npm that breaks them is caught before a release.
 - The runtime guide described a "Phase 1 — passive buffer" that the plugin did not implement. It now describes the real loading and queueing behavior.
 - The `window.__SVELTE_DEVTOOLS_RUNTIME__` type described the placeholder runtime. It now describes the live runtime, so the type no longer lists members the runtime does not have.
 

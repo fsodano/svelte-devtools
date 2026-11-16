@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { packResults } from './npm-pack-output.mjs';
 
 const repository = fileURLToPath(new URL('..', import.meta.url));
 const directory = mkdtempSync(join(tmpdir(), 'svelte-package-consumer-'));
@@ -15,7 +16,7 @@ const run = (command, args, cwd = directory) => execFileSync(command, args, { cw
 const write = (path, text) => writeFileSync(join(directory, path), text);
 console.log(`Consumer artifacts and logs: ${directory}`);
 try {
-  const packages = JSON.parse(run('npm', ['pack', '--workspaces', '--pack-destination', tarballs, '--cache', cache, '--json'], repository));
+  const packages = packResults(run('npm', ['pack', '--workspaces', '--pack-destination', tarballs, '--cache', cache, '--json'], repository));
   const fixture = JSON.parse(readFileSync(join(repository, 'tests/apps/svelte-kit/package.json'), 'utf8'));
   const dependencies = Object.fromEntries(packages.map(pkg => [pkg.name, `file:./tarballs/${pkg.filename}`]));
   for (const name of ['vite', 'svelte', '@vitejs/devtools', '@sveltejs/vite-plugin-svelte', '@sveltejs/kit', '@sveltejs/adapter-auto', 'typescript']) dependencies[name] = fixture.devDependencies[name];
