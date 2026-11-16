@@ -22,6 +22,7 @@
 - The Todo SQLite fixture approves the `better-sqlite3` install script. npm 12 does not run dependency install scripts unless they are approved, and the native driver would otherwise go unbuilt.
 - The browser suite reads its ports from `SVELTE_E2E_PORT` and `SVELTE_E2E_KIT_PORT`. The defaults are unchanged.
 - The publish script skips a package that is already on the registry at the release version. A publish that stops part way through can now be run again.
+- The publish script takes `--skip-validation`, which skips the test, browser, stress, SSR, production, and consumer checks. It still builds the packages and runs the package gate. A failed publish now explains how to supply a two-factor code.
 - `npm run bump-version <version>` moves every release reference in one step. It updates the manifests, the internal dependency ranges, the shared `DEVTOOLS_VERSION` constant, the lockfile, and the docs that name the release. `npm run bump-version -- --check` reports a reference that names another version, and CI runs it.
 
 ### Security
