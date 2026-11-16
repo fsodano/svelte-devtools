@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Build, types, unit tests, and package gate (Node ${{ matrix.node }})
+    name: Build, types, unit tests, and package gate (Node ${{ matrix.node }}, npm ${{ matrix.npm }})
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -24,12 +24,21 @@ jobs:
         # 22.12 is the lowest Node line the plugin allows. 24 is the documented
         # workflow. Both run so a change cannot break the declared minimum.
         node: [22, 24]
+        # npm 12 changes the output of npm pack, so the release scripts run
+        # under it too. npm 12 needs Node 22.22.2 or 24.15.0 or newer.
+        npm: ['11']
+        include:
+          - node: 24
+            npm: '12'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+      - name: Install npm ${{ matrix.npm }}
+        if: matrix.npm != '11'
+        run: npm install -g npm@${{ matrix.npm }}
       - run: npm ci
       - run: npm run build
       - run: npm run check
