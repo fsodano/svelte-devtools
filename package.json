@@ -20,6 +20,7 @@
     "watch": "npm run build && npm run dev -w @fsodano/svelte-devtools-types & npm run dev -w @fsodano/svelte-devtools-runtime & npm run dev -w @fsodano/vite-plugin-svelte-devtools & npm run dev -w @fsodano/svelte-devtools-client & wait",
     "clean": "rm -rf dist/ && rm -rf packages/*/dist/",
     "release:check": "node scripts/release-check.mjs",
+    "bump-version": "node scripts/bump-version.mjs",
     "prepublishOnly": "npm run build && npm test",
     "build:mcp": "npm run build -w @fsodano/svelte-devtools-mcp"
   },
