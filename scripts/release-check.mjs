@@ -23,6 +23,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { packResults } from './npm-pack-output.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packagesDir = join(root, 'packages');
@@ -96,11 +97,11 @@ for (const name of PUBLISHABLE) {
 
   // Step 2 — prove the workspace packs cleanly. Non-interactive; no tarball written.
   try {
-    const packed = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--workspace', name, '--json'], {
+    const [packed] = packResults(execFileSync('npm', ['pack', '--dry-run', '--workspace', name, '--json'], {
       cwd: root,
       stdio: ['ignore', 'pipe', 'pipe'],
       encoding: 'utf8',
-    }))[0];
+    }));
     const files = new Set(packed.files.map(file => file.path));
     const exportTargets = value => typeof value === 'string' ? [value]
       : value && typeof value === 'object' ? Object.values(value).flatMap(exportTargets) : [];
