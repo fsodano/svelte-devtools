@@ -110,4 +110,8 @@ Install the independent Svelte, SvelteKit, and Todo fixture dependencies before 
 
 Run `bash scripts/publish.sh --dry-run` to run all release gates without publishing. After the release PR passes CI and merges, tag the release and run `bash scripts/publish.sh --publish`. The script validates first, packs all five packages, and publishes their tarballs in dependency order. It accepts `--otp` when npm requires two-factor authentication. A failed publish stops the sequence; run the same command again to publish the packages that are still missing, since the script skips what the registry already has.
 
+`--skip-validation` skips the test, browser, stress, SSR, production, and consumer checks. It still builds the packages and runs the package gate, because the tarballs must carry the current build and the gate checks the metadata. Use it only when the full `--dry-run` already passed for the same commit.
+
+If the publish stops with `EOTP`, npm needs a two-factor code. Run the command from an interactive terminal so npm can complete the passkey challenge in a browser, or pass a recovery code with `--otp <code>`. npm asks once per package, so a passkey needs five approvals and a recovery code may only cover the first one.
+
 Work plans stay local in the ignored `docs/plans/` folder. Record lasting decisions as ADRs and retain release evidence in `docs/validation/`.
