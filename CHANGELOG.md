@@ -20,6 +20,7 @@
 - The lockfiles are generated with npm 12. npm 11 leaves out the optional wasm dependencies that the `@rolldown/binding-wasm32-wasi` entry needs, so a lockfile it writes fails `npm ci` on Linux. `CONTRIBUTING.md` records the regeneration steps.
 - The Todo SQLite fixture approves the `better-sqlite3` install script. npm 12 does not run dependency install scripts unless they are approved, and the native driver would otherwise go unbuilt.
 - The browser suite reads its ports from `SVELTE_E2E_PORT` and `SVELTE_E2E_KIT_PORT`. The defaults are unchanged.
+- The publish script skips a package that is already on the registry at the release version. A publish that stops part way through can now be run again.
 
 ### Security
 

@@ -36,7 +36,15 @@ fi
 # Manifests must already use registry-safe versions; never rewrite dependencies.
 STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"' EXIT
+RELEASE_VERSION="$(node -p "require('./package.json').version")"
 while IFS= read -r package; do
+  # A publish can stop part way through, for example when the registry rejects
+  # one package. Skip what is already on the registry so the script can run
+  # again without failing on the packages that made it.
+  if npm view "$package@$RELEASE_VERSION" version >/dev/null 2>&1; then
+    echo "Already published, skipping: $package@$RELEASE_VERSION"
+    continue
+  fi
   npm pack --workspace "$package" --pack-destination "$STAGING" --json > "$STAGING/pack.json"
   TARBALL="$(node -e 'const fs=require("node:fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))[0].filename)' "$STAGING/pack.json")"
   # Publish the verified contents without inheriting project-level npm credentials.
