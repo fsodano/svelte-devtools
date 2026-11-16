@@ -104,8 +104,10 @@ CI runs the build, type check, unit tests, Chromium regressions, real SSR/SQLite
 
 ### Release packages
 
+Set the release version with `npm run bump-version <version>`. It updates the manifests, the internal dependency ranges, the shared `DEVTOOLS_VERSION` constant, the lockfile, and the docs that name the release. Run `npm run bump-version -- --check` to confirm every reference names the current version. CI runs that check, so a reference left behind fails the build.
+
 Install the independent Svelte, SvelteKit, and Todo fixture dependencies before running the release workflow. Install Playwright Chromium. Authenticate with `npm login` in your user configuration; do not commit npm authentication settings.
 
-Run `bash scripts/publish.sh --dry-run` to run all release gates without publishing. After the release PR passes CI and merges, tag the release and run `bash scripts/publish.sh --publish`. The script validates first, packs all five packages, and publishes their tarballs in dependency order. It accepts `--otp` when npm requires two-factor authentication. A failed publish stops the sequence; inspect registry versions before retrying.
+Run `bash scripts/publish.sh --dry-run` to run all release gates without publishing. After the release PR passes CI and merges, tag the release and run `bash scripts/publish.sh --publish`. The script validates first, packs all five packages, and publishes their tarballs in dependency order. It accepts `--otp` when npm requires two-factor authentication. A failed publish stops the sequence; run the same command again to publish the packages that are still missing, since the script skips what the registry already has.
 
 Work plans stay local in the ignored `docs/plans/` folder. Record lasting decisions as ADRs and retain release evidence in `docs/validation/`.

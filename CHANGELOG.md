@@ -17,12 +17,12 @@
 
 - CI now runs on Node.js 24. The build, type check, unit test, and package gate jobs run on Node.js 22 and Node.js 24, so a change cannot break the declared minimum. The browser suite runs on Node.js 24.
 - The documented Node.js workflow is Node.js 24. The declared minimums are unchanged.
-<<<<<<< HEAD
 - The dependencies move to their latest releases. `@babel/parser` and `@babel/types` move to 8, `magic-string` to 1, `vis-network` to 10, and `happy-dom` to 21. The rest move to their latest patch or minor release.
 - The lockfiles are generated with npm 12. npm 11 leaves out the optional wasm dependencies that the `@rolldown/binding-wasm32-wasi` entry needs, so a lockfile it writes fails `npm ci` on Linux. `CONTRIBUTING.md` records the regeneration steps.
 - The Todo SQLite fixture approves the `better-sqlite3` install script. npm 12 does not run dependency install scripts unless they are approved, and the native driver would otherwise go unbuilt.
 - The browser suite reads its ports from `SVELTE_E2E_PORT` and `SVELTE_E2E_KIT_PORT`. The defaults are unchanged.
 - The publish script skips a package that is already on the registry at the release version. A publish that stops part way through can now be run again.
+- `npm run bump-version <version>` moves every release reference in one step. It updates the manifests, the internal dependency ranges, the shared `DEVTOOLS_VERSION` constant, the lockfile, and the docs that name the release. `npm run bump-version -- --check` reports a reference that names another version, and CI runs it.
 
 ### Security
 

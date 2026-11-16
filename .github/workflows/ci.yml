@@ -42,6 +42,8 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run check
+      - name: Check the release version references
+        run: node scripts/bump-version.mjs --check
       - name: Install native SQLite fixture for adapter tests
         run: npm ci --prefix tests/apps/todo-sqlite
       # The build above is required. npm test would build all packages again.
