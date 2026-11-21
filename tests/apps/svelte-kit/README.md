@@ -1,10 +1,10 @@
 # SvelteKit fixture
 
-Use this app to test SvelteKit routing, SSR responses, form actions, and Spring time travel. It uses Svelte 5, Vite 8.2.2, and `@vitejs/devtools` 0.4.8.
+Use this app to test server rendering, routes, layout relationships, form actions, and the animated Spring counter. It uses Svelte 5, Vite 8.2.2, and `@vitejs/devtools` 0.4.8.
 
 ## Run locally
 
-Use Node.js 22.12 or later. Run these commands from the repository root:
+Use Node.js 22.12 or later (Node.js 24 is the documented workflow). Run these commands from the repository root:
 
 ```sh
 npm ci
@@ -39,6 +39,7 @@ The component cache requires the open panel. Server events come from the SvelteK
 | `/sverdle` | Form actions and game state |
 | `/sverdle/how-to-play` | Nested routes |
 | `/navigation-test` | `afterNavigate`, `invalidateAll`, and cancellation through `beforeNavigate` |
+| `/devtools-check` | Server-loaded values, internal fetch, streamed response, hydration, and navigation |
 
 For the counter check, open Time Travel and click **Record**. Increment once, then use Undo and Redo after the Spring settles. The expected snapshot counts are **2 / 2**, **1 / 2**, then **2 / 2**. Redo must not create another snapshot.
 
@@ -57,6 +58,6 @@ See the [developer guide](../../../docs/INDEX.md) for build order and verificati
 
 ## SSR and correlated traces
 
-The `/devtools-check` route exercises server-loaded values, an internal fetch, a streamed result, hydration, and navigation. Its response endpoint supplies redirect, error, upload, and SSE cases for validation. Open Network to inspect SSR and fetch spans sharing a trace ID. Internal calls have explicit parent span IDs.
+The `/devtools-check` route exercises server-loaded values, an internal fetch, a streamed result, hydration, and navigation. Its response endpoint (`/devtools-check/response`) supplies redirect, error, upload, and SSE cases for validation. Open Network to inspect SSR and fetch spans sharing a trace ID. Internal calls have explicit parent span IDs.
 
-From the root, run `node scripts/verify-ssr-sql.mjs` after building packages and installing this app plus `tests/apps/todo-sqlite`. It owns ports 5183/5184 and an isolated Todo database. It checks initial HTML without JavaScript, hydration, streaming, concurrent request isolation, and HTTP/MCP/UI SQL traces. See [server integration](../../../docs/05_server.md).
+From the root, run `node scripts/verify-ssr-sql.mjs` after building packages and installing this app plus `tests/apps/todo-sqlite`. It owns ports 5183/5184 and an isolated Todo database. It checks initial HTML without JavaScript, hydration, streaming, concurrent request isolation, and HTTP/MCP/UI SQL traces. After building both fixtures (`npm run build --prefix tests/apps/svelte-kit` and `npm run build --prefix tests/apps/todo-sqlite`), `node scripts/verify-production.mjs` starts production preview servers on ports 5185/5186 to verify that production builds exclude DevTools. See [server integration](../../../docs/05_server.md).

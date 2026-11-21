@@ -6,7 +6,8 @@ Accepted (2026-08-12)
 
 > **Implementation note (2026-08-12):** Shipped. `packages/bridge/` was deleted
 > and the workspace shrank to four packages (`types`, `runtime`, `client`,
-> `vite-plugin`). The six files under `packages/vite-plugin/src/plugins/`
+> `vite-plugin`); [ADR-0016](./ADR-0016-mcp-adapter-over-authenticated-http.md)
+> later added `packages/mcp` as the fifth workspace. The six files under `packages/vite-plugin/src/plugins/`
 > (`configure.ts`, `transform.ts`, `devtools-setup.ts`, `static-serve.ts`,
 > `virtual-runtime.ts`, `optimizer.ts`) were removed, so `dist/plugins/` is no
 > longer emitted and `tsc` no longer compiles them. The root `package.json`

@@ -1,6 +1,8 @@
-# Svelte analyzer review
+# Historical verification record: Svelte analyzer review
 
-Review date: 2026-09-05. Tool: official `@sveltejs/mcp` 0.1.26, `svelteAutofixer`, targeting Svelte 5.
+This report preserves the point-in-time static analysis review and test evidence from 2026-09-05 (releases `v0.1.0` and `v0.1.1`). Test counts and component dispositions below are from that date (for example, `ErrorBoundary.svelte` was later removed in `v0.3.1` and replaced in `v0.3.2` by a Svelte error boundary around the panel views). Current release is `v0.4.0`.
+
+Review date: 2026-09-05. Evaluated release: `0.1.0` / `0.1.1`. Tool: official `@sveltejs/mcp` 0.1.26, `svelteAutofixer`, targeting Svelte 5.
 
 ## Execution and source handling
 

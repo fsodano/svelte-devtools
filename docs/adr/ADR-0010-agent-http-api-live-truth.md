@@ -4,16 +4,16 @@
 
 Accepted (2026-08-12)
 
-> **Implementation note (2026-08-12):** Shipped. `/api/migration` now reads the
+> **Implementation note (2026-08-12; updated 2026-09-05):** Shipped. `/api/migration` now reads the
 > real component registry via `packages/vite-plugin/src/registry.ts` instead of
 > the never-populated `globalThis.__SVELTE_DEVTOOLS_REGISTRY__`, and returns an
-> honest empty-registry contract (`totalFiles: 0`, no `overall: 100`). The
+> honest empty-registry contract (`totalFiles: 0`, `overall: null`). The
 > masking test was replaced in `tests/vite-plugin/server-api.test.ts`, and the
 > `svelte-devtools:migration-score` RPC aligns with the same data source.
-> `POST /api/set-state` implements Option B: `packages/vite-plugin/src/server-api.ts`
-> returns `501` with an explanatory error and no longer mutates `cachedState`.
-> The live runtime channel (Option A) is not shipped; the endpoint preserves its
-> shape for future implementation.
+> `POST /api/set-state` initially shipped Option B (`501`) on 2026-08-12, and
+> subsequently shipped Option A (acknowledged session-targeted live runtime
+> edits) on 2026-09-05 per [ADR-0016](./ADR-0016-mcp-adapter-over-authenticated-http.md)
+> and [ADR-0017](./ADR-0017-instance-safe-state-mutation.md).
 
 ## Context
 

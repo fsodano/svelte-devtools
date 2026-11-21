@@ -1,4 +1,8 @@
-# Package consumer validation — 0.2.1
+# Historical verification record: Package consumer validation — 0.2.1
+
+This report preserves the point-in-time package consumer verification from 2026-09-05 for release `v0.2.1`. Test counts and results below are from that date; current release is `v0.4.0`.
+
+Verification date: 2026-09-05. Evaluated release: `0.2.1`. Script: `node scripts/verify-package-consumer.mjs` (runs isolated Vite/SvelteKit consumer servers on `127.0.0.1:5190` against packed workspace tarballs).
 
 The release gate installs actual tarballs in a temporary directory outside the repository. No workspace dependency links or source aliases are used.
 

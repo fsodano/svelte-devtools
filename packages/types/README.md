@@ -2,24 +2,33 @@
 
 **TypeScript contracts and shared value helpers for Svelte DevTools.**
 
-Shares component, runtime event, snapshot, and plugin interfaces across the Vite plugin, browser runtime, panel, and MCP adapter. Applications normally install the plugin; direct consumers should keep package versions aligned.
+`@fsodano/svelte-devtools-types` (`0.4.0`) sits at the bottom of the Svelte DevTools workspace pipeline (`types -> runtime -> vite-plugin -> client` and `mcp`). It defines the component, runtime event, snapshot, bridge, and plugin interfaces shared across the Vite plugin, browser runtime, client panel, and MCP adapter. Applications normally install `@fsodano/vite-plugin-svelte-devtools`; direct consumers must keep package versions aligned at `0.4.0`.
 
-## Get started
+## Public entry points
 
-For application setup, install the [Vite plugin](https://www.npmjs.com/package/@fsodano/vite-plugin-svelte-devtools):
+- `@fsodano/svelte-devtools-types` (`dist/index.js`, `dist/index.d.ts`) — exports shared TypeScript types (`ComponentMeta`, `ComponentInstance`, `ComponentNode`, `TimelineEntry`, `BridgeMessage`, `SvelteDevToolsAPI`, `SvelteDevToolsPluginOptions`, `AgentResponse`), value helpers `isJsonEditable` (checks whether a live value can be edited safely as JSON) and `toDisplayValue` (converts live values into JSON-safe inspection previews), and re-exports all constants.
+- `@fsodano/svelte-devtools-types/constants` (`dist/constants.js`, `dist/constants.d.ts`) — exports `DEVTOOLS_VERSION` (`'0.4.0'`), `EVENT_TYPES`, `RUNE_TYPES`, `RPC_METHODS`, `RPC_TYPES`, `DATA_ATTRIBUTES`, `DOCK_CONFIG`, `COMPONENT_ID_PREFIX` (`'svt-'`), `LIMITS`, and `mapRuntimeEventTypeToBridge`.
+
+## Build and test
+
+Run these commands from the repository root:
+
+```bash
+npm run build:types
+npx vitest run tests/types/
+```
+
+For full workspace build order and API details, see the [developer guide](https://github.com/fsodano/svelte-devtools/blob/main/docs/INDEX.md) and [API reference](https://github.com/fsodano/svelte-devtools/blob/main/docs/06_api.md).
+
+## Get started in an application
+
+To add Svelte DevTools to a Svelte 5.20+ and Vite 8 application, install the [Vite plugin](https://www.npmjs.com/package/@fsodano/vite-plugin-svelte-devtools) and the tested Vite DevTools host:
 
 ```bash
 npm install -D @fsodano/vite-plugin-svelte-devtools@0.4.0 @vitejs/devtools@0.4.8
+npx svelte-devtools init
 ```
 
-Follow the [configuration guide](https://github.com/fsodano/svelte-devtools#integrate-with-your-app). SvelteKit also needs a development-only handle hook. Requirements: Svelte 5.20+, Vite 8, and a supported Node.js version; Node.js 22.12+ is the minimum and Node.js 24 is the documented workflow.
-
-## Developer and agent workflows
-
-Inspect individual component instances and source, edit writable JSON state with recorded undo/redo, mock captured browser fetches, and follow explicitly instrumented SQLite calls within SvelteKit request traces. Nine [MCP tools](https://github.com/fsodano/svelte-devtools/blob/main/docs/07_mcp.md) let an agent inspect the same data and make acknowledged state edits in a selected live session.
-
-Runtime inspection requires an open, authorized panel. Browser mocks do not intercept server fetch or XMLHttpRequest. Query tracing is explicit and synchronous; Time Travel does not roll back database writes.
-
-See the [sample apps](https://github.com/fsodano/svelte-devtools#sample-apps) and [local development guide](https://github.com/fsodano/svelte-devtools/blob/main/docs/INDEX.md). After editing panel source, rebuild the client and restart the example server.
+Follow the [configuration guide](https://github.com/fsodano/svelte-devtools#try-it-locally). SvelteKit applications also use a development-only server handle hook. Use Node.js 22.12+ or newer; the documented workflow and CI use Node.js 24.
 
 Independent community project. Early development; APIs may change. [MIT licensed](https://github.com/fsodano/svelte-devtools/blob/main/LICENSE).

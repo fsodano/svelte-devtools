@@ -1,12 +1,12 @@
 # Vue DevTools Feature Analysis — Adaptation for Svelte DevTools
 
-> This comparison contains design context as well as implemented features. For source release 0.4.0, use the [client guide](04_client.md), [server tracing](05_server.md), and [MCP contract](07_mcp.md). Opt-in synchronous SQLite tracing is available; the server guide defines its scope.
+> **Historical design context (analyzed 2026-07-23, status snapshot 2026-08-04).** The feature statuses in Sections 1–7 below record an early adaptation checkpoint and are **not** current v0.4.0 capabilities. Several items listed as backlog below (such as active-route highlighting in `RouterHub.svelte`, double-click node-to-detail navigation in `ComponentGraph.svelte`, and correlated SSR/SQLite traces in `NetworkDesk.svelte`) are now implemented.
+>
+> For current release 0.4.0 behavior and evidence, see the [panel comparison matrix](COMPARISON.md), [client guide](04_client.md), [server tracing guide](05_server.md), [MCP guide](07_mcp.md), and [completion audit](validation/devtools-completion-audit.md).
 
 > Analysis date: 2026-07-23
 > Source: https://github.com/vuejs/devtools
-> Status update: 2026-08-04 — adaptation status refreshed against the current `packages/client` source.
-
-> Current status: use the [completion audit](validation/devtools-completion-audit.md). The feature statuses below are a historical comparison and are not current validation results.
+> Historical status update: 2026-08-04 — adaptation status snapshot against `packages/client` at that date.
 
 ## 1. Architecture Overview
 

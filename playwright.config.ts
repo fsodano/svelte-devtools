@@ -9,9 +9,11 @@ import { BASE_URL, KIT_BASE_URL, KIT_PORT } from './tests/e2e/constants.js';
  * `tests/e2e/`. It runs exclusively via `npm run test:e2e` / `npx playwright test`.
  *
  * The global setup starts the plain Svelte test app (`tests/apps/svelte`) on
- * port 5173, waits for HTTP 200, and captures the Vite DevTools Manual Auth
- * Token from the server output. The smoke test then authenticates the dock
- * through the documented manual-dialog flow and asserts the Svelte panel.
+ * port 5173, waits for HTTP 200, and captures the Vite DevTools six-digit
+ * devframe auth code from the server output (the host may print it before a
+ * browser connects). The smoke test then authorizes the dock through
+ * `openDevToolsPanel` in `tests/e2e/panel-helpers.mjs` and asserts the
+ * Svelte panel.
  */
 export default defineConfig({
 	testDir: 'tests/e2e',

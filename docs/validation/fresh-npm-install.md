@@ -1,6 +1,8 @@
-# Fresh npm installation
+# Historical verification record: Fresh npm installation — 0.2.2
 
-Release: 0.2.2. Verification date: September 5, 2026.
+This report preserves the point-in-time fresh-install verification from 2026-09-05 for release `v0.2.2`. Test counts, version tags in the historical reproduction steps (`0.2.2`), and results below are from that date; current release is `v0.4.0`.
+
+Evaluated release: `0.2.2` (with `@vitejs/devtools` `0.4.8`). Verification date: 2026-09-05. Script: `node scripts/verify-fresh-install.mjs`.
 
 ## Baseline
 
