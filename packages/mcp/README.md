@@ -1,17 +1,22 @@
 # Svelte DevTools MCP
 
-Inspect Svelte 5 applications from an MCP client. The server provides eight read-only tools and one acknowledged state-edit tool over stdio. It uses the authenticated DevTools HTTP API as its data transport.
+`@fsodano/svelte-devtools-mcp` (`0.4.0`) is the Model Context Protocol (MCP) adapter at the end of the Svelte DevTools pipeline (`.svelte file -> vite-plugin $inspect injection -> browser runtime -> postMessage -> client panel -> HTTP API -> MCP stdio server`). It exposes eight read-only inspection tools and one acknowledged state-edit tool over stdio, using the Vite plugin's token-authenticated HTTP API (`/__svelte-devtools/api/*`) as its data transport.
+
+## Public entry points and CLI
+
+- `svelte-devtools-mcp` (`dist/cli.js`) — stdio CLI binary started by MCP clients (`npx -y @fsodano/svelte-devtools-mcp@0.4.0`). Reads `SVELTE_DEVTOOLS_URL` (default `http://localhost:5173`) and `SVELTE_DEVTOOLS_TOKEN` from the environment.
+- `@fsodano/svelte-devtools-mcp` (`dist/index.js`, `dist/index.d.ts`) — exports `createDevtoolsMcpServer(options)`, `DevtoolsMcpOptions`, `MAX_HTTP_RESPONSE_BYTES` (4 MiB), and `MAX_TOOL_OUTPUT_BYTES` (512 KiB).
 
 ## Connect to your running app
 
-Install [Svelte DevTools](https://www.npmjs.com/package/@fsodano/vite-plugin-svelte-devtools) in your Svelte application. In that application's directory, start its development script with a local API token:
+Install [Svelte DevTools](https://www.npmjs.com/package/@fsodano/vite-plugin-svelte-devtools) in your Svelte application. Use Node.js 22.12+ or newer (Node.js 24 is the documented workflow). In that application's directory, start its development script with a local API token:
 
 ```sh
 export SVELTE_DEVTOOLS_TOKEN=your-local-token
 npm run dev
 ```
 
-Open the app, authorize the Vite dock, and keep the Svelte panel open. Configure your MCP client:
+Open the app, authorize the Vite dock with the terminal's six-digit devframe code, and keep the Svelte panel open. Configure your MCP client:
 
 ```json
 {
@@ -28,17 +33,17 @@ Open the app, authorize the Vite dock, and keep the Svelte panel open. Configure
 }
 ```
 
-Replace the URL and token. Dock authorization uses a separate six-digit code. Do not commit real tokens. For source development, build the root workspaces and replace the npx command with `node /absolute/path/to/packages/mcp/dist/cli.js`.
+Replace the URL and token. Dock authorization uses a separate six-digit devframe code; `SVELTE_DEVTOOLS_TOKEN` authenticates the HTTP API and MCP server. Do not commit real tokens. For source development, build the root workspaces and replace the `npx` command with `node /absolute/path/to/packages/mcp/dist/cli.js`.
 
 [![Agent state editing and panel undo](https://raw.githubusercontent.com/fsodano/svelte-devtools/main/docs/media/agent-state-edit.gif)](https://github.com/fsodano/svelte-devtools/blob/main/docs/media/agent-state-edit.mp4)
 
 ## Workflow
 
 1. Call `svelte_status` to discover capabilities and sync readiness.
-2. Open the app. Authorize the Vite dock with the separate code or token shown by the installed host. Open the Svelte panel.
-3. Choose a session from `svelte_status` → `capabilities.sessions`. Call `svelte_components` with that `sessionId` and `includeState: false` for metadata discovery. Then request props and state for a specific component ID. Pass `sessionId` to timeline and snapshot reads too when multiple panels are open.
+2. Open the app. Authorize the Vite dock with the six-digit devframe code shown in the server terminal. Open the Svelte panel.
+3. Choose a session from `svelte_status` -> `capabilities.sessions`. Call `svelte_components` with that `sessionId` and `includeState: false` for metadata discovery. Then request props and state for a specific component ID. Pass `sessionId` to timeline and snapshot reads too when multiple panels are open.
 4. Use `svelte_source` for a source excerpt. Use `svelte_server_events` to follow server requests.
-5. To edit writable state, choose a session from `svelte_status` → `capabilities.sessions`. Call `svelte_set_state` with `sessionId`, `componentId`, `key`, and a JSON `value`.
+5. To edit writable state, choose a session from `svelte_status` -> `capabilities.sessions`. Call `svelte_set_state` with `sessionId`, `componentId`, `key`, and a JSON `value`.
 6. Success acknowledges the live setter and active recording. Snapshot capture occurs asynchronously through runtime events. Wait for a new panel sync and inspect again. If delivery returns `OUTCOME_UNKNOWN`, inspect live state before retrying.
 
 | Tool | Purpose |
@@ -74,4 +79,13 @@ The implementation uses the [official MCP TypeScript SDK](https://ts.sdk.modelco
 
 SQLite spans come from explicit synchronous instrumentation, not automatic database discovery. They carry the same IDs as Network and HTTP. Use `last` between 1 and 500, then follow `traceId` and `parentSpanId`. State time travel does not roll back database writes.
 
-See the [MCP guide](https://github.com/fsodano/svelte-devtools/blob/main/docs/07_mcp.md) and [sample applications](https://github.com/fsodano/svelte-devtools#sample-apps). Independent community project; early development. [MIT](https://github.com/fsodano/svelte-devtools/blob/main/LICENSE).
+## Build and test
+
+When contributing from the repository root, run:
+
+```sh
+npm run build:mcp
+npx vitest run tests/mcp/
+```
+
+See the [MCP guide](https://github.com/fsodano/svelte-devtools/blob/main/docs/07_mcp.md), [developer guide](https://github.com/fsodano/svelte-devtools/blob/main/docs/INDEX.md), and [sample applications](https://github.com/fsodano/svelte-devtools#sample-apps). Independent community project; early development. [MIT](https://github.com/fsodano/svelte-devtools/blob/main/LICENSE).

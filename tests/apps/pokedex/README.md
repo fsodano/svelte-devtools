@@ -1,10 +1,10 @@
 # Pokédex fixture
 
-Use this app to inspect repeated components in a realistic interface. It exercises 20 cards per page, parent relationships, asynchronous data, search, filtering, pagination, and request mocking. It uses Svelte 5, Vite 8.2.2, and `@vitejs/devtools` 0.4.8.
+Use this app to test repeated card instances, remote fetches, selection, and mock rules in a realistic interface. It exercises 20 `PokemonCard` instances per page, parent relationships, asynchronous data, search, filtering, and pagination. It uses Svelte 5, Vite 8.2.2, and `@vitejs/devtools` 0.4.8.
 
 ## Run locally
 
-Use Node.js 22.12 or later. Run these commands from the repository root:
+Use Node.js 22.12 or later (Node.js 24 is the documented workflow). Run these commands from the repository root:
 
 ```sh
 npm ci
@@ -14,21 +14,21 @@ export SVELTE_DEVTOOLS_TOKEN=local-devtools-token
 npm run dev --prefix tests/apps/pokedex -- --port 5176 --strictPort
 ```
 
-Open [localhost:5176](http://localhost:5176/). The explicit port overrides the package script's 5174 default so this app can run beside the SvelteKit fixture. Do not start a second server if this port is already in use.
+Open [localhost:5176](http://localhost:5176/). The explicit `--port 5176 --strictPort` flags override the package script's `5174` default (`vite dev --port 5174`) so this app can run beside the SvelteKit fixture. Do not start a second server if port 5176 is already in use.
 
-The app depends on the public PokeAPI for Pokémon names, types, and details, and on remote artwork images. It requires network access but no API key or database setup. The page load fetches types; browser requests fetch the list and details. Request failures can therefore affect different parts of the page.
+The app depends on the public PokeAPI for Pokémon names, types, and details, and on remote artwork images. It requires network access during normal use, but no API key or database setup. The page load fetches types; browser requests fetch the list and details. Request failures can therefore affect different parts of the page.
 
-The plugin is a local `file:` dependency. Build the root packages before starting the fixture; the extension does not need to be installed from npm.
+`src/hooks.server.ts` configures `svelteDevToolsHandle()` during development and `noopHandle()` for production. The plugin is linked through a local `file:../../../packages/vite-plugin` dependency. Build the root packages before starting the fixture; the extension does not need to be installed from npm.
 
 ## Inspect the app
 
 Click **Unauthorized** in the dock, enter the terminal's six-digit `devframe auth code`, and open **Svelte**. The code authorizes the dock; HTTP and MCP clients use the separate `SVELTE_DEVTOOLS_TOKEN`.
 
 - In Components, check that each `PokemonCard` has a distinct instance. Use the inspector to select different visible cards.
-- In Graph, check the `+layout` → `+page` → `PokemonCard` relationships.
+- In Graph, check the `+layout` -> `+page` -> `PokemonCard` relationships.
 - Search by name or ID, filter by type, change pages, or open a card's details to generate state changes and requests.
 - In Network, select a browser request and use **Mock this request** to prepare a rule. Review and enable the rule, then repeat the interaction. Rules intercept future requests; they do not replace data already loaded.
-- In Components → Source, use **Open … in editor**. The editor runs on the dev-server machine. Set `LAUNCH_EDITOR` before starting Vite if you need to choose it explicitly.
+- In Components -> Source, use **Open … in editor**. The editor runs on the dev-server machine. Set `LAUNCH_EDITOR` before starting Vite if you need to choose it explicitly.
 
 With the panel open, use another terminal:
 

@@ -1,35 +1,35 @@
 # Architecture Decision Records
 
-> **Current implementation:** These records retain decisions and constraints from their original dates. For current behavior, use the [API reference](../06_api.md), [MCP guide](../07_mcp.md), and [client guide](../04_client.md). Browser fetch mocks and acknowledged session-targeted state edits are implemented; historical proposals can describe earlier gaps.
+> **Current implementation:** These records retain decisions and constraints from their original dates. For current behavior, use the [API reference](../06_api.md), [MCP guide](../07_mcp.md), and [client guide](../04_client.md). Browser `fetch` mocks and acknowledged session-targeted state edits are implemented; historical records can describe earlier intermediate states.
 
-This directory records the significant architectural decisions behind Svelte DevTools: why the plugin transforms `.svelte` files the way it does, why the runtime talks to the panel over `postMessage`, why state restore uses surgical diffs. Each record answers one question: given the constraints at the time, why did we build it this way?
+This directory records the significant architectural decisions behind Svelte DevTools: why the plugin transforms `.svelte` files the way it does, why the runtime talks to the panel over `postMessage`, and why state restore uses per-key setter calls and diffs. Each record answers one question: given the constraints at the time, why did we build it this way?
 
-ADRs are for developers contributing to this repo. They are the history of the design, not a tutorial. Read the record for an area before you change it, and write one when you change the design.
+ADRs are for developers contributing to this repository. Read the record for an area before you change it, and write one when you change the design.
 
 ## Index
 
-| ADR | Decision | Status |
-|-----|----------|--------|
-| [ADR-0001](./ADR-0001-event-driven-component-detection.md) | Detect components with a `MutationObserver` instead of polling | Accepted |
-| [ADR-0002](./ADR-0002-debounced-state-change-batching.md) | Batch state changes into one rebuild per window | Accepted |
-| [ADR-0003](./ADR-0003-birpc-rpc-communication-layer.md) | birpc-based RPC layer in `packages/bridge` | Accepted, removed (ADR-0011) |
-| [ADR-0004](./ADR-0004-virtual-runtime-module-pattern.md) | Deliver the runtime as a virtual module | Accepted, superseded in practice |
-| [ADR-0005](./ADR-0005-plugin-composition-pattern.md) | Split the plugin into six sub-plugins | Accepted, superseded in practice |
-| [ADR-0006](./ADR-0006-inspect-state-tracking.md) | Track state with build-time `$inspect` injection | Accepted |
-| [ADR-0007](./ADR-0007-network-interception-architecture.md) | Dual-layer fetch/XHR interception with mock rules | Accepted, partially implemented |
-| [ADR-0008](./ADR-0008-state-reconstruction-surgical-json-diff.md) | Restore state via surgical JSON diff | Accepted |
-| [ADR-0009](./ADR-0009-secure-agent-http-api.md) | Secure the Agent HTTP API | Accepted (2026-08-12) |
-| [ADR-0010](./ADR-0010-agent-http-api-live-truth.md) | Agent HTTP API Must Report Live Truth | Accepted (2026-08-12) |
-| [ADR-0011](./ADR-0011-remove-dead-code-plugins-bridge.md) | Remove Dead Code, Plugin Decomposition and Bridge Package | Accepted (2026-08-12) |
-| [ADR-0012](./ADR-0012-stop-stubbing-app-navigation.md) | Stop Stubbing SvelteKit App Navigation | Accepted (2026-08-12) |
-| [ADR-0013](./ADR-0013-restore-e2e-testing-integrity.md) | Restore E2E Testing Integrity | Accepted (2026-08-12) |
-| [ADR-0014](./ADR-0014-publish-safe-workspace-dependencies.md) | Publish-Safe Workspace Dependencies | Accepted (2026-08-12) |
-| [ADR-0015](./ADR-0015-shared-resizable-inspection-layouts.md) | Shared resizable inspection layouts | Accepted (2026-09-05) |
-| [ADR-0016](./ADR-0016-mcp-adapter-over-authenticated-http.md) | MCP adapter over authenticated HTTP | Accepted (2026-09-05) |
-| [ADR-0017](./ADR-0017-instance-safe-state-mutation.md) | Instance-safe state mutation | Accepted (2026-09-05) |
-| [ADR-0018](./ADR-0018-request-scoped-server-traces.md) | Request-scoped server traces | Accepted (2026-09-05) |
-| [ADR-0019](./ADR-0019-explicit-synchronous-sqlite-observation.md) | Explicit synchronous SQLite observation | Accepted (2026-09-05) |
-| [ADR-0020](./ADR-0020-bounded-observation-and-live-value-separation.md) | Bounded observation and live-value separation | Accepted (2026-09-05) |
+| ADR | Title | Current Status |
+|-----|-------|----------------|
+| [ADR-0001](./ADR-0001-event-driven-component-detection.md) | Event-Driven Component Detection | Implemented (Accepted) |
+| [ADR-0002](./ADR-0002-debounced-state-change-batching.md) | Debounced State Change Batching | Implemented (Accepted; client-side store batching) |
+| [ADR-0003](./ADR-0003-birpc-rpc-communication-layer.md) | Birpc-Based RPC Communication Layer | Historical / Superseded (removed in [ADR-0011](./ADR-0011-remove-dead-code-plugins-bridge.md)) |
+| [ADR-0004](./ADR-0004-virtual-runtime-module-pattern.md) | Virtual Runtime Module Pattern | Superseded (URL-based runtime module + `__SVELTE_DEVTOOLS_QUEUE__`) |
+| [ADR-0005](./ADR-0005-plugin-composition-pattern.md) | Plugin Composition Pattern | Superseded (single `Plugin` is live; sub-plugins removed in [ADR-0011](./ADR-0011-remove-dead-code-plugins-bridge.md)) |
+| [ADR-0006](./ADR-0006-inspect-state-tracking.md) | Inspect State Tracking | Implemented (Accepted; build-time `$inspect` injection) |
+| [ADR-0007](./ADR-0007-network-interception-architecture.md) | Network Interception Architecture | Partial (browser `fetch` mocks + SSR fetch tracing live; no XHR or SSR mock rules) |
+| [ADR-0008](./ADR-0008-state-reconstruction-surgical-json-diff.md) | Surgical JSON Diff for State Reconstruction | Implemented (Accepted; per-key setter restore + diff view) |
+| [ADR-0009](./ADR-0009-secure-agent-http-api.md) | Secure the Agent HTTP API | Implemented (Accepted 2026-08-12; bearer token, CORS allow-list, Host check, root-confined source) |
+| [ADR-0010](./ADR-0010-agent-http-api-live-truth.md) | Agent HTTP API Must Report Live Truth | Implemented (Accepted 2026-08-12; live migration registry; live `set-state` completed in [ADR-0016](./ADR-0016-mcp-adapter-over-authenticated-http.md) / [ADR-0017](./ADR-0017-instance-safe-state-mutation.md)) |
+| [ADR-0011](./ADR-0011-remove-dead-code-plugins-bridge.md) | Remove Dead Code, Plugin Decomposition and Bridge Package | Implemented (Accepted 2026-08-12) |
+| [ADR-0012](./ADR-0012-stop-stubbing-app-navigation.md) | Stop Stubbing SvelteKit App Navigation | Implemented (Accepted 2026-08-12; side-channel navigation bridge) |
+| [ADR-0013](./ADR-0013-restore-e2e-testing-integrity.md) | Restore E2E Testing Integrity | Implemented (Accepted 2026-08-12; production module unit tests + Playwright suite) |
+| [ADR-0014](./ADR-0014-publish-safe-workspace-dependencies.md) | Publish-Safe Workspace Dependencies | Implemented (Accepted 2026-08-12; plain semver ranges + `npm run release:check`) |
+| [ADR-0015](./ADR-0015-shared-resizable-inspection-layouts.md) | Shared resizable inspection layouts | Implemented (Accepted 2026-09-05) |
+| [ADR-0016](./ADR-0016-mcp-adapter-over-authenticated-http.md) | MCP adapter over authenticated HTTP | Implemented (Accepted 2026-09-05; `packages/mcp` with 9 stdio tools) |
+| [ADR-0017](./ADR-0017-instance-safe-state-mutation.md) | Instance-safe state mutation | Implemented (Accepted 2026-09-05; `$props.id()` instance IDs + acknowledged setter edits) |
+| [ADR-0018](./ADR-0018-request-scoped-server-traces.md) | Request-scoped server traces | Implemented (Accepted 2026-09-05; `AsyncLocalStorage` trace/span correlation) |
+| [ADR-0019](./ADR-0019-explicit-synchronous-sqlite-observation.md) | Explicit synchronous SQLite observation | Implemented (Accepted 2026-09-05; `traceSqliteQuery` in `@fsodano/vite-plugin-svelte-devtools/sqlite`) |
+| [ADR-0020](./ADR-0020-bounded-observation-and-live-value-separation.md) | Bounded observation and live-value separation | Implemented (Accepted 2026-09-05; safe display serializer, 500/1,000 retention caps, fetch sync) |
 
 ## Lifecycle
 
@@ -74,14 +74,14 @@ A proposal that is explicitly declined gets `Status: Rejected`, with a one or tw
 
 ## Numbering
 
-- Sequential, zero-padded to four digits: `ADR-0001`, `ADR-0002`, `ADR-0008`, next is `ADR-0018`.
+- Sequential, zero-padded to four digits: `ADR-0001`, `ADR-0002`, ..., `ADR-0020`, next is `ADR-0021`.
 - The number is assigned when the proposal file is created in `docs/adr/proposed/`, so it can be referenced during discussion. It carries through acceptance unchanged.
 - Numbers are never reused and never renumbered. A superseded record keeps its number; the gap in the sequence after a deleted rejected proposal is fine.
 - The next number is always `max(existing) + 1`. Proposals in `docs/adr/proposed/` count toward the max, so two proposals can never claim the same number.
 
 ## Required Sections
 
-Every ADR, proposed or accepted, has exactly these six sections, in this order:
+Every ADR, proposed or accepted, has these six sections in this order:
 
 | Section | What it must contain |
 |---------|----------------------|
@@ -92,13 +92,13 @@ Every ADR, proposed or accepted, has exactly these six sections, in this order:
 | **Consequences** | The trade-offs, stated as a bulleted list. Include both the gains (zero background CPU, typed RPC) and the costs (more complex than an interval, duplicated rule logic). |
 | **Verification** | The concrete check that proves the decision holds. For this repo that usually means a named test, an HTTP API response, or a manual browser flow with the test app. Cite the file or command. |
 
-Keep the prose concise and repo-specific. Name the actual files (`packages/client/src/lib/stores/devtools-store.svelte.ts`, not "the client store"), the actual numbers, the actual APIs. If a section would take more than a short paragraph, the ADR is probably trying to decide more than one thing.
+Keep the prose concise and repo-specific. Name the actual files (`packages/client/src/lib/stores/devtools-store.svelte.ts`, not "the client store"), the actual numbers, and the actual APIs. If a section would take more than a short paragraph, the ADR is probably trying to decide more than one thing.
 
 ## Evidence
 
 A record is only as trustworthy as its evidence. Follow the pattern the existing records already use:
 
-- **Implementation notes** go as a blockquote immediately under `## Status`, dated `(YYYY-MM-DD)`, stating what actually shipped and where, especially when that differs from the decision text. See ADR-0002, ADR-0003, ADR-0004, ADR-0005, ADR-0007, ADR-0008.
+- **Implementation notes** go as a blockquote immediately under `## Status`, dated `(YYYY-MM-DD)`, stating what actually shipped and where, especially when that differs from the decision text. See ADR-0002, ADR-0003, ADR-0004, ADR-0005, ADR-0007, ADR-0008, ADR-0010.
 - **File paths** in backticks, so they are greppable.
 - **Cross-ADR references** by number, inline: "the debounced batching in ADR-0002", as ADR-0006 does.
 - **Measured facts** keep their source: a benchmark number, a console warning, a line count. When the source is a commit or PR, link it.
@@ -106,7 +106,7 @@ A record is only as trustworthy as its evidence. Follow the pattern the existing
 
 ## Writing a new ADR
 
-1. Copy `TEMPLATE.md` to `docs/adr/proposed/ADR-000N-<slug>.md`, with the next free number.
+1. Copy `TEMPLATE.md` to `docs/adr/proposed/ADR-000N-<slug>.md`, with the next free number (`ADR-0021`).
 2. Fill in all six sections. Keep it to one decision per record.
 3. Keep it under discussion until it is accepted, then follow the [Accepted](#accepted) steps.
-4. Update the [Index](#index) table and the ADR table in `docs/INDEX.md` when the status changes.
+4. Update the [Index](#index) table in this file when the status changes.

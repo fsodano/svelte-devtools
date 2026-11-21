@@ -1,11 +1,10 @@
 # Historical verification record: SSR and SQLite observability
 
-This report preserves the original audit findings and test evidence from 2026-09-05. Statuses and release notes below describe those runs; they are not a current work queue or a claim about later releases. Durable design choices are recorded in the architecture decisions.
+This report preserves the original audit findings and test evidence from 2026-09-05 (release `v0.2.0`). Test counts, timings, statuses, and release notes below describe those 2026-09-05 runs; they are not a current work queue or a claim about later releases (current release is `v0.4.0`). Durable design choices are recorded in the [architecture decisions](../adr/README.md).
 
+Verification date: 2026-09-05. Evaluated release: `0.2.0` (verified and merged in PR #22 as `283daac`, tagged `v0.2.0`). See the final release result below.
 
-Final status: verified and merged in PR #22 as `283daac`, tagged `v0.2.0`. See the final release result below.
-
-Scope: implementation PR #22, following README PR #21.
+Scope: implementation PR #22, following README PR #21. `node scripts/verify-ssr-sql.mjs` starts the SvelteKit fixture on port 5183 and the Todo SQLite fixture on port 5184 with a temporary SQLite database (`TODO_SQLITE_DB_PATH`), and `node scripts/verify-production.mjs` runs production preview checks on ports 5185 and 5186.
 
 ## Expected behavior
 

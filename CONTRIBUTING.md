@@ -1,12 +1,21 @@
 # Contributing to Svelte DevTools
 
-Start with [AGENTS.md](AGENTS.md), the [developer documentation](docs/INDEX.md), and the [completion audit](docs/validation/devtools-completion-audit.md). Preserve durable verification evidence in `docs/validation/` and record lasting design decisions in [ADRs](docs/adr/README.md).
+Start with [AGENTS.md](AGENTS.md), the [developer documentation index](docs/INDEX.md), and the [completion audit](docs/validation/devtools-completion-audit.md). Preserve durable verification evidence in `docs/validation/` and record lasting design decisions in [ADRs](docs/adr/README.md).
 
-Svelte DevTools is an independent project. The [Svelte contribution guide](https://github.com/sveltejs/svelte/blob/main/CONTRIBUTING.md) informs our emphasis on reproducible reports, focused changes, test commands and results, and UI evidence. The commands below are specific to this repository.
+Svelte DevTools is an independent project. The [Svelte contribution guide](https://github.com/sveltejs/svelte/blob/main/CONTRIBUTING.md) informs our emphasis on reproducible reports, focused changes, test commands and results, and UI evidence. The commands below apply specifically to this repository.
 
 ## Set up the repository
 
-Use Node.js 20.19 or newer and npm. CI uses Node.js 22 and Node.js 24. This repository has five npm workspaces: types, runtime, client, Vite plugin, and MCP. Test applications have their own lockfiles and are not root workspaces.
+Use Node.js 22.12 or newer (or `^20.19.0` per the package `engines` floor) and npm. The documented workflow and browser suite use Node.js 24, and CI runs the build, type check, unit test, and package gate jobs on Node.js 22 and Node.js 24.
+
+This repository has five npm workspaces under `packages/`:
+- `packages/types` (`@fsodano/svelte-devtools-types`)
+- `packages/runtime` (`@fsodano/svelte-devtools-runtime`)
+- `packages/vite-plugin` (`@fsodano/vite-plugin-svelte-devtools`)
+- `packages/client` (`@fsodano/svelte-devtools-client`)
+- `packages/mcp` (`@fsodano/svelte-devtools-mcp`)
+
+The four sample applications under `tests/apps/` have their own `package-lock.json` files and are not root workspaces.
 
 Run from the repository root:
 
@@ -15,14 +24,17 @@ npm ci
 npm run build
 npm ci --prefix tests/apps/svelte
 npm ci --prefix tests/apps/svelte-kit
+npm ci --prefix tests/apps/todo-sqlite
 npx playwright install chromium
 ```
 
-On Linux, use `npx playwright install --with-deps chromium` if browser system dependencies are missing. The build compiles the packages in dependency order. The client is served from `packages/client/dist/`; editing its source does not update the running panel until it is rebuilt and the fixture server is restarted.
+On Linux, use `npx playwright install --with-deps chromium` if browser system dependencies are missing. `npm ci --prefix tests/apps/todo-sqlite` is required before running `npx vitest run` because `tests/vite-plugin/sqlite.test.ts` exercises the native SQLite driver from that fixture.
+
+`npm run build` compiles the five packages in dependency order (`build:types` -> `build:runtime` -> `build:vite-plugin` -> `build:client` -> `build:mcp`). The DevTools panel is served from `packages/client/dist/`; if you edit `packages/client/src/`, rebuild the client (`npm run build:client`) and restart the fixture server before checking the browser.
 
 ### Regenerate a lockfile with npm 12
 
-The lockfiles are generated with **npm 12**. npm 11 leaves out the optional wasm dependencies that the `@rolldown/binding-wasm32-wasi` entry needs, so `npm ci` then fails with:
+The lockfiles are generated with **npm 12**. npm 11 omits the optional WebAssembly dependencies that `@rolldown/binding-wasm32-wasi` requires, which causes `npm ci` on Linux to fail with:
 
 ```
 npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync.
@@ -40,18 +52,18 @@ npm install --prefix tests/apps/todo-sqlite
 npm install --prefix tests/apps/pokedex
 ```
 
-npm 12 does not run dependency install scripts unless they are approved. The Todo SQLite fixture approves `better-sqlite3`, which builds the native driver. Review the pending list with `npm install-scripts ls`.
+npm 12 does not run dependency install scripts unless they are approved. The Todo SQLite fixture approves `better-sqlite3`, which compiles the native SQLite driver. Review pending install scripts with `npm install-scripts ls`.
 
 ## Choose the right test application
 
-| Application | Install | Use it to verify |
-|---|---|---|
-| Plain Svelte | `npm ci --prefix tests/apps/svelte` | Runtime startup, dock authorization, component inspection, browser requests |
-| SvelteKit | `npm ci --prefix tests/apps/svelte-kit` | SSR traces, routes, navigation, and the Spring counter |
-| Pokédex | `npm ci --prefix tests/apps/pokedex` | Repeated component instances and request workflows |
-| Todo SQLite | `npm ci --prefix tests/apps/todo-sqlite` | Data mutations and server integration |
+| Application | Port (`--strictPort`) | Install | Use it to verify |
+|---|---|---|---|
+| Plain Svelte (`tests/apps/svelte`) | `5173` | `npm ci --prefix tests/apps/svelte` | Runtime startup, dock authorization, component inspection, state edits, browser fetch mocks, 1,000-component stress page |
+| SvelteKit (`tests/apps/svelte-kit`) | `5174` | `npm ci --prefix tests/apps/svelte-kit` | SSR traces, route inventory, `$app/navigation`, and the Spring counter time-travel flow |
+| Todo SQLite (`tests/apps/todo-sqlite`) | `5175` | `npm ci --prefix tests/apps/todo-sqlite` | Persistent CRUD actions, SSR request correlation, and synchronous SQLite query spans |
+| Pokédex (`tests/apps/pokedex`) | `5176` | `npm ci --prefix tests/apps/pokedex` | Repeated component instances (20 `PokemonCard` cards), layout-to-page ancestry, and request workflows |
 
-Consult each fixture's configuration before selecting a port or external service. The default browser suite runs the plain and SvelteKit applications. It does not establish coverage of every fixture.
+Consult each fixture's `README.md` before selecting a port or external service. The default Playwright suite (`npm run test:e2e`) runs the plain Svelte and SvelteKit fixtures; it does not cover every fixture on its own.
 
 To run a fixture manually:
 
@@ -59,59 +71,70 @@ To run a fixture manually:
 SVELTE_DEVTOOLS_TOKEN=local-devtools-check npm run dev --prefix tests/apps/svelte -- --port 5173 --strictPort
 ```
 
-Open the app in a browser. Use the current Manual Auth Token printed by the Vite server to authorize the dock, then open the Svelte panel. The dock token and `SVELTE_DEVTOOLS_TOKEN` are different credentials. The dock token is single-use; follow the manual-dialog procedure in `AGENTS.md`.
+Open the application in Chromium. Authorize the Vite DevTools dock with the **six-digit `devframe auth code`** printed in the server terminal (click **Unauthorized** in the dock and enter the six digits), then open the **Svelte** dock entry. The six-digit dock code and the `SVELTE_DEVTOOLS_TOKEN` bearer token are separate credentials. Follow the host `0.4.8` authorization procedure in [AGENTS.md](AGENTS.md#dock-rendering-and-authorization-vite-devtools).
 
-With the Svelte panel open, query the API from another terminal:
+With the Svelte panel open, query the HTTP API from another terminal:
 
 ```sh
 curl -H 'Authorization: Bearer local-devtools-check' \
   http://localhost:5173/__svelte-devtools/api/components
 ```
 
-Runtime API data comes from panel sync. Check freshness and compare it with the actual app. See [MCP setup and limits](docs/07_mcp.md) for agent inspection.
+Runtime API data comes from periodic panel sync. Check `cachedAt` freshness and compare the response with the application DOM. See [MCP setup and limits](docs/07_mcp.md) for agent inspection.
 
 ## Validate a change
 
-Run the repository gates:
+Run the repository verification gates from the root:
 
 ```sh
 npm run build
 npm run check
-npx vitest run
+node scripts/bump-version.mjs --check
+npx vitest run --maxWorkers=2
 npm run test:e2e
 npm run release:check
 ```
 
-`npm test` is an alternative to the build plus Vitest commands; it builds first. Run focused tests during development, such as `npx vitest run tests/runtime/`, then run the complete gates before proposing the change.
+`npm test` runs `npm run build && vitest run`. During development, run focused unit tests such as `npx vitest run tests/runtime/`, then run the complete verification gates before opening a pull request.
 
-Stop your own fixture processes on ports 5173 and 5174 before E2E tests. Do not terminate another developer's processes. Global setup starts plain Svelte on 5173 and captures the dock token. Playwright starts SvelteKit on 5174. Both reject busy ports. The suite runs serially in Chromium and retains failure traces in `test-results/`.
+Before running `npm run test:e2e`, stop your own fixture processes on ports `5173` and `5174`. Do not terminate another developer's processes. Playwright global setup starts plain Svelte on `5173` (`SVELTE_E2E_PORT`) and captures the dock auth code; Playwright `webServer` starts SvelteKit on `5174` (`SVELTE_E2E_KIT_PORT`). Both use `--strictPort` and fail if the port is busy. Set `SVELTE_E2E_PORT` and `SVELTE_E2E_KIT_PORT` when you need alternate free ports. The suite runs serially in Chromium and saves failure traces in `test-results/`.
 
-Set `SVELTE_E2E_PORT` and `SVELTE_E2E_KIT_PORT` to move the two servers when the defaults are busy. Both ports must be free.
+Additional standalone verification scripts (run by CI and `bash scripts/publish.sh --dry-run`):
+- `node scripts/verify-stress.mjs` — 1,000-component mount, prop update, keyboard selection, and unmount check on port `5180`.
+- `node scripts/verify-ssr-sql.mjs` — real SvelteKit (`5183`) and Todo SQLite (`5184`) SSR, hydration, streaming, HTTP API, MCP stdio, and SQL trace waterfall check using a temporary SQLite database.
+- `node scripts/verify-production.mjs` — verifies built SvelteKit and Todo SQLite production previews contain no DevTools runtime, dock, globals, or API routes.
+- `node scripts/verify-package-consumer.mjs` — packs all five workspaces into tarballs and tests clean consumer installs outside the workspace.
+- `node scripts/verify-editor.mjs` — verifies project-root-confined source lookup and editor launch.
+- `node scripts/verify-pokedex.mjs` — verifies 20 distinct `PokemonCard` instances and ancestry against a running Pokédex server on port `5176`.
 
-Build, API, and real UI checks are required for runtime, transform, and panel changes. Compare the application DOM, API response, and panel result. For a regression, test production code or a compiled fixture. A copied implementation in a test does not protect the production behavior.
+Build, API, and live UI checks are required for runtime, transform, and panel changes. Compare the application DOM, API response, and panel UI. In unit and regression tests, import the production modules or compile a real fixture; never copy production logic into a test file.
 
-For identity, capture, or restore changes, follow the exact time-travel procedure in `AGENTS.md`. The separate `scripts/verify-time-travel.mjs` currently expects a running SvelteKit app on port 5174 in the `svelte-kit` tmux session. It is not part of `npm run test:e2e`. A green default browser suite does not prove this regression passed.
+For component identity, snapshot capture, or restore changes, run the mandatory Spring counter time-travel verification in [AGENTS.md](AGENTS.md#mandatory-time-travel-verification-procedure). The standalone script `node scripts/verify-time-travel.mjs` runs this check against a SvelteKit app running on port `5174` (`SVELTE_E2E_KIT_PORT`) in a `svelte-kit` tmux session. It is not part of `npm run test:e2e`.
 
-For UI changes, use the [design guidelines](docs/design-guidelines.md). Check narrow and wide layouts, both themes, keyboard access, larger fonts, and resizable panes. Include screenshots or a short recording of the actual application and panel. Do not use a mockup as evidence that the implemented UI works.
+For UI changes, follow the [design guidelines](docs/design-guidelines.md). Check narrow and wide viewports, light and dark themes, keyboard navigation, font scales, and resizable split panes. Attach screenshots or a short recording of the live application and panel. Do not use a static mockup as evidence that the implemented UI works.
 
 ## Document and submit the result
 
-Keep each change focused on a concrete problem. In the pull request, describe the trigger and resulting behavior. Include exact commands, pass/fail results, and unresolved failures. Identify which real applications you exercised. Link the relevant discrepancy IDs.
+Keep each pull request focused on a concrete problem. In the pull request description, state the trigger and the resulting behavior. List the exact commands run, their pass/fail results, and any checks not run. Identify which sample applications you exercised and link any relevant issue or completion-audit discrepancy IDs (`D01`–`D46`, `S1`–`S16`).
 
-If an API changes, update the API reference and affected examples. If agent access changes, update `docs/07_mcp.md` and relevant agent guides. Record a significant architecture choice using the [ADR process](docs/adr/README.md). Use short sentences and consistent terminology. Do not claim support that has not been tested.
+If an API changes, update [docs/06_api.md](docs/06_api.md) and affected examples. If agent access changes, update [docs/07_mcp.md](docs/07_mcp.md) and the skill files in `skills/`. Record significant architectural decisions using the [ADR process](docs/adr/README.md). Write short sentences in active voice with consistent terms. Do not claim browser or version support that you have not tested.
 
-CI runs the build, type check, unit tests, Chromium regressions, real SSR/SQLite checks, production previews, and isolated tarball-consumer checks. It does not publish packages. The package gate checks matching release versions, registry-safe dependencies, public metadata, licenses, READMEs, and exported files. Consumer checks cover the documented fixture versions; they do not prove compatibility with every supported version. Publishing requires a separate maintainer action and review of the release scripts.
+CI (`.github/workflows/ci.yml`) runs two jobs:
+1. **Verify** (Node 22 + npm 11, Node 24 + npm 11, Node 24 + npm 12): `npm ci`, `npm run build`, `npm run check`, `node scripts/bump-version.mjs --check`, Todo SQLite native fixture install, `npx vitest run --maxWorkers=2`, and `npm run release:check`.
+2. **Browser** (Node 24): `npm run test:e2e`, `verify-stress.mjs`, `verify-ssr-sql.mjs`, SvelteKit and Todo SQLite production builds plus `verify-production.mjs`, and `verify-package-consumer.mjs`.
+
+CI never publishes packages. `npm run release:check` verifies that all five publishable workspaces share the root release version and `DEVTOOLS_VERSION`, use plain semver internal ranges (no `file:` or `workspace:` specifiers), include required metadata, `README.md`, and matching `LICENSE` files, and pack cleanly with `npm pack --dry-run --json` under both npm 11 and npm 12.
 
 ### Release packages
 
-Set the release version with `npm run bump-version <version>`. It updates the manifests, the internal dependency ranges, the shared `DEVTOOLS_VERSION` constant, the lockfile, and the docs that name the release. Run `npm run bump-version -- --check` to confirm every reference names the current version. CI runs that check, so a reference left behind fails the build.
+Set the release version with `npm run bump-version <version>`. It updates the root and workspace `package.json` manifests, the internal workspace dependency ranges, `DEVTOOLS_VERSION` in `packages/types/src/constants.ts`, the root `package-lock.json`, and the documentation and skill files that name the current release. Run `npm run bump-version -- --check` (or `node scripts/bump-version.mjs --check`) to confirm every scanned file names the current version.
 
-Install the independent Svelte, SvelteKit, and Todo fixture dependencies before running the release workflow. Install Playwright Chromium. Authenticate with `npm login` in your user configuration; do not commit npm authentication settings.
+Before running the release script, install the root dependencies and the `svelte`, `svelte-kit`, and `todo-sqlite` fixture dependencies, and ensure Playwright Chromium is installed. Authenticate with `npm login` in your user configuration; never commit npm authentication tokens.
 
-Run `bash scripts/publish.sh --dry-run` to run all release gates without publishing. After the release PR passes CI and merges, tag the release and run `bash scripts/publish.sh --publish`. The script validates first, packs all five packages, and publishes their tarballs in dependency order. It accepts `--otp` when npm requires two-factor authentication. A failed publish stops the sequence; run the same command again to publish the packages that are still missing, since the script skips what the registry already has.
+Run `bash scripts/publish.sh --dry-run` to execute the full release validation gate without publishing. After the release PR passes CI and merges, tag the release and run `bash scripts/publish.sh --publish`. The script validates the workspace, packs all five packages, and publishes their tarballs to `https://registry.npmjs.org/` in topological dependency order (`node scripts/release-check.mjs --list`). If a publish fails partway through, re-run the same command; the script checks `npm view` and skips packages already published at the current version.
 
-`--skip-validation` skips the test, browser, stress, SSR, production, and consumer checks. It still builds the packages and runs the package gate, because the tarballs must carry the current build and the gate checks the metadata. Use it only when the full `--dry-run` already passed for the same commit.
+`--skip-validation` skips the unit test, browser, stress, SSR/SQLite, production preview, and consumer checks, but still runs `npm run build` and `npm run release:check` so the tarballs carry a current build and verified metadata. Use `--skip-validation` only when `bash scripts/publish.sh --dry-run` has already passed on the exact same commit.
 
-If the publish stops with `EOTP`, npm needs a two-factor code. Run the command from an interactive terminal so npm can complete the passkey challenge in a browser, or pass a recovery code with `--otp <code>`. npm asks once per package, so a passkey needs five approvals and a recovery code may only cover the first one.
+If publishing stops with `EOTP`, npm requires two-factor authentication. Run the command in an interactive terminal to complete the browser passkey challenge, or pass a recovery code with `--otp <code>`. npm prompts once per package across the five workspaces.
 
-Work plans stay local in the ignored `docs/plans/` folder. Record lasting decisions as ADRs and retain release evidence in `docs/validation/`.
+Keep local work plans in the git-ignored `docs/plans/` directory. Record lasting architectural decisions in `docs/adr/` and point-in-time verification evidence in `docs/validation/`.

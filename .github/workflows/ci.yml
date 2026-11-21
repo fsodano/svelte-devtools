@@ -21,8 +21,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 22.12 is the lowest Node line the plugin allows. 24 is the documented
-        # workflow. Both run so a change cannot break the declared minimum.
+        # CI runs Node 22 and 24; 24 is the documented workflow. The plugin's
+        # engines range (^20.19.0 || >=22.12.0) also permits Node 20.19+,
+        # which CI does not test. Both lines run so a change cannot break
+        # the tested minimum.
         node: [22, 24]
         # npm 12 changes the output of npm pack, so the release scripts run
         # under it too. npm 12 needs Node 22.22.2 or 24.15.0 or newer.

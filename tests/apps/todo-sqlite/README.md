@@ -1,10 +1,10 @@
 # Todo + SQLite fixture
 
-Use this app to test a SvelteKit CRUD workflow with persistent data. It exercises form actions, enhanced forms, repeated `TodoItem` components, local edit state, filters, and correlated HTTP/SQL traces. It uses Svelte 5, Vite 8.2.2, and `@vitejs/devtools` 0.4.8.
+Use this app to test persistent CRUD, SvelteKit requests, and state changes in a database-backed app. It exercises form actions, enhanced forms, repeated `TodoItem` components, local edit state, filters, and correlated HTTP/SQL traces. It uses Svelte 5, Vite 8.2.2, and `@vitejs/devtools` 0.4.8.
 
 ## Run locally
 
-Use Node.js 22.12 or later. Run these commands from the repository root:
+Use Node.js 22.12 or later (Node.js 24 is the documented workflow). Run these commands from the repository root:
 
 ```sh
 npm ci
@@ -14,9 +14,9 @@ export SVELTE_DEVTOOLS_TOKEN=local-devtools-token
 npm run dev --prefix tests/apps/todo-sqlite -- --port 5175 --strictPort
 ```
 
-Open [localhost:5175](http://localhost:5175/). The fixture installs its own dependencies, including the native `better-sqlite3` package. It links the plugin from `../../../packages/vite-plugin`; the root build supplies the extension assets.
+Open [localhost:5175](http://localhost:5175/). The fixture installs its own dependencies, including the native `better-sqlite3` package (which may need native build tooling on platforms without a prebuilt binary; `package.json` includes `allowScripts` for `better-sqlite3` on npm 12). It links the plugin from `file:../../../packages/vite-plugin`; the root build supplies the extension assets.
 
-No database service, connection string, migration command, or seed command is required. During development, `src/lib/db.js` creates `data/todos.db` and the `todos` table when first imported. A new database starts empty. Add tasks through the app.
+No database service, connection string, migration command, or seed command is required. During development, `src/lib/db.js` creates `tests/apps/todo-sqlite/data/todos.db` (`data/todos.db` inside this fixture directory) and the `todos` table when first imported. A new database starts empty. Add tasks through the app.
 
 The database uses WAL mode. The `.db`, `.db-wal`, and `.db-shm` files are ignored by Git. Tasks persist across app restarts. Set `TODO_SQLITE_DB_PATH` to use a different database file. There is no `DATABASE_URL` setting. The default remains `data/todos.db`.
 
@@ -29,7 +29,7 @@ Click **Unauthorized** in the dock and enter the terminal's six-digit `devframe 
 3. Watch component state and props as enhanced form actions refresh the page data.
 4. Open Network, select SQL, and inspect a query. Follow its parent request in the trace waterfall. Compare the span IDs with the authenticated API or `svelte_server_events` MCP tool.
 
-`src/hooks.server.ts` enables request tracing during development. `src/lib/db.js` wraps the actual prepared `get`, `all`, and `run` calls with `traceSqliteQuery`. SELECT, INSERT, UPDATE, and DELETE spans show measured duration, operation, fixed statement template, row count, and request parentage. Bindings and result rows are not captured. See [capture controls](../../../docs/05_server.md).
+`src/hooks.server.ts` enables request tracing during development (`svelteDevToolsHandle()`). `src/lib/db.js` wraps the actual prepared `get`, `all`, and `run` calls with `traceSqliteQuery`. SELECT, INSERT, UPDATE, and DELETE spans show measured duration, operation, fixed statement template, row count, and request parentage. Bindings and result rows are not captured. See [capture controls](../../../docs/05_server.md).
 
 Time Travel restores supported client state. It does not roll back SQLite writes or replay database transactions.
 
@@ -47,9 +47,9 @@ Runtime component data is cached from the panel. Create tasks first; an empty da
 
 ## Development checks
 
-`npm run build --prefix tests/apps/todo-sqlite` builds this fixture. It has no package-level `check` script. Use root `npm run check` for the extension and the [developer guide](../../../docs/INDEX.md) for the shared test workflow.
+`npm run build --prefix tests/apps/todo-sqlite` builds this fixture. It has no package-level `check` script. Installing this fixture (`npm ci --prefix tests/apps/todo-sqlite`) also supplies the native `better-sqlite3` driver required by the root unit test `tests/vite-plugin/sqlite.test.ts`. Use root `npm run check` for the extension and the [developer guide](../../../docs/INDEX.md) for the shared test workflow.
 
-After changing extension source, run root `npm run build` and restart the fixture. The panel serves prebuilt `packages/client/dist` assets. Production builds use `noopHandle()` and do not expose DevTools.
+After changing extension source, run root `npm run build` and restart the fixture. The panel serves prebuilt `packages/client/dist` assets. Production builds use `noopHandle()` and do not expose DevTools (`node scripts/verify-production.mjs` verifies production previews on ports 5185/5186).
 
 ## Isolated SSR and SQL verification
 

@@ -53,24 +53,26 @@ Vite 8 defaults to **Baseline Widely Available 2026-01-01** as the browser targe
 
 The Svelte DevTools plugin follows a standard Vite plugin pattern with one addition: it integrates with `@vitejs/devtools-kit` to register a dock in the Vite DevTools panel.
 
-### The Three Layers
+### The Plugin Hooks
 
-The plugin operates at three Vite extension points:
+The plugin operates across these Vite extension points (`packages/vite-plugin/src/index.ts`):
 
 | Layer | Hook | Purpose |
 |-------|------|---------|
-| Config | `configResolved` | Detect SvelteKit, store resolved config |
-| Dev server | `configureServer` | Serve runtime script, client UI, and API endpoints |
-| Transform | `transform` | Inject `$inspect` hooks into `.svelte` files |
-| HTML | `transformIndexHtml` | Inject runtime script tag into host page |
-| DevTools | `devtools.setup` | Register dock and RPC methods with `@vitejs/devtools` |
+| Virtual module | `resolveId`, `load` | Serve the SvelteKit-only `/@svelte-devtools-navigation-bridge` virtual module (`\0virtual:svelte-devtools-navigation-bridge`) without intercepting `$app/navigation` ([ADR-0012](adr/ADR-0012-stop-stubbing-app-navigation.md)) |
+| Config | `configResolved` | Detect Rolldown and SvelteKit, resolve `tsconfig.json` path aliases, and store the resolved project root |
+| Dev server | `configureServer` | Print `SVELTE_DEVTOOLS_TOKEN`, configure Host/Origin guards ([ADR-0009](adr/ADR-0009-secure-agent-http-api.md)), install request/fetch tracing, and mount `/__svelte-devtools` API and asset middlewares |
+| Transform | `transform` | Inject `$inspect` hooks, state setters, component metadata, and `$effect` tracking into `.svelte` files |
+| HTML | `transformIndexHtml` | Inject `/__svelte-devtools/svelte-runtime.js` (and `/@svelte-devtools-navigation-bridge` when SvelteKit is present) into HTML responses |
+| DevTools | `devtools.setup` | Register the dock entry and RPC methods with `@vitejs/devtools-kit` |
+| Teardown | `closeBundle` | Dispose active server fetch-tracing listeners |
 
 ### Dock Registration Pattern
 
 The plugin registers a dock entry through the `devtools` property on the plugin object:
 
 ```typescript
-const plugin: Plugin & { devtools: { setup: (ctx: DevToolsNodeContext) => void } } = {
+const plugin: Plugin & { devtools: { setup: (ctx: ViteDevToolsNodeContext) => void } } = {
   name: 'svelte-devtools',
   devtools: {
     setup(ctx) {
@@ -159,18 +161,18 @@ config(userConfig, env) {
 
 #### `configResolved`
 
-Called after the full config is resolved. This is where we detect SvelteKit and store the resolved config:
+Called after the full config is resolved. This is where the plugin detects Rolldown and SvelteKit, resolves `tsconfig.json` path aliases, and stores the resolved project root:
 
 ```typescript
 configResolved(resolvedConfig) {
   config = resolvedConfig;
   root = config.root;
 
-  const hasSvelteKit = resolvedConfig.plugins.some(
-    p => p?.name?.includes('sveltekit')
+  hasSvelteKit = resolvedConfig.plugins.some(
+    p => p?.name === 'vite-plugin-sveltekit'
   );
-  if (hasSvelteKit) {
-    console.log('[Svelte DevTools] Detected SvelteKit. Add hooks.server.ts...');
+  if (hasSvelteKit && isDebug) {
+    console.info('[Svelte DevTools] SvelteKit detected — add to src/hooks.server.ts: ...');
   }
 }
 ```
@@ -451,19 +453,19 @@ The dock entry supports these fields:
 
 ### Registering RPC Methods
 
-The `@vitejs/devtools` kit supports RPC for communication between the client UI (iframe) and the server (plugin). The plugin registers handlers:
+The `@vitejs/devtools-kit` host supports RPC for communication between the client UI (iframe) and the server (plugin). The plugin registers handlers using the `RPC_METHODS` constants (`svelte-devtools:*`):
 
 ```typescript
 ctx.rpc.register({
-  name: 'getComponents',
+  name: 'svelte-devtools:get-components',
   type: 'query',       // Read-only request
   handler: async () => {
-    return Array.from(componentRegistry.values());
+    return Array.from(COMPONENT_REGISTRY.values());
   }
 });
 
 ctx.rpc.register({
-  name: 'openInEditor',
+  name: 'svelte-devtools:open-in-editor',
   type: 'mutation',    // Writes or side effects
   handler: async (data) => {
     // Open file in editor...
@@ -476,15 +478,17 @@ The client UI calls these via the RPC bridge provided by `@vitejs/devtools`.
 
 ### Messages API (`ctx.logs`)
 
-The DevTools kit provides a notifications system for showing messages. **Note**: in `@vitejs/devtools-kit` for Vite 8 the property is `ctx.logs` (type `DevToolsLogsHost`), not `ctx.messages` — the plugin's `devtools.setup` uses `ctx.logs.add(...)`:
+The DevTools kit provides a notifications system for showing messages. **Note**: in `@vitejs/devtools-kit` for Vite 8 the context type is `ViteDevToolsNodeContext` and the runtime property is `ctx.logs`, not `ctx.messages` — the plugin's `devtools.setup` accesses `ctx.logs.add(...)`:
 
 ```typescript
 devtools: {
-  setup(ctx: DevToolsNodeContext) {
-    if (ctx.logs) {
-      ctx.logs.add({
+  setup(ctx: ViteDevToolsNodeContext) {
+    const ctxAny = ctx as unknown as Record<string, unknown>;
+    if (ctxAny.logs) {
+      const logsApi = ctxAny.logs as Record<string, (arg: unknown) => unknown>;
+      logsApi.add?.({
         message: 'Svelte DevTools initialized',
-        description: 'Component tree and state inspection active',
+        description: 'Component tree, state inspection, and migration scoring active',
         level: 'info',
         category: 'svelte-devtools',
       });
@@ -614,21 +618,22 @@ This is useful during DevTools development because the runtime's `console.log` c
 
 **`transformIndexHtml` does not fire for SvelteKit.** SvelteKit handles HTML generation server-side, so Vite's normal HTML transform pipeline is bypassed. The `transformIndexHtml` hook only works for plain Vite apps.
 
-**Workaround**: Use `transformPageChunk` in a SvelteKit `handle` hook:
+**Workaround**: Use `transformPageChunk` in a SvelteKit `handle` hook (`packages/vite-plugin/src/sveltekit.ts`):
 
 ```typescript
 // src/hooks.server.ts
-import { svelteDevToolsHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
+import { dev } from '$app/environment';
+import { svelteDevToolsHandle, noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
 
-export const handle = svelteDevToolsHandle();
+export const handle = dev ? svelteDevToolsHandle() : noopHandle();
 ```
 
-This handle function injects both the Vite DevTools client script and the Svelte runtime script into every server-rendered HTML response. It uses SvelteKit's `transformPageChunk` API to insert `<script>` tags before `</body>`.
+This handle function injects the Vite DevTools client script (`/@fs.../inject.js` when `@vitejs/devtools` is resolved), the SvelteKit navigation bridge (`/@svelte-devtools-navigation-bridge`), and the Svelte runtime script (`/__svelte-devtools/svelte-runtime.js`) into every server-rendered HTML response. It uses SvelteKit's `transformPageChunk` API to insert the `<script>` tags once before `</head>` (or before `</body>` / `</html>` when `</head>` is absent) without buffering streamed responses.
 
-The Vite plugin detects SvelteKit during `configResolved` and logs a message telling the user to add this hook:
+When `SVELTE_DEVTOOLS_DEBUG=true` is set, the Vite plugin logs this setup hint during `configResolved` if it detects `vite-plugin-sveltekit`:
 
 ```
-[Svelte DevTools] Detected SvelteKit. Add to src/hooks.server.ts:
+[Svelte DevTools] SvelteKit detected — add to src/hooks.server.ts:
   import { dev } from '$app/environment';
   import { svelteDevToolsHandle, noopHandle } from '@fsodano/vite-plugin-svelte-devtools/sveltekit';
   export const handle = dev ? svelteDevToolsHandle() : noopHandle();
@@ -664,11 +669,11 @@ magic-string.appendLeft() for each injection point
 
 Each file gets:
 
-1. **Component metadata** (registry entry + runtime registration) injected at the start of the `<script>` block.
-2. **`data-svelte-devtools-id`** attribute added to the first non-void HTML element.
-3. **`$inspect(...).with(...)`** calls inserted after each rune declaration.
-4. **`$effect` tracking** code injected into effect callbacks.
-5. **Component registry** updated with rune counts and migration analysis.
+1. **Component metadata** (per-instance ID via `$props.id()`, context parent linkage, `window.__SVELTE_DEVTOOLS_REGISTRY__` entry, and runtime registration queued via `window.__SVELTE_DEVTOOLS_QUEUE__`) injected at the start of the `<script>` block.
+2. **`data-svelte-devtools-id` and `data-svelte-component`** attributes added to owned regular and `svelte:element` DOM nodes in the template AST.
+3. **Per-key state setters (`_registerState`) and `$inspect(...).with(...)`** calls inserted after each rune declaration (when `enableStateInspection` is `true`).
+4. **`$effect` tracking** code injected into `$effect` and `$effect.pre` callbacks.
+5. **Build-time `COMPONENT_REGISTRY`** updated with rune counts and Svelte 4 -> 5 migration analysis.
 
 ### Vite 8's Default Browser Target and Svelte
 
@@ -707,7 +712,7 @@ Vite 8 is a significant change from Vite 7, but the plugin API surface for DevTo
 - **SvelteKit** bypasses `transformIndexHtml`. Use `transformPageChunk` via the handle export instead.
 - **`magic-string` and `@babel/parser`** remain the right tools for source-code manipulation inside transform hooks.
 
-The plugin's dependency on Vite is declared as `"vite": "^8.0.3"` in `package.json`. This range allows minor and patch updates while keeping the API surface stable.
+The plugin's peer dependencies in `packages/vite-plugin/package.json` are declared as `"vite": "^8.0.3"`, `"svelte": "^5.20.0"`, and optional `"@sveltejs/kit": "^2.55.0"`, with runtime dependencies on `"@vitejs/devtools-kit": "^0.4.0"`, `"@babel/parser": "^8.1.2"`, `"magic-string": "^1.4.5"`, and `"sirv": "^3.0.2"`. The repository test fixtures pin `vite` `8.2.2` and `@vitejs/devtools` `0.4.8`.
 
 ---
 
@@ -717,12 +722,12 @@ The plugin's dependency on Vite is declared as `"vite": "^8.0.3"` in `package.js
 **Scope:** `@fsodano/vite-plugin-svelte-devtools` (packages/vite-plugin)
 **Verdict:** Largely compatible — 4 issues found (2 high, 1 medium, 1 low), 3 optimization opportunities.
 
-> **Update (2026-08-04):** The 🔴 Must Fix items from this audit have been **resolved**:
-> - ✅ `DevToolsNodeContext` from `@vitejs/devtools-kit` is now imported and used (`index.ts:15`)
-> - ✅ `ctx.messages` access replaced with `ctx.logs` (`index.ts:467-478`)
+> **Update (2026-08-04 / v0.4.0):** The 🔴 Must Fix items from this historical audit have been **resolved**:
+> - ✅ `ViteDevToolsNodeContext` from `@vitejs/devtools-kit` is imported and used (`packages/vite-plugin/src/index.ts:21,65,430`)
+> - ✅ `ctx.messages` access replaced with `ctx.logs` (`packages/vite-plugin/src/index.ts:517-527`)
 > - ✅ `@vitejs/devtools-kit: ^0.4.0` added to dependencies (was `^0.1.11` proposed)
-> - ✅ `sirv` upgraded to `^3.0.2`
-> - 🟡 Still open: `transform` hook-level `filter: { id: /\.svelte$/ }` optimization — the hook still uses `shouldProcess()`-style checks inside the handler (`createFilter` + `.svelte-kit/generated` guard)
+> - ✅ `sirv` upgraded to `^3.0.2`, `@babel/parser` to `^8.1.2`, and `magic-string` to `^1.4.5`
+> - 🟡 Still open: `transform` hook-level `filter: { id: /\.svelte$/ }` optimization — the hook still uses `createFilter(include, exclude)` and a `.svelte-kit/generated` guard inside the handler (`packages/vite-plugin/src/index.ts:539-541`)
 
 ### 1. @babel/parser
 

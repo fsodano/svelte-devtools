@@ -5,32 +5,61 @@ description: Use when debugging Svelte 5 reactivity issues, inspecting component
 
 # Debugging with Svelte DevTools
 
-Reference for the current Svelte DevTools source on Svelte 5.20+ and Vite 8. Use MCP first for agent discovery and runtime inspection. See [MCP setup](../docs/07_mcp.md) for the local stdio server.
+Reference for Svelte DevTools 0.4.0 on Svelte 5.20+ and Vite 8 with `@vitejs/devtools` 0.4.8. Use MCP first for agent discovery and runtime inspection. See [MCP setup](../docs/07_mcp.md) for the local stdio server.
 
-## Agent API Overview
+## Credentials and prerequisites
 
-Call `svelte_status` first. Select a panel session from `capabilities.sessions`. Call `svelte_components` with `sessionId` and `includeState: false` to discover mounted instance IDs. Then inspect a specific ID with state included. Component, timeline, and snapshot reads accept `sessionId`, `offset`, and `limit`.
+Svelte DevTools uses two separate credentials:
 
-Runtime reads use panel caches. Keep the app and an authorized Svelte panel open. Check freshness before drawing conclusions; MCP rejects missing or stale syncs. A recent sync does not prove the app is still connected.
+1. **Dock authorization (`devframe auth code`)** — a six-digit code printed by `@vitejs/devtools` 0.4.8 in the Vite terminal. Enter it in the browser dock (`Digit 1 of 6` through `Digit 6 of 6`) so you can open the **Svelte** panel.
+2. **HTTP API and MCP bearer token (`SVELTE_DEVTOOLS_TOKEN`)** — a per-run token printed in the Vite terminal (or fixed by setting `SVELTE_DEVTOOLS_TOKEN` before starting Vite). Pass it as `Authorization: Bearer <token>` on `/__svelte-devtools/api/*` requests and configure it in the MCP server environment.
 
-The RPC methods below are a separate build-metadata interface. They require a Vite DevTools context. Their file registry IDs are not mounted runtime IDs and cannot select a live state-edit target.
+Runtime inspection (`components`, `timeline`, `snapshots`, `remote`, and `set-state`) reads from the panel cache synced every 2 seconds by an open, authorized Svelte DevTools panel in Chromium.
 
-### RPC Methods
+## Agent API overview (MCP-first)
 
-Only these methods are registered by the plugin (`svelteDevTools()` → `devtools.setup`). Methods listed in `RPC_METHODS` constants but missing here (`get-timeline`, `get-state`, `update-component-state`, `set-network-rule`, `get-routes`) are **not implemented** and will not respond.
+The `@fsodano/svelte-devtools-mcp` server exposes nine tools over stdio:
 
-| Method Name | Type | Description |
+| MCP tool | Type | Purpose |
 |---|---|---|
-| `svelte-devtools:build-status` | query | Check if the build is healthy |
-| `svelte-devtools:get-components` | query | List all registered components |
-| `svelte-devtools:component-state` | query | Get metadata of a component by ID |
-| `svelte-devtools:migration-score` | query | Svelte 4 to 5 migration percentage per file |
-| `svelte-devtools:open-in-editor` | mutation | Open a file at a line in the editor |
-| `svelte-devtools:rescan` | mutation | Force re-analyze all components (full-reload) |
+| `svelte_status` | read-only | Discover capabilities, operation paths, active panel sessions, and sync readiness |
+| `svelte_components` | read-only | List or inspect session-scoped components (`id`, `name`, `includeState`, `sessionId`, `offset`, `limit`, `maxAgeMs`) |
+| `svelte_timeline` | read-only | Read session-scoped timeline events (`type`, `sessionId`, `offset`, `limit`, `maxAgeMs`) |
+| `svelte_snapshots` | read-only | Read session-scoped snapshot and branch metadata (`sessionId`, `offset`, `limit`, `maxAgeMs`); does not restore |
+| `svelte_routes` | read-only | Read the SvelteKit route inventory from the resolved routes directory (`src/routes` fallback) |
+| `svelte_migration` | read-only | Read Svelte 4 -> 5 migration analysis for transformed files (`overall` is `null` until scored) |
+| `svelte_server_events` | read-only | Read correlated server request, fetch, and SQLite spans (`last` 1–500, optional `sinceId`) |
+| `svelte_source` | read-only | Read a bounded source excerpt within the Vite project root (`file`, `startLine`, `lineCount` 1–500) |
+| `svelte_set_state` | mutation | Edit writable JSON state on one mounted instance in an explicit live panel session (`sessionId`, `componentId`, `key`, `value`) |
 
-### Response Schema
+### Debugging flow
 
-All RPC responses follow the `AgentResponse<T>` format:
+1. Call `svelte_status`. Check `capabilities.sessions` and `capabilities.runtimeData`.
+2. Choose the intended `sessionId`. Call `svelte_components` with `sessionId`, `includeState: false`, and an optional `name` filter to discover mounted instance IDs without transferring large state payloads.
+3. Call `svelte_components` with `sessionId` and `id: componentId` (`includeState: true`) to read props and state for that specific mounted instance. Inspect source with `svelte_source`.
+4. Use `svelte_timeline` and `svelte_server_events` to compare the observed runtime events and server traces with the app UI.
+5. If the user authorized a writable-state change, follow [State editing](#state-editing). Wait for the next panel sync (every 2 seconds), then inspect again. Never infer mutation success from a cache write.
+
+Runtime reads check freshness (default `maxAgeMs: 10000`) and reject caches that have never synced (`NO_RUNTIME_DATA`) or are stale (`STALE_RUNTIME_DATA`). A recent sync does not prove the app is still connected.
+
+## Build-metadata RPC methods
+
+The RPC methods below are a separate build-metadata interface registered in `devtools.setup` (`packages/vite-plugin/src/index.ts`). They require a Vite DevTools RPC context (`ctx.rpc`). Their build-time file registry IDs (`svt-<hash36>`) are **not** mounted runtime instance IDs (`svt-<hash36>:<uid>`) and cannot select a live state-edit target.
+
+Only these six methods are registered by the plugin. Other names listed in `RPC_METHODS` constants (`get-timeline`, `get-state`, `update-component-state`, `set-network-rule`, `get-routes`) are not registered by the live plugin.
+
+| Method name | Type | Return format | Description |
+|---|---|---|---|
+| `svelte-devtools:build-status` | query | `AgentResponse` | Check build health and tracked rune names |
+| `svelte-devtools:get-components` | query | `ComponentMeta[]` | List all transformed component files from the build-time registry |
+| `svelte-devtools:component-state` | query | `AgentResponse<ComponentMeta>` | Get build-time metadata for one file by its `svt-<hash36>` ID |
+| `svelte-devtools:migration-score` | query | `{ overall, totalFiles, perFile }` | Svelte 4 -> 5 migration percentage per transformed file |
+| `svelte-devtools:open-in-editor` | mutation | `boolean` | Open `{ file, line? }` in the local editor via `launch-editor` |
+| `svelte-devtools:rescan` | mutation | `AgentResponse<{ rescanned: number }>` | Trigger a full page reload to re-analyze components |
+
+### `AgentResponse<T>` schema
+
+`svelte-devtools:build-status`, `svelte-devtools:component-state`, and `svelte-devtools:rescan` wrap their payload in `AgentResponse<T>`:
 
 ```typescript
 interface AgentResponse<T = unknown> {
@@ -40,439 +69,270 @@ interface AgentResponse<T = unknown> {
     code: string;    // machine-readable error code (e.g. 'NOT_FOUND')
     message: string; // human-readable description
   };
-  timestamp: number; // unix timestamp of the response
+  timestamp: number; // unix timestamp in milliseconds
 }
 ```
 
-## Method Details
+### Method details
 
-### `svelte-devtools:build-status`
+#### `svelte-devtools:build-status`
 
-Returns the current health of the devtools build system.
+Returns the build status of the plugin transform registry (`AgentResponse`):
 
-**Response data shape:**
 ```typescript
 {
-  connected: boolean;
-  totalComponents: number;
-  activeComponents: number;
-  trackedRunes: string[];
-  errors: string[];
-  warnings: string[];
+  ok: true,
+  data: {
+    connected: boolean;
+    totalComponents: number;
+    activeComponents: number;
+    trackedRunes: string[]; // ['$state', '$derived', '$props', '$effect', '$effect.pre', '$bindable', 'untrack', '$host']
+    errors: string[];
+    warnings: string[];
+  },
+  timestamp: number;
 }
 ```
 
-**Console usage:**
-```javascript
-// If using devtools-kit programmatically
-const status = await ctx.rpc.call('svelte-devtools:build-status');
-// OK: { ok: true, data: { connected: true, totalComponents: 5, ... }, timestamp: 1712345678 }
-// Error: { ok: false, error: { code: 'BUILD_ERROR', message: '...' }, timestamp: 1712345678 }
-```
+#### `svelte-devtools:get-components`
 
-### `svelte-devtools:get-components`
+Returns the raw `ComponentMeta[]` array from `COMPONENT_REGISTRY` for every `.svelte` file transformed during the session:
 
-Lists every component the plugin has encountered during build transforms.
-
-**Response data shape:**
 ```typescript
 Array<{
-  id: string;              // e.g. "svt-abc123"
-  name: string;            // component filename without extension
+  id: string;              // file hash ID, e.g. "svt-abc123"
+  name: string;            // component filename without .svelte
   filename: string;        // full path to the .svelte file
   runeCounts?: Record<string, number>;
+  propKeys?: string[];
   migrationResult?: MigrationResult;
 }>
 ```
 
-**Console usage:**
-```javascript
-const components = await ctx.rpc.call('svelte-devtools:get-components');
-// Returns array of all ComponentMeta entries from the build-time registry
-```
+#### `svelte-devtools:component-state`
 
-### `svelte-devtools:component-state`
+Takes a file `componentId` (`svt-<hash36>`) and returns `AgentResponse<ComponentMeta>`, or `{ ok: false, error: { code: 'NOT_FOUND', message: 'Component <id> not found' }, timestamp }` if the file ID is not in `COMPONENT_REGISTRY`.
 
-Get the full metadata for a single component by its `svt-*` ID.
+#### `svelte-devtools:migration-score`
 
-**Parameters:**
+Returns `{ overall: number | null, totalFiles: number, perFile: MigrationResult[] }` directly from `computeMigrationScores()`. `overall` is `null` until at least one component has been transformed. Any component scoring below 50% also triggers a warning notification in `ctx.logs`.
 
-- `componentId` (string) -- the component's `svt-*` identifier
+#### `svelte-devtools:open-in-editor`
 
-**Response data shape:**
-```typescript
-ComponentMeta  // same shape as get-components entries
-```
+Takes `{ file: string, line?: number }`. Resolves `file` against the Vite root and calls `launchEditor('<file>:<line>')`. Returns `true` if the file exists, or `false` otherwise.
 
-**Console usage:**
-```javascript
-const detail = await ctx.rpc.call('svelte-devtools:component-state', 'svt-abc123');
-// OK: { ok: true, data: { id: 'svt-abc123', name: 'Counter', ... } }
-// NOT_FOUND: { ok: false, error: { code: 'NOT_FOUND', message: 'Component svt-abc123 not found' } }
-```
+#### `svelte-devtools:rescan`
 
-### `svelte-devtools:migration-score`
+Sends `{ type: 'full-reload' }` over the Vite WebSocket and returns `{ ok: true, data: { rescanned: count }, timestamp }`.
 
-Returns the Svelte 4 to 5 migration progress across all components.
+## Browser console debugging
 
-**Response data shape:**
-```typescript
-{
-  overall: number | null; // null until components are scored
-  totalFiles: number;  // number of files analyzed
-  perFile: Array<{
-    filename: string;
-    maxScore: number;
-    actualScore: number;
-    percentage: number;
-    patterns: Array<{
-      svelte4: string;
-      svelte5: string;
-      weight: number;
-      migrated: boolean;
-      detected: boolean;
-    }>;
-  }>;
-}
-```
+You can also inspect runtime state directly in the browser console on the application page.
 
-**Console usage:**
-```javascript
-const migration = await ctx.rpc.call('svelte-devtools:migration-score');
-// { ok: true, data: { overall: 72, totalFiles: 8, perFile: [...] } }
-```
-
-A percentage below 50 triggers a warning message in the devtools notifications panel for each affected component.
-
-### `svelte-devtools:rescan`
-
-Triggers a full page reload to force the plugin to re-analyze all components. Use this after adding new components or changing plugin configuration.
-
-**Response data shape:**
-```typescript
-{
-  rescanned: number;  // number of components registered before reload
-}
-```
-
-**Console usage:**
-```javascript
-const result = await ctx.rpc.call('svelte-devtools:rescan');
-// Page reloads. Response: { ok: true, data: { rescanned: 5 } }
-```
-
-## Debugging Flow
-
-1. Call `svelte_status`. Check available operations and panel sessions.
-2. Choose the intended `sessionId`. Call `svelte_components` with `includeState: false` and a name filter.
-3. Query the selected mounted instance ID with state included. Check freshness and inspect source with `svelte_source`.
-4. Use `svelte_timeline` and `svelte_server_events` to compare the observed behavior with the app UI.
-5. If the user requested a writable-state change, follow [State Editing](#state-editing). Inspect again after the next sync. Do not infer mutation success from a cache write.
-
-## Browser Console Debugging
-
-You can also debug directly from the browser's developer tools.
-
-### Global APIs
-
-Three globals are available on `window`:
+### Global APIs on `window`
 
 ```javascript
-// 1. Runtime state
+// 1. Internal runtime (called by injected component code)
 window.__SVELTE_DEVTOOLS_RUNTIME__
 // {
-//   version: string,
+//   version: '0.4.0',
+//   init(): void,
+//   registerComponent(id, name, filename, sourceLocation?): void,
+//   unregisterComponent(id): void,
 //   handleState(componentId, key, type, value): void,
-//   registerComponent(id, name, filename): void,
-//   getAllComponents(): ComponentState[],
-//   getState(): DevToolsState
+//   handleEffect(componentId, key, runeName, filename): void,
+//   _registerState(componentId, key, setter): void,
+//   setComponentState(componentId, key, value): void,
+//   reportError(componentId, error): void,
+//   refresh(): void,
+//   startInspectBatch(): void,
+//   endInspectBatch(): void,
+//   flushAllEffects(): void,
+//   emit(event): void,
+//   getState(): DevToolsState,
+//   getAllComponents(): ComponentInstance[]
 // }
 
-// 2. Component registry (build-time metadata)
-window.__SVELTE_DEVTOOLS_REGISTRY__
-// Map<string, { id: string, name: string, filename: string }>
+// 2. Early-call queue (populated before svelte-runtime.js finishes loading, then drained to [])
+window.__SVELTE_DEVTOOLS_QUEUE__
 
-// 3. Public API (live runtime data)
+// 3. Per-instance metadata registry populated by injected component code
+window.__SVELTE_DEVTOOLS_REGISTRY__
+// Map<string, { id: string, parentId?: string, name: string, filename: string, propKeys: string[] }>
+
+// 4. Public inspection API used by the DevTools panel
 window.__SVELTE_DEVTOOLS__
 // {
-//   version: string,
-//   enabled: boolean,
+//   version: '0.4.0',
+//   enabled: true,
 //   getComponentTree(): ComponentInstance[],
 //   getAllComponents(): ComponentInstance[],
 //   getComponentById(id): ComponentInstance | undefined,
+//   getWritableStateKeys(id): string[],
+//   editComponentState(id, key, value): void,
 //   getTimeline(): TimelineEntry[],
-//   subscribe(callback): () => void
+//   setComponentState(id, key, value): void,
+//   startInspectBatch(): void,
+//   endInspectBatch(): void,
+//   flushAllEffects(): void,
+//   refresh(): void,
+//   enableInspector(): void,
+//   disableInspector(): void,
+//   subscribe(callback): () => void,
+//   trace(name, dependencies): void
 // }
 ```
 
-### Quick Console Checks
+### Quick console checks
 
 ```javascript
 // Is the runtime loaded?
 Boolean(window.__SVELTE_DEVTOOLS_RUNTIME__)
 
-// Is the registry populated?
-window.__SVELTE_DEVTOOLS_REGISTRY__.size
+// How many mounted instances are in the registry?
+window.__SVELTE_DEVTOOLS_REGISTRY__?.size
 
-// List all tracked components
-window.__SVELTE_DEVTOOLS_RUNTIME__.getAllComponents()
+// List all tracked components (flat)
+window.__SVELTE_DEVTOOLS__.getAllComponents()
 
-// Get live component tree
+// Get nested component tree
 window.__SVELTE_DEVTOOLS__.getComponentTree()
 
-// Watch state changes live
-window.__SVELTE_DEVTOOLS__.subscribe((event) => {
+// Check writable JSON state keys for a specific mounted instance ID
+window.__SVELTE_DEVTOOLS__.getWritableStateKeys('svt-abc123:s0')
+
+// Watch runtime events live
+const unsubscribe = window.__SVELTE_DEVTOOLS__.subscribe((event) => {
   console.log('[DevTools Event]', event);
 });
 
-// Check the devtools version
-window.__SVELTE_DEVTOOLS__.version
-
-// Get the event timeline
+// Get the newest 1,000 runtime timeline entries
 window.__SVELTE_DEVTOOLS__.getTimeline()
 ```
 
-### Event Stream
+### Raw `postMessage` event stream
 
-The runtime emits events via `postMessage`. You can listen to the raw stream:
+The runtime emits events to the panel via `window.postMessage`:
 
 ```javascript
 window.addEventListener('message', (event) => {
-  if (event.data.source !== 'svelte-devtools') return;
+  if (event.data?.source !== 'svelte-devtools') return;
   console.log('[Svelte DevTools Event]', event.data);
 });
 ```
 
-Events have this shape:
+Messages have the envelope `{ source: 'svelte-devtools', type, payload }`, where `type` is one of `runtime-ready`, `component-register`, `component:unmount`, `state`, `effect`, `trace:trigger`, `client:request`, `restore:echoes-done`, `inspect:select`, or `inspect:toggle`.
 
-```typescript
-{
-  source: 'svelte-devtools',
-  type: 'runtime-ready' | 'component-register' | 'state',
-  payload: {
-    componentId: string,
-    componentName?: string,
-    key?: string,
-    value?: unknown,
-    timestamp: number
-  }
-}
-```
-
-## Common Debugging Scenarios
+## Common debugging scenarios
 
 ### State not updating in DevTools view
 
-The `$inspect` hook was not injected or the runtime is not receiving the callback.
+The `$inspect` hook was not injected, or the runtime has not loaded.
 
-```javascript
-// 1. Check that $inspect was injected into the component source
-// Open the component's source in DevTools Sources panel
-// Look for: `$inspect($VAR).with((t,...v)=>...`
-
-// 2. Check the runtime is receiving the call
-// Add a breakpoint in handleState or listen to postMessage:
-window.addEventListener('message', (event) => {
-  if (event.data.source === 'svelte-devtools' && event.data.type === 'state') {
-    console.log('State change received:', event.data.payload);
-  }
-});
-
-// 3. If no event fires, the $inspect injection was skipped
-// Check the plugin's include/exclude patterns for this file
-```
+1. Open the transformed component in the browser DevTools **Sources** panel and look for `$inspect(<var>).with((t,...v)=>...)`.
+2. Listen for `postMessage` events with `event.data?.source === 'svelte-devtools' && event.data?.type === 'state'`.
+3. If no `$inspect` call is present, check `svelteDevTools({ include, exclude, enableStateInspection })` in `vite.config.ts`.
 
 ### Component not appearing in tree
 
-The component failed to register, or registration happened before the UI connected.
+1. Check `window.__SVELTE_DEVTOOLS_REGISTRY__` in the console.
+2. Check the DOM for `document.querySelectorAll('[data-svelte-devtools-id]')`.
+3. Call `window.__SVELTE_DEVTOOLS__.refresh()` to force a DOM re-scan for elements carrying `data-svelte-devtools-id`.
 
-```javascript
-// 1. Check the registry
-console.log(window.__SVELTE_DEVTOOLS_REGISTRY__);
+### DevTools panel iframe is blank
 
-// 2. Check for the data attribute on the DOM element
-document.querySelector('[data-svelte-devtools-id]');
-// Should return the component's root element
+The client UI was not built, or `/__svelte-devtools/` is not serving assets.
 
-// 3. Manually trigger registration if needed
-window.__SVELTE_DEVTOOLS_RUNTIME__?.registerComponent(
-  'svt-manual-1',
-  'MyComponent',
-  '/src/lib/MyComponent.svelte'
-);
-```
+1. Check `fetch('/__svelte-devtools/').then(r => r.status)` and `fetch('/__svelte-devtools/svelte-runtime.js').then(r => r.status)`.
+2. Rebuild from the repository root (`npm run build:client && npm run build:runtime`, or `npm run build`) and restart the Vite dev server.
 
-### DevTools iframe blank
+### SSR components or server traces missing in SvelteKit
 
-The client UI was not built or the `/__svelte-devtools/` endpoint is not serving assets.
-
-```javascript
-// 1. Check the endpoint directly
-fetch('/__svelte-devtools/')
-  .then(r => r.text())
-  .then(html => console.log(html.includes('svelte') ? 'OK' : 'NOT OK'));
-
-// 2. Check the runtime endpoint
-fetch('/__svelte-devtools/svelte-runtime.js')
-  .then(r => r.text())
-  .then(code => console.log(code.length + ' bytes loaded'));
-```
-
-If the endpoints return 404, rebuild the client and runtime packages:
-
-```bash
-npm run build:client
-npm run build:runtime
-```
-
-### SSR components not tracked
-
-Server-rendered components do not have access to browser globals. The hooks file must be configured correctly.
-
-```javascript
-// 1. Verify the hooks file exists
-// Check src/hooks.server.ts for the correct setup
-
-// 2. Check that the runtime script was injected into the HTML
-// View page source and search for: /__svelte-devtools/svelte-runtime.js
-
-// 3. Ensure the handle function wraps transformPageChunk
-// The svelteDevToolsHandle() function calls resolve() with transformPageChunk
-// that injects both the devtools client injection and the runtime script
-```
-
-### Migration score shows 0% or low
-
-The component is using Svelte 4 patterns (on:click, let:, export let, etc.) and has not been migrated.
-
-```javascript
-// Get detailed migration data
-const score = await ctx.rpc.call('svelte-devtools:migration-score');
-score.data.perFile.forEach(file => {
-  console.log(`${file.filename}: ${file.percentage}% migrated`);
-  file.patterns.filter(p => !p.migrated).forEach(p => {
-    console.log(`  Svelte 4: ${p.svelte4} → Svelte 5: ${p.svelte5}`);
-  });
-});
-```
+1. Verify `src/hooks.server.ts` exports `export const handle = dev ? svelteDevToolsHandle() : noopHandle();`.
+2. View page source and confirm `/__svelte-devtools/svelte-runtime.js` and `/@svelte-devtools-navigation-bridge` are injected exactly once before `</head>`.
 
 ### Many components with the same name
 
-Mounted runtime instances have distinct IDs even when they share a filename and display name. Use the ID returned for the selected panel session. Do not reuse it after unmount. Build-time RPC metadata uses file IDs; those are a different registry.
-
-### Build errors during transform
-
-If a `.svelte` file has a syntax error, the plugin logs the error and skips transforms for that file. Check the devtools notifications panel or the browser console for transform error messages:
-
-```javascript
-// The plugin emits messages via ctx.logs.add (DevToolsLogsHost)
-// Look for: "Transform error in <ComponentName>"
-// Followed by the specific babel or svelte parse error
-```
+Mounted runtime instances have distinct IDs (`svt-<hash36>:<uid>`) even when they share a filename and display name (such as 20 `PokemonCard` instances). Always select the mounted instance ID returned for the active `sessionId`. Do not reuse an instance ID after unmount, and do not confuse build-time file IDs (`svt-<hash36>`) with mounted instance IDs.
 
 ## HTTP REST API
 
-The devtools exposes an HTTP API at `/__svelte-devtools/api/` on the dev server. Agents can query this transport without controlling the browser, but runtime caches still require an open, authorized Svelte panel. Every endpoint requires the per-run token: send it as an `Authorization: Bearer <token>` header. The panel uses periodic authenticated fetch for sync. Requests without a valid token get `401`. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server, or copy the token printed in the server terminal.
+The Vite plugin exposes a token-authenticated HTTP API at `/__svelte-devtools/api/*`. Send `Authorization: Bearer <token>` on every request (or `?token=<token>` for beacon-only requests that cannot set headers). Requests without a valid token receive `401`. Set `SVELTE_DEVTOOLS_TOKEN` before starting the dev server, or copy the token printed in the server terminal.
+
+CORS is allow-listed: origins are reflected only for `http://localhost:*`, `http://127.0.0.1:*`, and configured `allowedOrigins`. Requests without an `Origin` header receive no CORS header.
 
 ### Endpoints
 
-All endpoints return JSON with `Content-Type: application/json`. CORS is allow-listed, not wildcard: origins are reflected only for `http://localhost:*`, `http://127.0.0.1:*`, and configured origins. Requests without an `Origin` header get no CORS header.
-
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/__svelte-devtools/api/` | Plugin status, available endpoints |
-| `GET` | `/__svelte-devtools/api/components` | Session-scoped cached components; supports filters, pagination, and `includeState=false` |
-| `GET` | `/__svelte-devtools/api/timeline` | Timeline of events (mounts, state changes, effects) |
-| `GET` | `/__svelte-devtools/api/server-events` | Server request traces with bodies |
-| `GET` | `/__svelte-devtools/api/migration` | Svelte 4→5 migration scores; `overall` is `null` until components are scored |
-| `GET` | `/__svelte-devtools/api/snapshots` | Snapshot branch tree (parentId, branchId, timestamps) |
-| `GET` | `/__svelte-devtools/api/routes` | SvelteKit routes from the resolved configured routes directory |
-| `GET` | `/__svelte-devtools/api/remote` | Remote-debugging payload synced from the panel |
-| `GET` | `/__svelte-devtools/api/source?file=<path>` | Source code file lookup |
-| `POST` | `/__svelte-devtools/api/set-state` | Acknowledged live edit (`{sessionId, componentId, key, value}`) |
-| `POST` | `/__svelte-devtools/api/sync` | (internal) Client syncs runtime state here |
+| `GET` | `/__svelte-devtools/api/` or `/api/status` | Plugin status, version, `capabilities.sessions`, and available endpoints |
+| `GET` | `/__svelte-devtools/api/components` | Session-scoped cached components (`sessionId`, `id`, `name`, `includeState=false`, `offset`, `limit`) |
+| `GET` | `/__svelte-devtools/api/timeline` | Session-scoped timeline events (`sessionId`, `type`, `offset`, `limit`) |
+| `GET` | `/__svelte-devtools/api/server-events` | Server request, fetch, and SQLite traces (`last`, `sinceId`) |
+| `DELETE` | `/__svelte-devtools/api/server-events` | Clear the server event buffer |
+| `GET` | `/__svelte-devtools/api/migration` | Svelte 4 -> 5 migration scores (`overall` is `null` until components are scored) |
+| `GET` | `/__svelte-devtools/api/snapshots` | Session-scoped snapshot and branch metadata (`sessionId`, `offset`, `limit`) |
+| `GET` | `/__svelte-devtools/api/routes` | SvelteKit routes from the resolved configured routes directory (`src/routes` fallback) |
+| `GET` | `/__svelte-devtools/api/remote` | Session-scoped remote-debugging payload synced from the panel |
+| `GET` | `/__svelte-devtools/api/source?file=<path>` | Source code file lookup within the Vite project root |
+| `POST` | `/__svelte-devtools/api/set-state` | Acknowledged live state edit (`{ sessionId, componentId, key, value }`) |
+| `GET` | `/__svelte-devtools/api/commands?sessionId=<id>&url=<url>` | (internal) Panel command polling |
+| `POST` | `/__svelte-devtools/api/commands/result` | (internal) Panel command acknowledgement |
+| `POST` | `/__svelte-devtools/api/sync` | (internal) Panel syncs runtime state here every 2 seconds |
 
-### Example Usage
+Legacy token-protected endpoints also exist at `/__svelte-devtools/server-events` (`GET` returns an array; `DELETE` clears), `/__svelte-devtools/migration-score` (`GET`), and `/__svelte-devtools/open-in-editor` (`POST { file, line, column }`). Prefer `/__svelte-devtools/api/*`.
+
+### Example usage
+
+Select a panel session ID from `capabilities.sessions` in the `GET /__svelte-devtools/api/` response and export it as `SVELTE_DEVTOOLS_SESSION`. If `sessionId` is omitted or empty, the server falls back to the most recently synced panel (`caches.latest`), which can return data from the wrong browser tab when multiple panels are open.
 
 ```bash
-# Check plugin is loaded
+# 1. Check plugin status and discover active panel sessions
 curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   http://localhost:5173/__svelte-devtools/api/
 
-# After selecting a session from status, list component metadata
+# Export the target session ID from capabilities.sessions:
+export SVELTE_DEVTOOLS_SESSION=replace-with-session-id
+
+# 2. List component metadata for the selected session
 curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   "http://localhost:5173/__svelte-devtools/api/components?sessionId=$SVELTE_DEVTOOLS_SESSION&includeState=false&limit=100" | jq '.count, .components[].name'
 
-# Get timeline events
+# 3. Get timeline events
 curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   "http://localhost:5173/__svelte-devtools/api/timeline?sessionId=$SVELTE_DEVTOOLS_SESSION&limit=100" | jq '.count'
 
-# Get server event traces
+# 4. Get server event traces
 curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   http://localhost:5173/__svelte-devtools/api/server-events | jq '.events | length'
 
-# Get migration scores (Svelte 4→5)
+# 5. Get migration scores (Svelte 4 -> 5)
 curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   http://localhost:5173/__svelte-devtools/api/migration
 
-# Get snapshot branch tree
+# 6. Get snapshot branch tree
 curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   "http://localhost:5173/__svelte-devtools/api/snapshots?sessionId=$SVELTE_DEVTOOLS_SESSION&limit=100" | jq '.snapshots | length'
 
-# Look up a source file
+# 7. Look up a source file
 curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
   "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
 ```
 
-### State Editing
+### State editing
 
-`POST /api/set-state` and MCP `svelte_set_state` deliver edits to one explicit live panel session. Required fields are `sessionId`, `componentId`, `key`, and a JSON `value`. Select the session through status discovery and the mounted component through a session-scoped component query.
+`POST /__svelte-devtools/api/set-state` and MCP `svelte_set_state` deliver edits to one explicit live panel session. Required fields are `sessionId`, `componentId`, `key`, and a JSON `value`. Select `sessionId` through `svelte_status` (or `GET /api/`) and `componentId` through a session-scoped component query.
 
-Example MCP arguments for an authorized edit (replace both IDs with discovered values):
+Example JSON payload (replace both IDs with discovered values):
 
 ```json
 {"sessionId":"panel-session-id","componentId":"mounted-instance-id","key":"count","value":42}
 ```
 
-Use the same object as the HTTP POST JSON body with the bearer token. The key must have a live setter. Derived values and non-JSON values are read-only. Success acknowledges the setter and active recording; snapshot capture follows through runtime events. Wait for the next panel sync, then inspect state and snapshots. If the response is `OUTCOME_UNKNOWN`, inspect before retrying. Do not automatically retry a timed-out mutation. Remote snapshot restore is not implemented.
-
-### Snapshot Visualization
-
-```bash
-# Get snapshot / branch tree
-curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  "http://localhost:5173/__svelte-devtools/api/snapshots?sessionId=$SVELTE_DEVTOOLS_SESSION&limit=100"
-```
-
-Returns the list of captured snapshots with their branch IDs, parent IDs, and timestamps — enabling agents to reconstruct the branching timeline. Each snapshot can have a `parentId` (for linear navigation) and `branchId` (for fork detection), enabling git-style branch topology visualization.
-
-### Source File Lookup
-
-```bash
-# Get source code of a file
-curl -H "Authorization: Bearer $SVELTE_DEVTOOLS_TOKEN" \
-  "http://localhost:5173/__svelte-devtools/api/source?file=src/App.svelte"
-```
-
-### Response Format
-
-```json
-{
-  "ok": true,
-  "count": 3,
-  "components": [],
-  "cachedAt": 1712345678000
-}
-```
-
-### Notes
-
-- Component, timeline, and snapshot data is cached separately by panel session via periodic authenticated fetch. If the DevTools panel has not been opened, the cache may be empty.
-- Server events require tracing integration and observed requests. Migration scores come from the live build-time registry: with no scored components, `overall` is `null` and `totalFiles` is `0`.
-- Port numbers (5173, 5174, etc.) vary by project.
+The target key must have a live setter and a JSON-editable current value. Props, `$derived` values, functions, collections, class instances, and non-JSON values are read-only. Success (`200`) acknowledges that the live setter ran and recording is active; snapshot capture follows asynchronously through runtime events. Wait for the next panel sync, then inspect state and snapshots. If the response is `409` with `OUTCOME_UNKNOWN`, inspect live state before retrying. Do not automatically retry a timed-out mutation. Remote snapshot restore is not implemented.
 
 ## Diagnose a database-backed request
 
-After an application action, call `svelte_server_events` with `{ "last": 100 }`. Find `server:sql` events, then match each `data.parentSpanId` to the parent's `data.spanId`. Use `data.traceId` to group the request. Compare the same IDs in Network's SQL filter and trace waterfall. `last` accepts at most 500; retained history can omit a parent.
+After an application action, call `svelte_server_events` with `{ "last": 100 }` (or `GET /__svelte-devtools/api/server-events?last=100`). Find `server:sql` events, then match each `data.parentSpanId` to the parent request's `data.spanId`. Use `data.traceId` to group all spans in the request. Compare the same IDs in the **Network** tab's **SQL** filter and **Trace waterfall**. `svelte_server_events` accepts `last` up to 500; retained history (1,000 server events, 500 panel rows) can omit an older parent.
 
-Inspect duration, operation, safe error code, optional row count, and statement truncation. Statement capture requires explicit opt-in and omits bindings and result rows. A query span proves that call ran, not that a surrounding transaction committed. Do not retry a database mutation from trace visibility alone or describe Time Travel as database rollback. Use [the isolated SSR/SQL verifier](../scripts/verify-ssr-sql.mjs) for regression checks.
+Inspect `duration`, `operation`, safe `error` code, optional `rowCount`, and `statementTruncated`. Statement capture requires explicit opt-in (`captureStatement: true`) and omits bindings and result rows. A query span proves that synchronous call ran, not that a surrounding transaction committed. Do not retry a database mutation from trace visibility alone or describe Time Travel as database rollback. Use [`scripts/verify-ssr-sql.mjs`](../scripts/verify-ssr-sql.mjs) for isolated regression checks.

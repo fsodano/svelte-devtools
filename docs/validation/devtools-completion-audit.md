@@ -1,9 +1,8 @@
 # Historical verification record: DevTools completion
 
-This report preserves the original audit findings and test evidence from 2026-09-05. Statuses and release notes below describe those runs; they are not a current work queue or a claim about later releases. Durable design choices are recorded in the architecture decisions.
+This report preserves the original audit findings and test evidence from 2026-09-05 (releases `v0.1.0` and `v0.1.1`). Test counts, timings, statuses, and release notes below describe those 2026-09-05 runs; they are not a current work queue or a claim about later releases (current release is `v0.4.0`). Durable design choices are recorded in the [architecture decisions](../adr/README.md).
 
-
-Audit date: 2026-09-05. Scope: Svelte 5 components and SvelteKit applications on Vite 8, with a useful browser panel and reliable agent access.
+Audit date: 2026-09-05. Evaluated release: `0.1.0` / `0.1.1`. Scope: Svelte 5.20+ components and SvelteKit applications on Vite 8 (fixtures on Vite 8.2.2 and `@vitejs/devtools` 0.4.8), with a browser panel and agent access.
 
 ## Observed discrepancies
 
@@ -81,8 +80,8 @@ The review reports two contextual lint issues and 46 advisory suggestions, not a
 - `npm run check`: zero errors and zero warnings.
 - `npm run test:e2e`: 11 Chromium tests pass in 43.3 seconds. Coverage includes plain Svelte and SvelteKit, real MCP stdio, scoped state edits and failed targets, undo/redo, non-JSON values, request-to-mock interception/disable, Settings persistence, resizing, and recording after a Spring unmounts.
 - `npm run release:check`: all five package manifests, packed entry points, and distributed artifacts pass. No npm package was published.
-- `node scripts/verify-editor.mjs`: a real Vite server launches the configured local recorder editor with the correct canonical filename, line 3, and column 2. Missing and out-of-root paths are rejected.
-- `node scripts/verify-pokedex.mjs`: all 20 real application card instances are selected independently; every card points to the route page, which points to the layout. Source actions and wide/narrow screenshots are verified. External Pokémon data and images use deterministic test responses.
+- `node scripts/verify-editor.mjs`: a real Vite server (port 5177) launches the configured local recorder editor with the correct canonical filename, line 3, and column 2. Missing and out-of-root paths are rejected.
+- `node scripts/verify-pokedex.mjs`: against the Pokédex server on port 5176, all 20 real application card instances are selected independently; every card points to the route page, which points to the layout. Source actions and wide/narrow screenshots are verified. External Pokémon data and images use deterministic test responses.
 - Todo SQLite acceptance: create, toggle, edit, and delete a test todo; confirm its cleanup; verify component/timeline/server-event/route APIs; inspect ten panels at 1,440- and 650-pixel browser widths with large fonts and resizable details. The three-call read-only MCP guide trial selects an explicit session and mounted instance.
 - Consumer production builds: plain Svelte and SvelteKit outputs exclude injected runtime/dock artifacts. Kit development routes return 404 in production. The no-op server import preserves global fetch.
 
